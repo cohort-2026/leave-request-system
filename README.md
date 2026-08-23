@@ -4,12 +4,30 @@
 
 **Current Phase:** Planning
 
-Development must not begin until the planning phase
-has been reviewed and approved.
+---
+
+## Start Here
+
+**Do not start coding yet.**
+
+Before beginning development, your team must read the central
+**Intern Project Planning Guide** and complete all five planning
+deliverables.
+
+👉 [Read the Intern Project Planning Guide](https://github.com/cohort-2026/intern-programme/blob/main/planning-guide.md)
+
+Your team will be expected to understand the client's problem,
+identify stakeholders and users, define requirements, create
+user stories and acceptance criteria, and create user flows.
+
+Development may only begin once the planning phase has been
+reviewed and approved by your mentor.
 
 ---
 
 ## Client Brief
+
+Please read the client brief carefully.
 
 We are a company with multiple employees who need to submit requests to the business, including requests relating to leave.
 
@@ -25,7 +43,7 @@ We are open to your team's recommendations on how the system should work.
 
 ## Planning Deliverables
 
-Your team is responsible for producing:
+Your team must complete:
 
 1. Problem Understanding
 2. Stakeholders and Users
@@ -33,22 +51,31 @@ Your team is responsible for producing:
 4. User Stories and Acceptance Criteria
 5. User Flows
 
----
-
-## Documentation
-
-Planning documentation should be created inside the
-`docs/` directory.
+See the [full Planning Guide](https://github.com/cohort-2026/intern-programme/blob/main/planning-guide.md)
+for detailed instructions.
 
 ---
 
 ## Team
 
-Add your team members here once your team has been confirmed.
+**Leave Request Team**
+
+[View team on GitHub](https://github.com/orgs/cohort-2026/teams/leave-request-team)
+
+---
+
+## Documentation
+
+Your project documentation should be stored inside the `docs/`
+directory.
+
+The client brief is available here:
+
+`docs/client-brief.md`
 
 ---
 
 ## Development
 
-Do not begin development until the planning phase
-has been reviewed and approved by your mentor.
+Development must not begin until the planning phase has been
+reviewed and approved by your mentor.
