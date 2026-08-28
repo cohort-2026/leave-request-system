@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leave Request System — HTML Wireframe</title>
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --line: #222;
+      --paper: #fff;
+      --page: #d6d6d6;
+      --fill: #f3f3f3;
+      --note: #fff6d6;
+      --note-line: #c9a227;
+      --danger: #7a1f1f;
+      --danger-bg: #f8e8e8;
+      --ok-bg: #e7f3ea;
+      --ok: #1d5c2e;
+      --accent: #2c3e6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--page);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    button, input, select, textarea { font: inherit; }
+    a { color: var(--accent); }
+
+    .wf-top {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 16px;
+      background: #222;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .wf-top strong { font-size: 15px; }
+    .wf-top span.tag {
+      border: 1px solid #fff;
+      padding: 2px 8px;
+      font-size: 11px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .wf-top .hint { color: #ccc; font-size: 12px; margin-left: auto; }
+
+    .wf-layout {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr) 280px;
+      min-height: calc(100vh - 44px);
+    }
+    .wf-nav, .wf-notes {
+      background: #ececec;
+      border-right: 2px solid #222;
+      padding: 12px;
+      overflow: auto;
+    }
+    .wf-notes { border-right: 0; border-left: 2px solid #222; }
+    .wf-nav h2, .wf-notes h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin: 16px 0 6px;
+      color: var(--muted);
+    }
+    .wf-nav h2:first-child { margin-top: 0; }
+    .wf-nav a {
+      display: block;
+      color: var(--ink);
+      text-decoration: none;
+      padding: 6px 8px;
+      border: 1px solid transparent;
+      margin-bottom: 2px;
+    }
+    .wf-nav a:hover { background: #fff; border-color: #bbb; }
+    .wf-nav a.active { background: #fff; border: 2px solid #222; font-weight: bold; }
+
+    .wf-canvas {
+      padding: 16px;
+      overflow: auto;
+    }
+    .device {
+      max-width: 920px;
+      margin: 0 auto;
+      background: var(--paper);
+      border: 2px solid var(--line);
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+    }
+    .app-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--line);
+      background: var(--fill);
+    }
+    .app-bar .logo {
+      width: 28px; height: 28px;
+      border: 2px solid #222;
+      display: grid; place-items: center;
+      font-weight: bold;
+      font-size: 11px;
+    }
+    .app-bar .who { margin-left: auto; font-size: 12px; text-align: right; }
+    .app-bar .who small { display: block; color: var(--muted); }
+    .app-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      border-bottom: 2px solid var(--line);
+    }
+    .app-nav button {
+      background: #fff;
+      border: 0;
+      border-right: 1px solid #222;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .app-nav button.on { background: #222; color: #fff; font-weight: bold; }
+    .screen-body { padding: 16px; flex: 1; }
+    .screen { display: none; }
+    .screen.on { display: block; }
+
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    h3 { font-size: 15px; margin: 0 0 8px; }
+    p.sub { margin: 0 0 16px; color: var(--muted); }
+
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 220px; }
+    .box {
+      border: 2px solid #222;
+      padding: 12px;
+      background: #fff;
+      margin-bottom: 12px;
+    }
+    .box.alt { background: var(--fill); }
+    .placeholder {
+      border: 2px dashed #666;
+      background: repeating-linear-gradient(-45deg, #fafafa, #fafafa 8px, #eee 8px, #eee 16px);
+      min-height: 80px;
+      display: grid;
+      place-items: center;
+      color: #555;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    label.field { display: block; margin-bottom: 10px; font-size: 12px; font-weight: bold; }
+    label.field span { display: block; font-weight: normal; color: var(--muted); margin-bottom: 4px; }
+    input[type="text"], input[type="email"], input[type="password"], input[type="date"],
+    input[type="file"], select, textarea {
+      width: 100%;
+      border: 2px solid #222;
+      padding: 8px;
+      background: #fff;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .btn {
+      border: 2px solid #222;
+      background: #fff;
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+    .btn.primary { background: #222; color: #fff; }
+    .btn.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid #222; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: var(--fill); }
+    .badge {
+      display: inline-block;
+      border: 1px solid #222;
+      padding: 1px 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .badge.pending { background: #fff3cd; }
+    .badge.approved { background: var(--ok-bg); }
+    .badge.rejected { background: var(--danger-bg); }
+    .badge.blocked { background: #eee; }
+    .callout {
+      border: 2px solid #222;
+      padding: 10px 12px;
+      margin: 12px 0;
+    }
+    .callout.ok { background: var(--ok-bg); }
+    .callout.err { background: var(--danger-bg); color: var(--danger); }
+    .callout.warn { background: var(--note); }
+    .kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .kpi .box { margin: 0; text-align: center; }
+    .kpi b { display: block; font-size: 22px; }
+    .kpi small { color: var(--muted); }
+    .cal {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      font-size: 12px;
+    }
+    .cal div {
+      border: 1px solid #222;
+      min-height: 54px;
+      padding: 4px;
+      background: #fff;
+    }
+    .cal .hd { background: var(--fill); min-height: 0; font-weight: bold; text-align: center; }
+    .cal .out { background: #f7f7f7; color: #999; }
+    .cal .leave { background: #dbe7ff; }
+    .cal .hol { background: #f8e8e8; }
+    .cal .blk { background: #eee; text-decoration: line-through; }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 16px 0;
+    }
+    .flow button, .flow .step {
+      border: 2px solid #222;
+      background: #fff;
+      padding: 10px 12px;
+      min-width: 90px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .flow .arrow { font-weight: bold; }
+    .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .note-card {
+      border: 2px dashed var(--note-line);
+      background: var(--note);
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .note-card b { display: block; margin-bottom: 4px; }
+    .wf-notes ul { margin: 6px 0 0 18px; padding: 0; }
+    .muted { color: var(--muted); }
+    .hidden { display: none !important; }
+    .lock {
+      font-size: 11px;
+      border: 1px solid #222;
+      padding: 2px 6px;
+      background: #fff;
+    }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 1100px) {
+      .wf-layout { grid-template-columns: 1fr; }
+      .wf-nav, .wf-notes { border: 0; border-bottom: 2px solid #222; max-height: 220px; }
+      .split, .roles { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wf-top">
+    <strong>Leave Request System</strong>
+    <span class="tag">Wireframe</span>
+    <span class="hint">Structure and flow only — not final UI. Open a screen, then use in-app buttons as a user would.</span>
+  </div>
+
+  <div class="wf-layout">
+    <nav class="wf-nav" id="sidenav">
+      <h2>Map</h2>
+      <a href="#flow" data-screen="flow">End-to-end flow</a>
+      <h2>Shared</h2>
+      <a href="#login" data-screen="login">Login</a>
+      <a href="#onboard" data-screen="onboard">Self-onboarding</a>
+      <a href="#verify" data-screen="verify">Email verification</a>
+      <h2>Employee</h2>
+      <a href="#emp-home" data-screen="emp-home">Dashboard</a>
+      <a href="#emp-new" data-screen="emp-new">New leave request</a>
+      <a href="#emp-list" data-screen="emp-list">My requests</a>
+      <a href="#emp-detail" data-screen="emp-detail">Request details</a>
+      <a href="#emp-cal" data-screen="emp-cal">My calendar</a>
+      <h2>Manager</h2>
+      <a href="#mgr-queue" data-screen="mgr-queue">Team queue</a>
+      <a href="#mgr-review" data-screen="mgr-review">Review request</a>
+      <a href="#mgr-cal" data-screen="mgr-cal">Team calendar / blocks</a>
+      <h2>Company Admin</h2>
+      <a href="#hr-home" data-screen="hr-home">Company setup</a>
+      <a href="#hr-cal" data-screen="hr-cal">Working days &amp; holidays</a>
+      <a href="#hr-types" data-screen="hr-types">Leave types</a>
+      <a href="#hr-link" data-screen="hr-link">Onboarding link</a>
+      <a href="#hr-users" data-screen="hr-users">Employees</a>
+      <a href="#hr-orgcal" data-screen="hr-orgcal">Company calendar</a>
+      <h2>Platform Admin</h2>
+      <a href="#plat-home" data-screen="plat-home">Companies</a>
+    </nav>
+
+    <div class="wf-canvas">
+      <div class="device">
+        <div class="app-bar" id="appbar">
+          <div class="logo">LR</div>
+          <div>
+            <strong>Leave Request Platform</strong>
+            <div class="muted" id="app-context">Wireframe map</div>
+          </div>
+          <div class="who" id="who">
+            Not signed in
+            <small>Use login or pick a screen</small>
+          </div>
+        </div>
+        <div class="app-nav hidden" id="appnav"></div>
+        <div class="screen-body">
+
+          <!-- FLOW -->
+          <section class="screen on" id="flow">
+            <h1>End-to-end user flow</h1>
+            <p class="sub">From the planning review (25 Aug 2026). Click a step to open that screen.</p>
+            <div class="flow">
+              <button type="button" data-go="plat-home">1. Create company</button>
+              <span class="arrow">→</span>
+              <button type="button" data-go="hr-home">2. Company setup</button>
+              <span class="arrow">→</span>
+              <button type="button" data-go="hr-link">3. Onboarding link</button>
+              <span class="arrow">→</span>
+              <button type="button" data-go="onboard">4. Employee registers</button>
+              <span class="arrow">→</span>
+              <button type="button" data-go="emp-new">5. Apply + working days</button>
+              <span class="arrow">→</span>
+              <button type="button" data-go="mgr-review">6. Manager reviews</button>
+              <span class="arrow">→</span>
+              <button type="button" data-go="emp-list">7. Balance updated</button>
+            </div>
+            <div class="roles">
+              <div class="box">
+                <h3>Employee</h3>
+                <p>Self-onboard, submit leave, see own requests / calendar / balance, cancel while pending.</p>
+                <button class="btn" type="button" data-go="login">Start as employee</button>
+              </div>
+              <div class="box">
+                <h3>Manager</h3>
+                <p>Team queue, same working-day total, approve / reject (reason required), team calendar, block team dates.</p>
+                <button class="btn" type="button" data-go="mgr-queue">Start as manager</button>
+              </div>
+              <div class="box">
+                <h3>HR / Company Admin</h3>
+                <p>Own company only: calendar, holidays, leave types, employees, onboarding link, company date blocks.</p>
+                <button class="btn" type="button" data-go="hr-home">Start as company admin</button>
+              </div>
+              <div class="box">
+                <h3>Platform Admin</h3>
+                <p>Creates companies. Does not use another company’s leave data day-to-day.</p>
+                <button class="btn" type="button" data-go="plat-home">Start as platform admin</button>
+              </div>
+            </div>
+            <p class="muted">Access rule: every user belongs to one company except Platform Admin. Nobody sees another company’s employees, leave, or configuration.</p>
+          </section>
+
+          <!-- LOGIN -->
+          <section class="screen" id="login">
+            <h1>Log in</h1>
+            <p class="sub">Official channel for leave. Employees do not self-register here — they use a company onboarding link.</p>
+            <div class="row">
+              <div class="col">
+                <div class="box">
+                  <label class="field">Email
+                    <input type="email" value="thandi@company-a.example" />
+                  </label>
+                  <label class="field">Password
+                    <input type="password" value="password" />
+                  </label>
+                  <div class="actions">
+                    <button class="btn primary" type="button" data-go="emp-home">Log in (Employee)</button>
+                    <button class="btn" type="button" data-go="mgr-queue">Log in (Manager)</button>
+                    <button class="btn" type="button" data-go="hr-home">Log in (Company Admin)</button>
+                    <button class="btn" type="button" data-go="plat-home">Log in (Platform Admin)</button>
+                  </div>
+                  <p class="muted">Wireframe shortcut: four login buttons so each role can be walked through. Production has one login; role comes from the account.</p>
+                </div>
+              </div>
+              <div class="col">
+                <div class="box alt">
+                  <h3>New employee?</h3>
+                  <p>You cannot pick a company on this screen. Open the onboarding link your company sent you.</p>
+                  <button class="btn" type="button" data-go="onboard">Open company onboarding link</button>
+                </div>
+                <div class="callout err hidden" id="login-error">Email or password is incorrect. Account not created.</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ONBOARD -->
+          <section class="screen" id="onboard">
+            <h1>Join your company</h1>
+            <p class="sub">Opened from a company-specific link. Company is locked — employee cannot switch to another company.</p>
+            <div class="callout warn">
+              Company: <strong>Company A</strong>
+              <span class="lock">Locked from link</span>
+              <div class="muted">app.example.com/onboard/company-a</div>
+            </div>
+            <div class="row">
+              <div class="col">
+                <div class="box">
+                  <label class="field">Name <input type="text" value="Thandi" /></label>
+                  <label class="field">Surname <input type="text" value="Mokoena" /></label>
+                  <label class="field">Employee number <input type="text" value="EMP-1042" /></label>
+                  <label class="field">Email <input type="email" value="thandi@company-a.example" /></label>
+                  <label class="field">Department
+                    <select><option>Operations</option><option>Finance</option><option>HR</option></select>
+                  </label>
+                  <label class="field">Position <input type="text" value="Packer" /></label>
+                </div>
+              </div>
+              <div class="col">
+                <div class="box">
+                  <h3>Create login</h3>
+                  <label class="field">Password <input type="password" value="password" /></label>
+                  <label class="field">Confirm password <input type="password" value="password" /></label>
+                  <div class="actions">
+                    <button class="btn primary" type="button" data-go="verify">Create account</button>
+                    <button class="btn" type="button" id="btn-dup">Show duplicate error</button>
+                    <button class="btn" type="button" id="btn-disabled">Show disabled-link error</button>
+                  </div>
+                  <div class="callout err hidden" id="dup-err">An account with this email or employee number already exists at Company A. Registration stopped.</div>
+                  <div class="callout err hidden" id="disabled-err">This onboarding link is disabled. Ask your company admin for a new link. You cannot register under another company.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- VERIFY -->
+          <section class="screen" id="verify">
+            <h1>Verify your email</h1>
+            <p class="sub">Email verification is supported before the profile is usable.</p>
+            <div class="box">
+              <p>We sent a verification message to <strong>thandi@company-a.example</strong>.</p>
+              <p>After verification, the employee profile is created under <strong>Company A</strong> only.</p>
+              <div class="actions">
+                <button class="btn primary" type="button" data-go="login">I’ve verified — go to login</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- EMP HOME -->
+          <section class="screen" id="emp-home">
+            <h1>My leave</h1>
+            <p class="sub">Employee sees own requests, own balance, own company only.</p>
+            <div class="kpi">
+              <div class="box"><b>12</b><small>Annual days left</small></div>
+              <div class="box"><b>1</b><small>Pending request</small></div>
+              <div class="box"><b>Company A</b><small>You cannot see Company B</small></div>
+            </div>
+            <div class="actions" style="margin-top:0">
+              <button class="btn primary" type="button" data-go="emp-new">New leave request</button>
+              <button class="btn" type="button" data-go="emp-list">View my requests</button>
+              <button class="btn" type="button" data-go="emp-cal">My calendar</button>
+            </div>
+            <div class="box">
+              <h3>Recent</h3>
+              <table>
+                <tr><th>Type</th><th>Dates</th><th>Working days</th><th>Status</th></tr>
+                <tr>
+                  <td>Annual</td>
+                  <td>1–7 Sep 2026</td>
+                  <td>5</td>
+                  <td><span class="badge pending">Pending</span></td>
+                </tr>
+                <tr>
+                  <td>Sick</td>
+                  <td>18 Aug 2026</td>
+                  <td>1</td>
+                  <td><span class="badge approved">Approved</span></td>
+                </tr>
+              </table>
+            </div>
+          </section>
+
+          <!-- EMP NEW -->
+          <section class="screen" id="emp-new">
+            <h1>New leave request</h1>
+            <p class="sub">Working-day total must be visible before submit, then stored for the manager.</p>
+            <div class="row">
+              <div class="col">
+                <div class="box">
+                  <label class="field">Leave type
+                    <select id="leave-type">
+                      <option>Annual leave</option>
+                      <option>Sick leave</option>
+                      <option>Family responsibility</option>
+                    </select>
+                  </label>
+                  <label class="field">Start date
+                    <input type="date" id="start-date" value="2026-09-01" />
+                  </label>
+                  <label class="field">End date
+                    <input type="date" id="end-date" value="2026-09-07" />
+                  </label>
+                  <label class="field">Reason
+                    <textarea>Family visit</textarea>
+                  </label>
+                  <label class="field">Supporting file (optional)
+                    <input type="file" />
+                  </label>
+                  <div class="actions">
+                    <button class="btn" type="button" data-go="emp-home">Cancel</button>
+                    <button class="btn primary" type="button" id="btn-submit-leave">Submit request</button>
+                  </div>
+                </div>
+              </div>
+              <div class="col">
+                <div class="callout ok" id="days-box">
+                  <strong>Working days before submit</strong>
+                  <div style="font-size:28px" id="days-count">5 days</div>
+                  <div class="muted" id="days-note">Weekends and Company A public holidays excluded.</div>
+                </div>
+                <div class="box alt">
+                  <h3>Try these checks</h3>
+                  <button class="btn" type="button" id="btn-invalid-dates">End before start</button>
+                  <button class="btn" type="button" id="btn-blocked">Overlap blocked date</button>
+                  <button class="btn" type="button" id="btn-holiday">Range with company holiday</button>
+                  <p class="muted">Planning example: 1–7 Sep 2026, Sat+Sun out = 5 working days.</p>
+                </div>
+                <div class="callout err hidden" id="leave-err"></div>
+                <div class="callout ok hidden" id="leave-ok">Request saved as Pending. Working-day total stored as 5. Manager will see the same number.</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- EMP LIST -->
+          <section class="screen" id="emp-list">
+            <h1>My requests</h1>
+            <p class="sub">Visibility of submitted requests and recorded decisions. Cancel only while Pending.</p>
+            <p>
+              Filter:
+              <button class="btn" type="button">All</button>
+              <button class="btn" type="button">Pending</button>
+              <button class="btn" type="button">Approved</button>
+              <button class="btn" type="button">Rejected</button>
+            </p>
+            <table>
+              <tr><th>Type</th><th>Dates</th><th>Working days</th><th>Status</th><th>Action</th></tr>
+              <tr>
+                <td>Annual</td>
+                <td>1–7 Sep 2026</td>
+                <td>5</td>
+                <td><span class="badge pending">Pending</span></td>
+                <td>
+                  <button class="btn" type="button" data-go="emp-detail">Open</button>
+                  <button class="btn danger" type="button" id="btn-cancel">Cancel</button>
+                </td>
+              </tr>
+              <tr>
+                <td>Sick</td>
+                <td>18 Aug 2026</td>
+                <td>1</td>
+                <td><span class="badge approved">Approved</span></td>
+                <td><button class="btn" type="button" data-go="emp-detail">Open</button></td>
+              </tr>
+              <tr>
+                <td>Annual</td>
+                <td>3–4 Jul 2026</td>
+                <td>2</td>
+                <td><span class="badge rejected">Rejected</span></td>
+                <td><button class="btn" type="button" data-go="emp-detail">Open</button></td>
+              </tr>
+            </table>
+            <div class="callout warn hidden" id="cancel-ok">Pending request cancelled. It was not sent to the manager. Balance unchanged.</div>
+          </section>
+
+          <!-- EMP DETAIL -->
+          <section class="screen" id="emp-detail">
+            <h1>Request details</h1>
+            <p class="sub">Read-only record of what was submitted and decided.</p>
+            <div class="box">
+              <table>
+                <tr><th>Employee</th><td>Thandi Mokoena (EMP-1042)</td></tr>
+                <tr><th>Company</th><td>Company A</td></tr>
+                <tr><th>Type</th><td>Annual leave</td></tr>
+                <tr><th>Dates</th><td>Tue 1 Sep 2026 – Mon 7 Sep 2026</td></tr>
+                <tr><th>Working days</th><td><strong>5</strong> (stored at submit; weekends excluded)</td></tr>
+                <tr><th>Reason</th><td>Family visit</td></tr>
+                <tr><th>File</th><td>none</td></tr>
+                <tr><th>Status</th><td><span class="badge pending">Pending</span></td></tr>
+                <tr><th>Decision</th><td>Not yet reviewed</td></tr>
+              </table>
+              <div class="actions">
+                <button class="btn" type="button" data-go="emp-list">Back to list</button>
+                <button class="btn danger" type="button" data-go="emp-list">Cancel pending request</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- EMP CAL -->
+          <section class="screen" id="emp-cal">
+            <h1>My calendar</h1>
+            <p class="sub">Employee sees own leave, company holidays, and blocked dates that would stop a submit.</p>
+            <p><strong>September 2026 — Company A</strong></p>
+            <div class="cal" id="cal-emp"></div>
+            <p class="muted">Blue = own leave · Red = public holiday · Grey = blocked date · Weekends faded</p>
+          </section>
+
+          <!-- MGR QUEUE -->
+          <section class="screen" id="mgr-queue">
+            <h1>Team approval queue</h1>
+            <p class="sub">Manager reviews assigned employees in Company A only.</p>
+            <div class="kpi">
+              <div class="box"><b>2</b><small>Pending</small></div>
+              <div class="box"><b>Company A</b><small>Team: Operations</small></div>
+            </div>
+            <table>
+              <tr><th>Employee</th><th>Type</th><th>Dates</th><th>Working days</th><th>File</th><th></th></tr>
+              <tr>
+                <td>Thandi Mokoena</td>
+                <td>Annual</td>
+                <td>1–7 Sep 2026</td>
+                <td><strong>5</strong></td>
+                <td>—</td>
+                <td><button class="btn primary" type="button" data-go="mgr-review">Review</button></td>
+              </tr>
+              <tr>
+                <td>Lebo Nkosi</td>
+                <td>Sick</td>
+                <td>14 Sep 2026</td>
+                <td><strong>1</strong></td>
+                <td>note.pdf</td>
+                <td><button class="btn primary" type="button" data-go="mgr-review">Review</button></td>
+              </tr>
+            </table>
+            <div class="actions">
+              <button class="btn" type="button" data-go="mgr-cal">Open team calendar</button>
+            </div>
+          </section>
+
+          <!-- MGR REVIEW -->
+          <section class="screen" id="mgr-review">
+            <h1>Review leave request</h1>
+            <p class="sub">Manager sees the same stored working-day total. Reject is blocked without a reason.</p>
+            <div class="row">
+              <div class="col">
+                <div class="box">
+                  <table>
+                    <tr><th>Employee</th><td>Thandi Mokoena · Operations</td></tr>
+                    <tr><th>Type</th><td>Annual leave</td></tr>
+                    <tr><th>Dates</th><td>1–7 Sep 2026</td></tr>
+                    <tr><th>Working days</th><td><strong>5 days</strong> — same figure shown at submit</td></tr>
+                    <tr><th>Reason</th><td>Family visit</td></tr>
+                    <tr><th>File</th><td class="placeholder" style="min-height:48px">No file</td></tr>
+                  </table>
+                  <label class="field">Reject reason (required to reject)
+                    <textarea id="reject-reason" placeholder="Required if you reject"></textarea>
+                  </label>
+                  <div class="actions">
+                    <button class="btn primary" type="button" id="btn-approve">Approve</button>
+                    <button class="btn danger" type="button" id="btn-reject">Reject</button>
+                    <button class="btn" type="button" data-go="mgr-queue">Back</button>
+                  </div>
+                  <div class="callout err hidden" id="reject-err">Reject without a reason is blocked. Enter a reason.</div>
+                  <div class="callout ok hidden" id="approve-ok">Approved. Status = Approved. Leave balance reduced by 5. Employee, team, and company calendars updated.</div>
+                  <div class="callout warn hidden" id="reject-ok">Rejected. Decision and reason stored. Balance not changed.</div>
+                </div>
+              </div>
+              <div class="col">
+                <div class="box alt">
+                  <h3>Team overlap</h3>
+                  <p>Check team calendar before deciding.</p>
+                  <div class="placeholder">Mini team calendar · 2 people already off 4 Sep</div>
+                  <button class="btn" type="button" data-go="mgr-cal">Open full team calendar</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- MGR CAL -->
+          <section class="screen" id="mgr-cal">
+            <h1>Team calendar and blocked dates</h1>
+            <p class="sub">Manager can block dates for the team. Overlapping a blocked date prevents employee submit.</p>
+            <div class="row">
+              <div class="col">
+                <p><strong>September 2026 — Operations team, Company A</strong></p>
+                <div class="cal" id="cal-mgr"></div>
+              </div>
+              <div class="col">
+                <div class="box">
+                  <h3>Block team dates</h3>
+                  <label class="field">From <input type="date" value="2026-09-15" /></label>
+                  <label class="field">To <input type="date" value="2026-09-15" /></label>
+                  <label class="field">Why
+                    <input type="text" value="Stocktake — no leave" />
+                  </label>
+                  <button class="btn primary" type="button" id="btn-block-team">Block dates</button>
+                  <div class="callout warn hidden" id="block-ok">15 Sep 2026 blocked for the team. Employees who pick that date see a clear error and the request is not saved.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- HR HOME -->
+          <section class="screen" id="hr-home">
+            <h1>Company setup</h1>
+            <p class="sub">Company Admin configures own company after Platform Admin creates it.</p>
+            <div class="kpi">
+              <div class="box"><b>Company A</b><small>Your company only</small></div>
+              <div class="box"><b>500</b><small>Employees (planning example)</small></div>
+              <div class="box"><b>Active</b><small>Onboarding link</small></div>
+            </div>
+            <div class="split">
+              <div class="box"><h3>Working calendar &amp; holidays</h3><p>Default Sat–Sun off. Public holidays are company-specific.</p><button class="btn" type="button" data-go="hr-cal">Open</button></div>
+              <div class="box"><h3>Leave types</h3><p>Annual, sick, family responsibility — company-owned.</p><button class="btn" type="button" data-go="hr-types">Open</button></div>
+              <div class="box"><h3>Onboarding link</h3><p>Generate, disable, or regenerate. Link belongs to this company only.</p><button class="btn" type="button" data-go="hr-link">Open</button></div>
+              <div class="box"><h3>Employees</h3><p>People who registered via the link, plus roles.</p><button class="btn" type="button" data-go="hr-users">Open</button></div>
+              <div class="box"><h3>Company calendar</h3><p>Organisation view and company-wide date blocks.</p><button class="btn" type="button" data-go="hr-orgcal">Open</button></div>
+              <div class="box alt"><h3>Not on this screen</h3><p>Company B data. Platform Admin tools. Payroll integrations (future).</p></div>
+            </div>
+          </section>
+
+          <!-- HR CAL -->
+          <section class="screen" id="hr-cal">
+            <h1>Working days and public holidays</h1>
+            <p class="sub">Used by the working-day calculator. Company B can have a different calendar.</p>
+            <div class="row">
+              <div class="col">
+                <div class="box">
+                  <h3>Working week</h3>
+                  <label><input type="checkbox" /> Sunday</label><br />
+                  <label><input type="checkbox" checked /> Monday</label><br />
+                  <label><input type="checkbox" checked /> Tuesday</label><br />
+                  <label><input type="checkbox" checked /> Wednesday</label><br />
+                  <label><input type="checkbox" checked /> Thursday</label><br />
+                  <label><input type="checkbox" checked /> Friday</label><br />
+                  <label><input type="checkbox" /> Saturday</label>
+                  <p class="muted">Assumption: Sat–Sun off unless this calendar says otherwise.</p>
+                </div>
+              </div>
+              <div class="col">
+                <div class="box">
+                  <h3>Company A public holidays</h3>
+                  <table>
+                    <tr><th>Date</th><th>Name</th></tr>
+                    <tr><td>24 Sep 2026</td><td>Heritage Day</td></tr>
+                    <tr><td>16 Dec 2026</td><td>Day of Reconciliation</td></tr>
+                  </table>
+                  <label class="field">Add holiday date <input type="date" /></label>
+                  <label class="field">Name <input type="text" placeholder="Holiday name" /></label>
+                  <button class="btn" type="button">Add holiday</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- HR TYPES -->
+          <section class="screen" id="hr-types">
+            <h1>Leave types</h1>
+            <p class="sub">Each company controls its own types and balances.</p>
+            <table>
+              <tr><th>Type</th><th>Default days / year</th><th></th></tr>
+              <tr><td>Annual leave</td><td>15</td><td><button class="btn" type="button">Edit</button></td></tr>
+              <tr><td>Sick leave</td><td>30 cycle</td><td><button class="btn" type="button">Edit</button></td></tr>
+              <tr><td>Family responsibility</td><td>3</td><td><button class="btn" type="button">Edit</button></td></tr>
+            </table>
+            <div class="box">
+              <h3>Add type</h3>
+              <label class="field">Name <input type="text" /></label>
+              <label class="field">Days <input type="text" /></label>
+              <button class="btn primary" type="button">Save type</button>
+            </div>
+          </section>
+
+          <!-- HR LINK -->
+          <section class="screen" id="hr-link">
+            <h1>Employee onboarding link</h1>
+            <p class="sub">FR-06 / FR-07. One link, one company. Can be disabled or regenerated.</p>
+            <div class="box">
+              <p>Company: <strong>Company A</strong></p>
+              <label class="field">Current link
+                <input type="text" readonly value="https://app.example.com/onboard/company-a" />
+              </label>
+              <p>Status: <span class="badge approved" id="link-status">Active</span></p>
+              <div class="actions">
+                <button class="btn" type="button" id="btn-copy">Copy link</button>
+                <button class="btn danger" type="button" id="btn-disable-link">Disable</button>
+                <button class="btn" type="button" id="btn-regen">Regenerate</button>
+              </div>
+              <div class="callout warn hidden" id="link-msg"></div>
+            </div>
+            <div class="box alt">
+              <h3>What happens next</h3>
+              <p>Admin sends this link (email, WhatsApp, poster). Employee opens it → registers under Company A → cannot choose Company B.</p>
+              <button class="btn" type="button" data-go="onboard">Preview employee registration</button>
+            </div>
+          </section>
+
+          <!-- HR USERS -->
+          <section class="screen" id="hr-users">
+            <h1>Employees</h1>
+            <p class="sub">Company A people only. Duplicate email / employee number is rejected at onboarding.</p>
+            <table>
+              <tr><th>Name</th><th>Emp no.</th><th>Department</th><th>Role</th></tr>
+              <tr><td>Thandi Mokoena</td><td>EMP-1042</td><td>Operations</td><td>Employee</td></tr>
+              <tr><td>Sipho Dlamini</td><td>EMP-0881</td><td>Operations</td><td>Manager</td></tr>
+              <tr><td>Naledi Khumalo</td><td>EMP-0101</td><td>HR</td><td>Company Admin</td></tr>
+            </table>
+            <p class="muted">New people arrive through the onboarding link. Manual create-every-account is what this enhancement removes.</p>
+          </section>
+
+          <!-- HR ORG CAL -->
+          <section class="screen" id="hr-orgcal">
+            <h1>Company calendar</h1>
+            <p class="sub">Organisation view. Company Admin can block dates for the whole company.</p>
+            <div class="row">
+              <div class="col">
+                <p><strong>September 2026 — Company A</strong></p>
+                <div class="cal" id="cal-hr"></div>
+              </div>
+              <div class="col">
+                <div class="box">
+                  <h3>Block company dates</h3>
+                  <label class="field">From <input type="date" value="2026-09-24" /></label>
+                  <label class="field">To <input type="date" value="2026-09-24" /></label>
+                  <label class="field">Why <input type="text" value="Already a public holiday" /></label>
+                  <button class="btn primary" type="button">Block for company</button>
+                  <p class="muted">Blocks stop new leave submits with a clear message. They do not show Company B’s calendar.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- PLATFORM -->
+          <section class="screen" id="plat-home">
+            <h1>Companies on the platform</h1>
+            <p class="sub">Same application, isolated data. Platform Admin creates companies; each company then does its own setup.</p>
+            <div class="split">
+              <div class="box">
+                <h3>Company A</h3>
+                <p>500 employees · Calendar A · Policy A</p>
+                <p>Onboarding: app.example.com/onboard/company-a</p>
+                <span class="badge">Isolated</span>
+              </div>
+              <div class="box">
+                <h3>Company B</h3>
+                <p>100 employees · Calendar B · Policy B</p>
+                <p>Onboarding: app.example.com/onboard/company-b</p>
+                <span class="badge">Isolated</span>
+              </div>
+            </div>
+            <p style="text-align:center;font-weight:bold">✕ No shared employees, leave, policies, or holidays</p>
+            <div class="box">
+              <h3>Create company</h3>
+              <label class="field">Company name <input type="text" placeholder="e.g. Company C" /></label>
+              <button class="btn primary" type="button" id="btn-create-co">Create company</button>
+              <div class="callout ok hidden" id="create-ok">Company created. Company Admin can now set calendar, holidays, leave types, and generate an onboarding link. Platform Admin does not browse that company’s leave as a day-to-day user.</div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+
+    <aside class="wf-notes" id="notes">
+      <h2>This screen</h2>
+      <div class="note-card" id="note-body"></div>
+    </aside>
+  </div>
+
+  <script>
+    const notes = {
+      flow: {
+        why: "Map of the accepted v1 flow. Mentors should be able to walk start → finish from this page.",
+        supports: "Planning end-to-end: company setup → onboarding link → register → apply + working days → review → balance.",
+        does: "Pick a role or a step. Does not store data.",
+        next: "Login or a role home.",
+        errors: "None — this is the wireframe index."
+      },
+      login: {
+        why: "Shared official record per company needs a signed-in user.",
+        supports: "Core leave + four roles. Employees do not pick a company here.",
+        does: "Log in. New staff are sent to the company onboarding link.",
+        next: "Role home, or onboarding.",
+        errors: "Wrong password. No account yet. Disabled user."
+      },
+      onboard: {
+        why: "Stops HR creating every account by hand. Link is company-scoped so people cannot join the wrong company.",
+        supports: "FR-06, FR-07, FR-08. Story 3.",
+        does: "Enter name, surname, employee number, email, department, position, then credentials.",
+        next: "Email verification, then login.",
+        errors: "Duplicate email/employee number. Disabled or regenerated link. Missing fields."
+      },
+      verify: {
+        why: "Planning requires email verification support.",
+        supports: "FR-08.",
+        does: "Confirm the mailbox before the profile is usable.",
+        next: "Login.",
+        errors: "Expired or already-used verification."
+      },
+      "emp-home": {
+        why: "Employees need visibility of requests and balance — the original client brief.",
+        supports: "Story 1 remainder + visibility.",
+        does: "See balance, pending count, recent requests. Start a new request.",
+        next: "New leave, my requests, calendar.",
+        errors: "Empty state if no requests yet."
+      },
+      "emp-new": {
+        why: "Manual day counts were inconsistent. Total must be shown before submit and stored.",
+        supports: "FR-01 to FR-05. Story 1. Example 1–7 Sep 2026 = 5 days.",
+        does: "Pick type, dates, reason, optional file. See working days. Submit if valid.",
+        next: "My requests as Pending. Invalid input stays here with a message.",
+        errors: "End before start. Blocked date. Company holiday already excluded. Bad file. Overlap issues. Request is not saved."
+      },
+      "emp-list": {
+        why: "Replace email/WhatsApp with one list of requests and decisions.",
+        supports: "Core leave: submit, cancel while Pending, decision history.",
+        does: "Filter, open, cancel pending.",
+        next: "Details, or new request.",
+        errors: "Cannot cancel after approve/reject."
+      },
+      "emp-detail": {
+        why: "The stored record: dates, working days, status, decision.",
+        supports: "FR-05. Auditability NFR.",
+        does: "Read the request. Cancel if still Pending.",
+        next: "Back to list.",
+        errors: "Not found / not own request (would be blocked in a real app)."
+      },
+      "emp-cal": {
+        why: "Employee own calendar. Blocked dates and holidays visible so submit errors are unsurprising.",
+        supports: "Story 5.",
+        does: "Look at own leave month.",
+        next: "New leave request.",
+        errors: "None beyond empty month."
+      },
+      "mgr-queue": {
+        why: "Managers need a team queue instead of chat threads.",
+        supports: "Story 2.",
+        does: "See pending team requests including working days and file flag. Open review.",
+        next: "Review, or team calendar.",
+        errors: "Empty queue."
+      },
+      "mgr-review": {
+        why: "Decision must be recorded. Reject needs a reason. Working-day figure must match submit.",
+        supports: "Story 2, FR-05.",
+        does: "Approve, or reject with reason. Check team overlap.",
+        next: "Queue. On approve: balance and calendars update.",
+        errors: "Reject with empty reason is blocked."
+      },
+      "mgr-cal": {
+        why: "Overlap and team blocks. Blocked dates prevent submit.",
+        supports: "Story 5.",
+        does: "See team leave. Block team dates.",
+        next: "Back to queue.",
+        errors: "Invalid block range."
+      },
+      "hr-home": {
+        why: "Company setup is a required step before employees can onboard and calculate days correctly.",
+        supports: "FR-02, FR-03, FR-06, FR-09, FR-10.",
+        does: "Jump to calendar, types, link, employees, org calendar.",
+        next: "Any setup screen.",
+        errors: "Company not created yet (Platform Admin must create it first)."
+      },
+      "hr-cal": {
+        why: "Working-day rules and holidays differ by company.",
+        supports: "FR-02, FR-03.",
+        does: "Set working week. Add public holidays.",
+        next: "Company setup.",
+        errors: "Duplicate holiday date."
+      },
+      "hr-types": {
+        why: "Each company owns leave types and policies.",
+        supports: "FR-09 / company structure.",
+        does: "List and add types.",
+        next: "Company setup.",
+        errors: "Name required."
+      },
+      "hr-link": {
+        why: "Self-onboarding is an accepted enhancement. Admin must generate, disable, regenerate.",
+        supports: "FR-06, FR-07. Story 3.",
+        does: "Copy / disable / regenerate the company link.",
+        next: "Employee registration (via the link).",
+        errors: "Disabled link cannot register. Old link after regenerate is invalid."
+      },
+      "hr-users": {
+        why: "Company-scoped people list after self-onboarding.",
+        supports: "FR-08, FR-10.",
+        does: "See employees and roles for this company.",
+        next: "Onboarding link if someone is missing.",
+        errors: "No users yet."
+      },
+      "hr-orgcal": {
+        why: "Company Admin sees organisation calendar and can block company dates.",
+        supports: "Story 5.",
+        does: "View org leave. Block company-wide dates.",
+        next: "Company setup.",
+        errors: "Block overlapping invalid range."
+      },
+      "plat-home": {
+        why: "Multi-company is core architecture, not a later rebuild. Platform Admin creates companies only.",
+        supports: "FR-09, FR-10. Story 4.",
+        does: "See Company A and B isolated. Create another company.",
+        next: "That company’s admin does setup. Platform Admin does not open leave queues.",
+        errors: "Duplicate company name."
+      }
+    };
+
+    const roles = {
+      flow: ["Wireframe map", "Not signed in"],
+      login: ["Leave Request Platform", "Not signed in"],
+      onboard: ["Join Company A", "Onboarding link · not signed in"],
+      verify: ["Join Company A", "Check email"],
+      "emp-home": ["Thandi Mokoena", "Employee · Company A"],
+      "emp-new": ["Thandi Mokoena", "Employee · Company A"],
+      "emp-list": ["Thandi Mokoena", "Employee · Company A"],
+      "emp-detail": ["Thandi Mokoena", "Employee · Company A"],
+      "emp-cal": ["Thandi Mokoena", "Employee · Company A"],
+      "mgr-queue": ["Sipho Dlamini", "Manager · Company A"],
+      "mgr-review": ["Sipho Dlamini", "Manager · Company A"],
+      "mgr-cal": ["Sipho Dlamini", "Manager · Company A"],
+      "hr-home": ["Naledi Khumalo", "Company Admin · Company A"],
+      "hr-cal": ["Naledi Khumalo", "Company Admin · Company A"],
+      "hr-types": ["Naledi Khumalo", "Company Admin · Company A"],
+      "hr-link": ["Naledi Khumalo", "Company Admin · Company A"],
+      "hr-users": ["Naledi Khumalo", "Company Admin · Company A"],
+      "hr-orgcal": ["Naledi Khumalo", "Company Admin · Company A"],
+      "plat-home": ["Platform Admin", "All companies · no leave queues"]
+    };
+
+    const navs = {
+      emp: [
+        ["emp-home", "Dashboard"],
+        ["emp-new", "New leave"],
+        ["emp-list", "My requests"],
+        ["emp-cal", "Calendar"]
+      ],
+      mgr: [
+        ["mgr-queue", "Team queue"],
+        ["mgr-cal", "Team calendar"]
+      ],
+      hr: [
+        ["hr-home", "Setup"],
+        ["hr-cal", "Working days"],
+        ["hr-types", "Leave types"],
+        ["hr-link", "Onboarding link"],
+        ["hr-users", "Employees"],
+        ["hr-orgcal", "Company calendar"]
+      ],
+      plat: [["plat-home", "Companies"]]
+    };
+
+    function roleFor(id) {
+      if (id.startsWith("emp-")) return "emp";
+      if (id.startsWith("mgr-")) return "mgr";
+      if (id.startsWith("hr-")) return "hr";
+      if (id.startsWith("plat-")) return "plat";
+      return null;
+    }
+
+    const holidays = ["2026-09-24", "2026-12-16"];
+    const blocked = new Set(["2026-09-15"]);
+
+    function iso(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return y + "-" + m + "-" + day;
+    }
+
+    function workingDays(start, end) {
+      if (!start || !end) return { error: "Pick start and end dates." };
+      const s = new Date(start + "T00:00:00");
+      const e = new Date(end + "T00:00:00");
+      if (e < s) return { error: "End date cannot be before start date. Request not saved." };
+      let n = 0;
+      const skip = [];
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        const key = iso(d);
+        const dow = d.getDay();
+        if (dow === 0 || dow === 6) { skip.push(key + " weekend"); continue; }
+        if (holidays.includes(key)) { skip.push(key + " company holiday"); continue; }
+        n++;
+      }
+      return { n, skip };
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === id));
+      document.querySelectorAll(".wf-nav a").forEach((a) => a.classList.toggle("active", a.dataset.screen === id));
+      const n = notes[id];
+      document.getElementById("note-body").innerHTML = n
+        ? "<b>Why this screen</b>" + n.why +
+          "<br><br><b>Requirement</b>" + n.supports +
+          "<br><br><b>User can</b>" + n.does +
+          "<br><br><b>Next</b>" + n.next +
+          "<br><br><b>When it goes wrong</b>" + n.errors
+        : "";
+      const who = roles[id] || ["Leave Request Platform", ""];
+      document.getElementById("who").innerHTML = who[0] + "<small>" + who[1] + "</small>";
+      document.getElementById("app-context").textContent = who[1] || "Wireframe";
+      const role = roleFor(id);
+      const bar = document.getElementById("appnav");
+      if (!role) {
+        bar.classList.add("hidden");
+        bar.innerHTML = "";
+      } else {
+        bar.classList.remove("hidden");
+        bar.innerHTML = navs[role].map(([sid, label]) =>
+          "<button type='button' class='" + (sid === id ? "on" : "") + "' data-go='" + sid + "'>" + label + "</button>"
+        ).join("") + "<button type='button' data-go='login'>Log out</button>";
+      }
+      history.replaceState(null, "", "#" + id);
+      if (id === "emp-new") updateDays();
+    }
+
+    function updateDays() {
+      const start = document.getElementById("start-date").value;
+      const end = document.getElementById("end-date").value;
+      const box = document.getElementById("days-box");
+      const err = document.getElementById("leave-err");
+      const ok = document.getElementById("leave-ok");
+      ok.classList.add("hidden");
+      const r = workingDays(start, end);
+      if (r.error) {
+        document.getElementById("days-count").textContent = "—";
+        document.getElementById("days-note").textContent = r.error;
+        box.className = "callout err";
+        return;
+      }
+      box.className = "callout ok";
+      document.getElementById("days-count").textContent = r.n + " day" + (r.n === 1 ? "" : "s");
+      document.getElementById("days-note").textContent =
+        (r.skip.length ? "Excluded: " + r.skip.join(", ") + ". " : "") +
+        "Weekends and Company A holidays excluded. This total is stored for the manager.";
+      err.classList.add("hidden");
+    }
+
+    function drawCal(el, marks) {
+      const start = new Date(2026, 8, 1);
+      const firstDow = start.getDay();
+      const days = 30;
+      const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      let html = names.map((n) => "<div class='hd'>" + n + "</div>").join("");
+      for (let i = 0; i < firstDow; i++) html += "<div class='out'></div>";
+      for (let d = 1; d <= days; d++) {
+        const dt = new Date(2026, 8, d);
+        const key = iso(dt);
+        const dow = dt.getDay();
+        let cls = "";
+        let extra = "";
+        if (dow === 0 || dow === 6) cls = "out";
+        if (marks.leave && marks.leave.includes(d)) { cls = "leave"; extra = " leave"; }
+        if (holidays.includes(key)) { cls = "hol"; extra = " holiday"; }
+        if (blocked.has(key) || (marks.block && marks.block.includes(d))) { cls = "blk"; extra = " blocked"; }
+        html += "<div class='" + cls + "'>" + d + extra + "</div>";
+      }
+      el.innerHTML = html;
+    }
+
+    document.getElementById("cal-emp") && drawCal(document.getElementById("cal-emp"), { leave: [1,2,3,4,7] });
+    document.getElementById("cal-mgr") && drawCal(document.getElementById("cal-mgr"), { leave: [1,2,3,4,7], block: [15] });
+    document.getElementById("cal-hr") && drawCal(document.getElementById("cal-hr"), { leave: [1,2,3,4,7], block: [15] });
+
+    document.body.addEventListener("click", (e) => {
+      const go = e.target.closest("[data-go]");
+      if (go) {
+        e.preventDefault();
+        showScreen(go.dataset.go);
+      }
+      const nav = e.target.closest(".wf-nav a");
+      if (nav) {
+        e.preventDefault();
+        showScreen(nav.dataset.screen);
+      }
+    });
+
+    ["start-date", "end-date"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", updateDays);
+    });
+
+    document.getElementById("btn-submit-leave").addEventListener("click", () => {
+      const start = document.getElementById("start-date").value;
+      const end = document.getElementById("end-date").value;
+      const err = document.getElementById("leave-err");
+      const ok = document.getElementById("leave-ok");
+      err.classList.add("hidden");
+      ok.classList.add("hidden");
+      for (let d = new Date(start + "T00:00:00"); d <= new Date(end + "T00:00:00"); d.setDate(d.getDate() + 1)) {
+        if (blocked.has(iso(d))) {
+          err.textContent = iso(d) + " is blocked for your team (stocktake). Request not saved.";
+          err.classList.remove("hidden");
+          return;
+        }
+      }
+      const r = workingDays(start, end);
+      if (r.error) {
+        err.textContent = r.error;
+        err.classList.remove("hidden");
+        return;
+      }
+      ok.textContent = "Request saved as Pending. Working-day total stored as " + r.n + ". Manager will see the same number.";
+      ok.classList.remove("hidden");
+    });
+
+    document.getElementById("btn-invalid-dates").addEventListener("click", () => {
+      document.getElementById("start-date").value = "2026-09-07";
+      document.getElementById("end-date").value = "2026-09-01";
+      updateDays();
+      document.getElementById("btn-submit-leave").click();
+    });
+    document.getElementById("btn-blocked").addEventListener("click", () => {
+      document.getElementById("start-date").value = "2026-09-15";
+      document.getElementById("end-date").value = "2026-09-15";
+      updateDays();
+      document.getElementById("btn-submit-leave").click();
+    });
+    document.getElementById("btn-holiday").addEventListener("click", () => {
+      document.getElementById("start-date").value = "2026-09-21";
+      document.getElementById("end-date").value = "2026-09-25";
+      updateDays();
+    });
+
+    document.getElementById("btn-dup").addEventListener("click", () => {
+      document.getElementById("dup-err").classList.toggle("hidden");
+      document.getElementById("disabled-err").classList.add("hidden");
+    });
+    document.getElementById("btn-disabled").addEventListener("click", () => {
+      document.getElementById("disabled-err").classList.toggle("hidden");
+      document.getElementById("dup-err").classList.add("hidden");
+    });
+    document.getElementById("btn-cancel").addEventListener("click", () => {
+      document.getElementById("cancel-ok").classList.remove("hidden");
+    });
+
+    document.getElementById("btn-approve").addEventListener("click", () => {
+      document.getElementById("reject-err").classList.add("hidden");
+      document.getElementById("reject-ok").classList.add("hidden");
+      document.getElementById("approve-ok").classList.remove("hidden");
+    });
+    document.getElementById("btn-reject").addEventListener("click", () => {
+      document.getElementById("approve-ok").classList.add("hidden");
+      const reason = document.getElementById("reject-reason").value.trim();
+      if (!reason) {
+        document.getElementById("reject-ok").classList.add("hidden");
+        document.getElementById("reject-err").classList.remove("hidden");
+        return;
+      }
+      document.getElementById("reject-err").classList.add("hidden");
+      document.getElementById("reject-ok").classList.remove("hidden");
+    });
+    document.getElementById("btn-block-team").addEventListener("click", () => {
+      document.getElementById("block-ok").classList.remove("hidden");
+    });
+
+    document.getElementById("btn-copy").addEventListener("click", () => {
+      const el = document.getElementById("link-msg");
+      el.textContent = "Link copied. Send it to Company A employees only.";
+      el.classList.remove("hidden");
+    });
+    document.getElementById("btn-disable-link").addEventListener("click", () => {
+      document.getElementById("link-status").textContent = "Disabled";
+      document.getElementById("link-status").className = "badge rejected";
+      const el = document.getElementById("link-msg");
+      el.textContent = "Link disabled. New registrations for Company A are blocked until you regenerate.";
+      el.classList.remove("hidden");
+    });
+    document.getElementById("btn-regen").addEventListener("click", () => {
+      document.getElementById("link-status").textContent = "Active";
+      document.getElementById("link-status").className = "badge approved";
+      const el = document.getElementById("link-msg");
+      el.textContent = "New link generated. The old URL no longer works. Still Company A only.";
+      el.classList.remove("hidden");
+    });
+    document.getElementById("btn-create-co").addEventListener("click", () => {
+      document.getElementById("create-ok").classList.remove("hidden");
+    });
+
+    const initial = (location.hash || "#flow").slice(1);
+    showScreen(notes[initial] ? initial : "flow");
+  </script>
+</body>
+</html>

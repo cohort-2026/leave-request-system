@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leave Request System — Visual data model</title>
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --line: #222;
+      --paper: #fff;
+      --page: #d6d6d6;
+      --fill: #f3f3f3;
+      --pk: #fff3c4;
+      --fk: #dbe7ff;
+      --uk: #e7f3ea;
+      --accent: #2c3e6b;
+      --dash: #6a6a6a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--page);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    button { font: inherit; }
+
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #222;
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .top strong { font-size: 15px; }
+    .tag {
+      border: 1px solid #fff;
+      padding: 2px 8px;
+      font-size: 11px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .top .hint { color: #ccc; font-size: 12px; margin-left: auto; }
+    .top a { color: #fff; }
+
+    .toolbar {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 8px 16px 10px;
+      background: #ececec;
+      border-bottom: 2px solid #222;
+      position: sticky;
+      top: 44px;
+      z-index: 30;
+    }
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .toolbar .btn {
+      border: 2px solid #222;
+      background: #fff;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .toolbar .btn.on { background: #222; color: #fff; font-weight: bold; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      margin-left: auto;
+      font-size: 12px;
+      align-items: center;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sw { width: 16px; height: 12px; border: 1px solid #222; }
+    .sw.pk { background: var(--pk); }
+    .sw.fk { background: var(--fk); }
+    .sw.uk { background: var(--uk); }
+    .keybar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      align-items: center;
+      background: #fff;
+      border: 2px solid #222;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    .keybar strong { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+    .key-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .key-item b { display: block; line-height: 1.2; }
+    .key-item small { display: block; color: var(--muted); font-size: 11px; }
+    .key-item svg { flex: 0 0 auto; }
+    .key-tip { color: var(--muted); font-size: 11px; margin-left: auto; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      min-height: calc(100vh - 170px);
+    }
+    .canvas-wrap {
+      overflow: auto;
+      background:
+        linear-gradient(#cacaca 1px, transparent 1px),
+        linear-gradient(90deg, #cacaca 1px, transparent 1px);
+      background-size: 24px 24px;
+      background-color: #d6d6d6;
+    }
+    .board {
+      position: relative;
+      min-width: 1620px;
+      min-height: 1280px;
+      padding-right: 32px;
+    }
+    #svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+    #svg .hit { pointer-events: stroke; cursor: pointer; }
+    .tbl {
+      position: absolute;
+      width: 320px;
+      background: #fff;
+      border: 2px solid #222;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.12);
+      z-index: 2;
+      overflow: visible;
+    }
+    .tbl.wide { width: 360px; }
+    .tbl.xl { width: 420px; }
+    .tbl.dim { opacity: .28; }
+    .tbl.hot { outline: 3px solid #222; z-index: 5; }
+    .tbl h3 {
+      margin: 0;
+      padding: 8px 10px;
+      background: #222;
+      color: #fff;
+      font-size: 12px;
+      letter-spacing: .04em;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .tbl h3 small { font-weight: normal; opacity: .8; font-size: 10px; letter-spacing: 0; }
+    .tbl table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      table-layout: fixed;
+    }
+    .tbl td {
+      padding: 4px 8px;
+      border-top: 1px solid #ddd;
+      vertical-align: middle;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tbl td:first-child { width: 62%; }
+    .tbl tr.pk td { background: var(--pk); font-weight: bold; }
+    .tbl tr.fk td { background: var(--fk); }
+    .tbl tr.uk td { background: var(--uk); }
+    .k {
+      display: inline-block;
+      width: 22px;
+      font-size: 9px;
+      font-weight: bold;
+      letter-spacing: .03em;
+      margin-right: 6px;
+    }
+    .type {
+      width: 38%;
+      color: var(--muted);
+      text-align: right;
+      white-space: nowrap;
+      font-size: 10px;
+    }
+    .rel-label {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #222;
+      padding: 1px 6px;
+      font-size: 10px;
+      z-index: 3;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .rel-label.dim { opacity: .2; }
+    .rel-label.hot { outline: 2px solid #222; font-weight: bold; }
+
+    .key-box {
+      position: absolute;
+      background: #fff;
+      border: 2px solid #222;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.12);
+      z-index: 2;
+      overflow: hidden;
+    }
+    .key-box h3 {
+      margin: 0;
+      padding: 8px 10px;
+      background: #222;
+      color: #fff;
+      font-size: 12px;
+      letter-spacing: .04em;
+    }
+    .key-box .key-body { padding: 12px 14px 14px; font-size: 12px; }
+    .key-box p { margin: 0 0 10px; }
+    .key-demo {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      justify-content: center;
+      margin: 10px 0 8px;
+    }
+    .mini-tbl {
+      border: 2px solid #222;
+      background: #fff;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: .04em;
+      text-align: center;
+      min-width: 110px;
+    }
+    .mini-tbl span { display: block; font-weight: normal; color: var(--muted); font-size: 10px; letter-spacing: 0; margin-top: 2px; }
+    .key-read {
+      text-align: center;
+      background: #fff6d6;
+      border: 1px dashed #c9a227;
+      padding: 8px 10px;
+      margin: 8px 0 0;
+    }
+    .ends-graphic {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin: 8px 0 10px;
+    }
+    .ends-cap { font-size: 11px; color: var(--muted); text-align: center; margin-top: 2px; }
+
+    .notes {
+      background: #ececec;
+      border-left: 2px solid #222;
+      padding: 12px;
+      overflow: auto;
+    }
+    .notes h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin: 0 0 8px;
+    }
+    .card {
+      border: 2px dashed #c9a227;
+      background: #fff6d6;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .card > b { display: block; margin-bottom: 4px; }
+    .notes ul { margin: 6px 0 0 18px; padding: 0; }
+    .muted { color: var(--muted); }
+
+    /* Conceptual + isolation use inner boards */
+    .view { display: none; }
+    .view.on { display: block; }
+    .concept-board { position: relative; min-width: 1680px; min-height: 900px; }
+    .ent {
+      position: absolute;
+      border: 2px solid #222;
+      background: #fff;
+      padding: 12px 14px;
+      min-width: 140px;
+      text-align: center;
+      z-index: 2;
+      box-shadow: 3px 3px 0 rgba(0,0,0,.12);
+    }
+    .ent.core { background: #222; color: #fff; min-width: 180px; }
+    .ent.assoc { background: var(--pk); }
+    .ent h4 { margin: 0 0 4px; font-size: 14px; }
+    .ent p { margin: 0; font-size: 11px; color: var(--muted); }
+    .ent.core p { color: #ccc; }
+    .ent.dim { opacity: .28; }
+    .ent.hot { outline: 3px solid #222; }
+
+    .iso {
+      display: grid;
+      grid-template-columns: 1fr 90px 1fr;
+      gap: 12px;
+      padding: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .iso-col {
+      border: 2px solid #222;
+      background: #fff;
+      padding: 16px;
+    }
+    .iso-col h3 {
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #222;
+    }
+    .iso-box {
+      border: 2px solid #222;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      background: var(--fill);
+      font-size: 12px;
+    }
+    .iso-box strong { display: block; }
+    .iso-x {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      text-align: center;
+      gap: 8px;
+    }
+    .iso-x .big {
+      width: 64px; height: 64px;
+      border: 3px solid #7a1f1f;
+      color: #7a1f1f;
+      display: grid;
+      place-items: center;
+      font-size: 32px;
+      background: #f8e8e8;
+    }
+
+    @media (max-width: 2000px) {
+      .layout { grid-template-columns: 1fr; }
+      .notes { border-left: 0; border-top: 2px solid #222; max-height: 200px; }
+    }
+    @media print {
+      .top, .toolbar, .notes { display: none !important; }
+      .layout { display: block; }
+      .canvas-wrap { overflow: visible; background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <strong>Leave Request System</strong>
+    <span class="tag">ERD</span>
+    <span class="hint">Visual of <a href="data-model.md">data-model.md</a> · Crow’s Foot · click a table or line</span>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <button type="button" class="btn on" data-view="logical">Logical ERD</button>
+      <button type="button" class="btn" data-view="concept">Conceptual map</button>
+      <button type="button" class="btn" data-view="iso">Company isolation</button>
+      <label class="chip" id="all-fields-wrap"><input type="checkbox" id="all-fields" /> Show all fields</label>
+      <div class="legend">
+        <span class="chip"><span class="sw pk"></span> Primary key</span>
+        <span class="chip"><span class="sw fk"></span> Foreign key</span>
+        <span class="chip"><span class="sw uk"></span> Unique</span>
+        <span class="chip muted">Dashed line = isolation copy of company_id</span>
+      </div>
+    </div>
+    <div class="keybar" id="keybar">
+      <strong>Line ends</strong>
+      <span class="key-item">
+        <svg width="64" height="28" viewBox="0 0 64 28" aria-hidden="true">
+          <line x1="4" y1="14" x2="60" y2="14" stroke="#222" stroke-width="1.8"/>
+          <line x1="22" y1="5" x2="22" y2="23" stroke="#222" stroke-width="1.8"/>
+          <line x1="30" y1="5" x2="30" y2="23" stroke="#222" stroke-width="1.8"/>
+        </svg>
+        <span><b>Exactly one</b><small>two bars · this table contributes 1 row</small></span>
+      </span>
+      <span class="key-item">
+        <svg width="64" height="28" viewBox="0 0 64 28" aria-hidden="true">
+          <line x1="4" y1="14" x2="60" y2="14" stroke="#222" stroke-width="1.8"/>
+          <circle cx="28" cy="14" r="4" fill="#fff" stroke="#222" stroke-width="1.8"/>
+          <line x1="38" y1="5" x2="38" y2="23" stroke="#222" stroke-width="1.8"/>
+        </svg>
+        <span><b>Zero or one</b><small>ring + bar · optional (can be empty)</small></span>
+      </span>
+      <span class="key-item">
+        <svg width="72" height="28" viewBox="0 0 72 28" aria-hidden="true">
+          <line x1="4" y1="14" x2="40" y2="14" stroke="#222" stroke-width="1.8"/>
+          <circle cx="36" cy="14" r="4" fill="#fff" stroke="#222" stroke-width="1.8"/>
+          <line x1="40" y1="14" x2="66" y2="5" stroke="#222" stroke-width="1.8"/>
+          <line x1="40" y1="14" x2="66" y2="14" stroke="#222" stroke-width="1.8"/>
+          <line x1="40" y1="14" x2="66" y2="23" stroke="#222" stroke-width="1.8"/>
+        </svg>
+        <span><b>Many</b><small>crow’s foot · 0 or more rows of this table</small></span>
+      </span>
+      <span class="key-tip">The symbol sits on the table it describes. Click any line for a worked example.</span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="canvas-wrap">
+      <div class="view on" id="view-logical">
+        <div class="board" id="board-logical">
+          <svg id="svg-logical"></svg>
+        </div>
+      </div>
+      <div class="view" id="view-concept">
+        <div class="concept-board" id="board-concept">
+          <svg id="svg-concept"></svg>
+        </div>
+      </div>
+      <div class="view" id="view-iso">
+        <div class="iso">
+          <div class="iso-col">
+            <h3>Company A</h3>
+            <div class="iso-box"><strong>company_id = 1</strong> slug: company-a · Mon–Fri working</div>
+            <div class="iso-box"><strong>Departments</strong> Operations (Sipho) · HR</div>
+            <div class="iso-box"><strong>Users</strong> Thandi EMP-1042 · Sipho · Naledi · Lebo</div>
+            <div class="iso-box"><strong>Leave types / balances</strong> Annual 15 · Sick 30 cycle · Family 3</div>
+            <div class="iso-box"><strong>Holidays</strong> 24 Sep Heritage Day · 16 Dec Reconciliation</div>
+            <div class="iso-box"><strong>Onboarding link</strong> app.example.com/onboard/company-a</div>
+            <div class="iso-box"><strong>Leave requests</strong> Thandi Annual 1–7 Sep · stored working_days_count = 5</div>
+            <div class="iso-box"><strong>Date blocks</strong> 15 Sep stocktake (Operations team)</div>
+          </div>
+          <div class="iso-x">
+            <div class="big">✕</div>
+            <div>No shared rows</div>
+            <div class="muted">FR-09 · FR-10</div>
+            <div class="muted">Employees, leave, policies and holidays stay inside one company_id</div>
+          </div>
+          <div class="iso-col">
+            <h3>Company B</h3>
+            <div class="iso-box"><strong>company_id = 2</strong> slug: company-b · own working week</div>
+            <div class="iso-box"><strong>Departments</strong> Own list (8 in the planning example)</div>
+            <div class="iso-box"><strong>Users</strong> Own people only — cannot see Thandi</div>
+            <div class="iso-box"><strong>Leave types / balances</strong> Policy B — separate LeaveType rows</div>
+            <div class="iso-box"><strong>Holidays</strong> Calendar B — separate PublicHoliday rows</div>
+            <div class="iso-box"><strong>Onboarding link</strong> app.example.com/onboard/company-b</div>
+            <div class="iso-box"><strong>Leave requests</strong> Own applications. No join to Company A requests</div>
+            <div class="iso-box"><strong>Date blocks</strong> Own team / company blocks</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="notes" id="notes">
+      <h2>This diagram</h2>
+      <div class="card" id="note-body"></div>
+    </aside>
+  </div>
+
+  <script>
+    const ROW = 22;
+    const HEAD = 32;
+    const BOARD_W = 1620;
+
+    const tables = {
+      company: {
+        id: "company", title: "COMPANY", sub: "tenant",
+        x: 710, y: 40, w: 340,
+        why: "The platform is multi-company. Isolation starts here.",
+        cols: [
+          { n: "company_id", k: "PK", t: "INT" },
+          { n: "name", k: "", t: "VARCHAR" },
+          { n: "slug", k: "UK", t: "VARCHAR" },
+          { n: "mon … sun_is_working", k: "", t: "BOOLEAN ×7", extra: true },
+          { n: "monday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "tuesday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "wednesday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "thursday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "friday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "saturday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "sunday_is_working", k: "", t: "BOOLEAN", all: true },
+          { n: "created_at", k: "", t: "DATETIME", all: true },
+          { n: "created_by_user_id", k: "FK", t: "INT → User" }
+        ]
+      },
+      department: {
+        id: "department", title: "DEPARTMENT", sub: "team",
+        x: 48, y: 280, w: 340,
+        why: "Onboarding captures department. A manager’s team is a department.",
+        cols: [
+          { n: "department_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "name", k: "UK*", t: "VARCHAR" },
+          { n: "manager_user_id", k: "FK", t: "INT → User" }
+        ]
+      },
+      leave_type: {
+        id: "leave_type", title: "LEAVE_TYPE", sub: "company policy",
+        x: 540, y: 280, w: 340,
+        why: "Each company owns its leave types and default days.",
+        cols: [
+          { n: "leave_type_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "name", k: "UK*", t: "VARCHAR" },
+          { n: "default_days", k: "", t: "INT" },
+          { n: "allowance_period", k: "", t: "VARCHAR" },
+          { n: "is_active", k: "", t: "BOOLEAN", all: true }
+        ]
+      },
+      public_holiday: {
+        id: "public_holiday", title: "PUBLIC_HOLIDAY", sub: "excluded from count",
+        x: 1000, y: 280, w: 320,
+        why: "Company-specific dates excluded from the working-day count. Not a submit block.",
+        cols: [
+          { n: "public_holiday_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "holiday_date", k: "UK*", t: "DATE" },
+          { n: "name", k: "", t: "VARCHAR" }
+        ]
+      },
+      onboarding_link: {
+        id: "onboarding_link", title: "ONBOARDING_LINK", sub: "one company",
+        x: 1260, y: 280, w: 320,
+        why: "Generate, disable, or regenerate. Token belongs to one company (FR-06 / FR-07).",
+        cols: [
+          { n: "onboarding_link_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "token", k: "UK", t: "VARCHAR" },
+          { n: "status", k: "", t: "VARCHAR" },
+          { n: "created_at", k: "", t: "DATETIME", all: true },
+          { n: "created_by_user_id", k: "FK", t: "INT → User" },
+          { n: "disabled_at", k: "", t: "DATETIME", all: true }
+        ]
+      },
+      user: {
+        id: "user", title: "USER", sub: "one role in v1",
+        x: 48, y: 510, w: 360,
+        why: "Anyone who logs in. Platform Admin has company_id null.",
+        cols: [
+          { n: "user_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "department_id", k: "FK", t: "INT → Department" },
+          { n: "role", k: "", t: "VARCHAR" },
+          { n: "first_name", k: "", t: "VARCHAR" },
+          { n: "last_name", k: "", t: "VARCHAR" },
+          { n: "employee_number", k: "UK*", t: "VARCHAR" },
+          { n: "email", k: "UK", t: "VARCHAR" },
+          { n: "password_hash", k: "", t: "VARCHAR", all: true },
+          { n: "position", k: "", t: "VARCHAR" },
+          { n: "status", k: "", t: "VARCHAR" },
+          { n: "email_verified_at", k: "", t: "DATETIME" },
+          { n: "verification_token", k: "UK", t: "VARCHAR", all: true },
+          { n: "verification_expires_at", k: "", t: "DATETIME", all: true },
+          { n: "created_at", k: "", t: "DATETIME", all: true }
+        ]
+      },
+      date_block: {
+        id: "date_block", title: "DATE_BLOCK", sub: "stops submit",
+        x: 1000, y: 510, w: 320,
+        why: "Manager (team) or company admin (whole company) blocks dates. Overlap refuses submit.",
+        cols: [
+          { n: "date_block_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "department_id", k: "FK", t: "INT → Department" },
+          { n: "scope", k: "", t: "VARCHAR" },
+          { n: "start_date", k: "", t: "DATE" },
+          { n: "end_date", k: "", t: "DATE" },
+          { n: "reason", k: "", t: "VARCHAR" },
+          { n: "created_by_user_id", k: "FK", t: "INT → User", all: true },
+          { n: "created_at", k: "", t: "DATETIME", all: true }
+        ]
+      },
+      leave_request: {
+        id: "leave_request", title: "LEAVE_REQUEST", sub: "official record",
+        x: 48, y: 870, w: 420,
+        why: "Replaces email/WhatsApp. working_days_count is stored at submit (FR-05) and not recalculated later. Status: pending | approved | rejected | cancelled. decision_reason is required when rejected.",
+        cols: [
+          { n: "leave_request_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "employee_user_id", k: "FK", t: "INT → User" },
+          { n: "leave_type_id", k: "FK", t: "INT → LeaveType" },
+          { n: "start_date", k: "", t: "DATE" },
+          { n: "end_date", k: "", t: "DATE" },
+          { n: "working_days_count", k: "", t: "INT" },
+          { n: "reason", k: "", t: "TEXT" },
+          { n: "supporting_file_name", k: "", t: "VARCHAR" },
+          { n: "supporting_file_key", k: "", t: "VARCHAR", all: true },
+          { n: "status", k: "", t: "VARCHAR" },
+          { n: "submitted_at", k: "", t: "DATETIME", all: true },
+          { n: "cancelled_at", k: "", t: "DATETIME", all: true },
+          { n: "reviewer_user_id", k: "FK", t: "INT → User" },
+          { n: "reviewed_at", k: "", t: "DATETIME", all: true },
+          { n: "decision_reason", k: "", t: "TEXT" }
+        ]
+      },
+      leave_balance: {
+        id: "leave_balance", title: "LEAVE_BALANCE", sub: "User × LeaveType",
+        x: 540, y: 870, w: 340,
+        why: "Remaining days per person per type. Reduced by working_days_count on approve only.",
+        cols: [
+          { n: "leave_balance_id", k: "PK", t: "INT" },
+          { n: "company_id", k: "FK", t: "INT → Company" },
+          { n: "user_id", k: "FK", t: "INT → User" },
+          { n: "leave_type_id", k: "FK", t: "INT → LeaveType" },
+          { n: "days_remaining", k: "", t: "INT" }
+        ]
+      }
+    };
+
+    const rels = [
+      { id: "c-d", a: "company", b: "department", aSide: "s", aT: 0.10, bSide: "n", bT: 0.62, aCard: "one", bCard: "many", label: "has", via: "below-company",
+        meaning: "A company has many departments. A department belongs to one company." },
+      { id: "c-u", a: "company", b: "user", aSide: "s", aT: 0.18, bSide: "e", bT: 0.20, aCard: "oneo", bCard: "many", label: "employs", via: "below-company",
+        meaning: "Company users belong to one company. Platform Admin has company_id null (optional on User)." },
+      { id: "c-lt", a: "company", b: "leave_type", aSide: "s", aT: 0.42, bSide: "n", bT: 0.50, aCard: "one", bCard: "many", label: "defines", via: "below-company",
+        meaning: "Each company configures its own leave types. Company A Annual is not Company B Annual." },
+      { id: "c-ph", a: "company", b: "public_holiday", aSide: "s", aT: 0.88, bSide: "n", bT: 0.40, aCard: "one", bCard: "many", label: "observes", via: "below-company",
+        meaning: "Public holidays are company-specific and excluded from the working-day count (FR-03)." },
+      { id: "c-ol", a: "company", b: "onboarding_link", aSide: "e", aT: 0.36, bSide: "n", bT: 0.50, aCard: "one", bCard: "many", label: "issues",
+        meaning: "A company has a history of tokens; at most one is active. The link cannot register someone under another company." },
+      { id: "c-db", a: "company", b: "date_block", aSide: "s", aT: 0.70, bSide: "n", bT: 0.22, aCard: "one", bCard: "many", label: "sets", dashed: true, via: "gap",
+        meaning: "Isolation: every block is stored under a company_id so Company B never sees Company A’s stocktake." },
+      { id: "c-lr", a: "company", b: "leave_request", aSide: "s", aT: 0.28, bSide: "e", bT: 0.14, aCard: "one", bCard: "many", label: "isolates", dashed: true, via: "below-company",
+        meaning: "company_id is copied onto the request so leave queries can filter by tenant without joining through the employee." },
+      { id: "c-lb", a: "company", b: "leave_balance", aSide: "s", aT: 0.58, bSide: "e", bT: 0.18, aCard: "one", bCard: "many", label: "isolates", dashed: true, via: "below-company",
+        meaning: "Isolation copy of company_id on the balance row." },
+      { id: "d-u", a: "department", b: "user", aSide: "s", aT: 0.28, bSide: "n", bT: 0.28, aCard: "oneo", bCard: "many", label: "contains",
+        meaning: "Thandi and Sipho are both in Operations. Platform Admin has no department." },
+      { id: "u-d", a: "user", b: "department", aSide: "n", aT: 0.72, bSide: "s", bT: 0.72, aCard: "oneo", bCard: "many", label: "manages",
+        meaning: "Department.manager_user_id. One manager can be assigned to one or more departments. Optional until a manager is set." },
+      { id: "d-db", a: "department", b: "date_block", aSide: "e", aT: 0.55, bSide: "w", bT: 0.42, aCard: "oneo", bCard: "many", label: "team blocks", dashed: true, via: "gap",
+        meaning: "Team blocks set department_id. Company-wide blocks leave it null." },
+      { id: "u-lr", a: "user", b: "leave_request", aSide: "s", aT: 0.30, bSide: "n", bT: 0.26, aCard: "one", bCard: "many", label: "submits",
+        meaning: "employee_user_id. One employee submits many requests. My requests / My calendar filter on this." },
+      { id: "u-rev", a: "user", b: "leave_request", aSide: "s", aT: 0.70, bSide: "n", bT: 0.62, aCard: "oneo", bCard: "many", label: "reviews",
+        meaning: "reviewer_user_id. Optional until the manager approves or rejects. Reject still needs decision_reason." },
+      { id: "lt-lr", a: "leave_type", b: "leave_request", aSide: "w", aT: 0.70, bSide: "e", bT: 0.42, aCard: "one", bCard: "many", label: "classifies", via: "before-bottom",
+        meaning: "A request is of one type (Annual, Sick, Family responsibility)." },
+      { id: "u-lb", a: "user", b: "leave_balance", aSide: "s", aT: 0.92, bSide: "n", bT: 0.18, aCard: "one", bCard: "many", label: "holds", via: "after-user",
+        meaning: "One remaining-days row per type. Dashboard “12 Annual days left” is a LeaveBalance row, not a field on User." },
+      { id: "lt-lb", a: "leave_type", b: "leave_balance", aSide: "s", aT: 0.48, bSide: "n", bT: 0.48, aCard: "one", bCard: "many", label: "tracks",
+        meaning: "Many people hold a balance for Annual. Together with User this is the M:N with extra data (days_remaining)." }
+    ];
+
+    const notes = {
+      default: {
+        title: "Logical ERD",
+        body: "Nine tables for v1. Read every line from both ends: the symbol next to a table says how many rows of that table take part. Dashed lines are isolation copies of company_id — still a relationship, just the extra tenant key.",
+        extra: [
+          "Two bars = exactly one. Ring + bar = optional (zero or one). Crow’s foot = many.",
+          "Click a line (or its verb label) for a sentence in this panel.",
+          "Yellow = primary key, blue = foreign key, green = unique."
+        ]
+      },
+      concept: {
+        title: "Conceptual map",
+        body: "Same system without column lists. LeaveBalance is the associative table between User and LeaveType. DateBlock is separate from PublicHoliday: holidays change the day count; blocks refuse submit.",
+        extra: ["Company is the tenant.", "User plays several roles through named relationships (submits, reviews, manages).", "No 1-to-1 tables in v1."]
+      },
+      iso: {
+        title: "Company isolation",
+        body: "FR-09 and FR-10. Two companies share the application, not the rows. Every company-scoped table has company_id so a query can never mix A and B.",
+        extra: ["Onboarding URL slug is unique per company.", "Thandi’s 5-day request lives only under company_id = 1.", "Platform Admin creates companies and does not browse another company’s leave day-to-day."]
+      }
+    };
+
+    let showAll = false;
+    let selected = null;
+    const geom = {};
+
+    function visibleCols(t) {
+      return t.cols.filter((c) => {
+        if (showAll) return !c.extra;
+        return !c.all;
+      });
+    }
+
+    function heightOf(t) {
+      return HEAD + visibleCols(t).length * ROW;
+    }
+
+    function keyClass(k) {
+      if (k === "PK") return "pk";
+      if (k === "FK") return "fk";
+      if (k === "UK" || k === "UK*") return "uk";
+      return "";
+    }
+
+    function renderTables() {
+      const board = document.getElementById("board-logical");
+      board.querySelectorAll(".tbl, .rel-label").forEach((n) => n.remove());
+      Object.values(tables).forEach((t) => {
+        const h = heightOf(t);
+        geom[t.id] = { x: t.x, y: t.y, w: t.w, h: h };
+        const el = document.createElement("div");
+        el.className = "tbl" + (t.w >= 400 ? " xl" : t.w > 320 ? " wide" : "");
+        el.id = "tbl-" + t.id;
+        el.style.left = t.x + "px";
+        el.style.top = t.y + "px";
+        el.style.width = t.w + "px";
+        el.innerHTML = "<h3>" + t.title + "<small>" + t.sub + "</small></h3><table>" +
+          visibleCols(t).map((c) =>
+            "<tr class='" + keyClass(c.k) + "'><td><span class='k'>" + (c.k || "") +
+            "</span>" + c.n + "</td><td class='type'>" + c.t + "</td></tr>"
+          ).join("") + "</table>";
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          select("table:" + t.id);
+        });
+        board.appendChild(el);
+      });
+    }
+
+    function pt(id, side, t) {
+      const g = geom[id];
+      const tt = Math.max(0.08, Math.min(0.92, t));
+      if (side === "n") return { x: g.x + g.w * tt, y: g.y };
+      if (side === "s") return { x: g.x + g.w * tt, y: g.y + g.h };
+      if (side === "w") return { x: g.x, y: g.y + g.h * tt };
+      return { x: g.x + g.w, y: g.y + g.h * tt };
+    }
+
+    function stub(p, side, len) {
+      if (side === "n") return { x: p.x, y: p.y - len };
+      if (side === "s") return { x: p.x, y: p.y + len };
+      if (side === "w") return { x: p.x - len, y: p.y };
+      return { x: p.x + len, y: p.y };
+    }
+
+    function layout() {
+      const y0 = 40;
+      tables.company.x = 640;
+      tables.company.y = y0;
+      tables.company.w = 340;
+
+      const y1 = y0 + heightOf(tables.company) + 112;
+      tables.department.x = 40; tables.department.y = y1; tables.department.w = 340;
+      tables.leave_type.x = 500; tables.leave_type.y = y1; tables.leave_type.w = 340;
+      tables.public_holiday.x = 900; tables.public_holiday.y = y1; tables.public_holiday.w = 320;
+      tables.onboarding_link.x = 1260; tables.onboarding_link.y = y1; tables.onboarding_link.w = 320;
+
+      const y2 = y1 + Math.max(
+        heightOf(tables.department),
+        heightOf(tables.leave_type),
+        heightOf(tables.public_holiday),
+        heightOf(tables.onboarding_link)
+      ) + 108;
+      tables.user.x = 40; tables.user.y = y2; tables.user.w = 360;
+      tables.date_block.x = 900; tables.date_block.y = y2; tables.date_block.w = 320;
+
+      const y3 = y2 + Math.max(heightOf(tables.user), heightOf(tables.date_block)) + 116;
+      tables.leave_request.x = 40; tables.leave_request.y = y3; tables.leave_request.w = 420;
+      tables.leave_balance.x = 500; tables.leave_balance.y = y3; tables.leave_balance.w = 340;
+
+      return y3 + Math.max(heightOf(tables.leave_request), heightOf(tables.leave_balance), 280) + 64;
+    }
+
+    function route(a, aSide, b, bSide, opt) {
+      opt = opt || {};
+      const s = 20;
+      const A = stub(a, aSide, s);
+      const B = stub(b, bSide, s);
+      const pts = [a, A];
+      const aVert = aSide === "n" || aSide === "s";
+      const bVert = bSide === "n" || bSide === "s";
+      if (aVert && bVert) {
+        const midY = opt.midY != null ? opt.midY : (A.y + B.y) / 2;
+        pts.push({ x: A.x, y: midY }, { x: B.x, y: midY });
+      } else if (!aVert && !bVert) {
+        const midX = opt.midX != null ? opt.midX : (A.x + B.x) / 2;
+        const midY = opt.midY;
+        if (midY != null) {
+          pts.push({ x: A.x, y: midY }, { x: B.x, y: midY });
+        } else {
+          pts.push({ x: midX, y: A.y }, { x: midX, y: B.y });
+        }
+      } else if (aVert && !bVert) {
+        if (opt.midY != null) {
+          pts.push({ x: A.x, y: opt.midY }, { x: B.x, y: opt.midY });
+        } else {
+          pts.push({ x: A.x, y: B.y });
+        }
+      } else if (opt.midY != null) {
+        pts.push({ x: A.x, y: opt.midY }, { x: B.x, y: opt.midY });
+      } else {
+        pts.push({ x: B.x, y: A.y });
+      }
+      pts.push(B, b);
+      return pts;
+    }
+
+    function insideTable(p, pad) {
+      pad = pad || 8;
+      return Object.values(geom).some((g) =>
+        p.x > g.x - pad && p.x < g.x + g.w + pad && p.y > g.y - pad && p.y < g.y + g.h + pad
+      );
+    }
+
+    function labelPoint(pts) {
+      let best = null, bestLen = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y;
+        const len = Math.hypot(dx, dy);
+        const mid = { x: (pts[i].x + pts[i - 1].x) / 2, y: (pts[i].y + pts[i - 1].y) / 2 };
+        if (len > bestLen && !insideTable(mid, 16)) {
+          bestLen = len;
+          best = mid;
+        }
+      }
+      return best || pts[Math.floor(pts.length / 2)];
+    }
+
+    function dPath(pts) {
+      return pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+    }
+
+    function markerGroup(p, side, card, dashed) {
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      const stroke = dashed ? "#555" : "#222";
+      const into = { n: 0, e: 90, s: 180, w: 270 }[side];
+      g.setAttribute("transform", "translate(" + p.x + "," + p.y + ") rotate(" + into + ")");
+      const ns = "http://www.w3.org/2000/svg";
+      function line(x1, y1, x2, y2) {
+        const el = document.createElementNS(ns, "line");
+        el.setAttribute("x1", x1); el.setAttribute("y1", y1);
+        el.setAttribute("x2", x2); el.setAttribute("y2", y2);
+        el.setAttribute("stroke", stroke);
+        el.setAttribute("stroke-width", "1.8");
+        el.setAttribute("stroke-linecap", "square");
+        g.appendChild(el);
+      }
+      function circle(cy) {
+        const el = document.createElementNS(ns, "circle");
+        el.setAttribute("cx", "0"); el.setAttribute("cy", cy);
+        el.setAttribute("r", "3.4");
+        el.setAttribute("fill", "#d6d6d6");
+        el.setAttribute("stroke", stroke);
+        el.setAttribute("stroke-width", "1.8");
+        g.appendChild(el);
+      }
+      if (card === "one") {
+        line(-9, -8, 9, -8);
+        line(-9, -15, 9, -15);
+      } else if (card === "oneo") {
+        circle(-10);
+        line(-9, -18, 9, -18);
+      } else if (card === "many") {
+        circle(-9);
+        line(-9, -14, 0, -26);
+        line(0, -14, 0, -26);
+        line(9, -14, 0, -26);
+      }
+      return g;
+    }
+
+    function drawRels() {
+      const svg = document.getElementById("svg-logical");
+      const board = document.getElementById("board-logical");
+      const h = layout();
+      Object.values(tables).forEach((t) => {
+        geom[t.id] = { x: t.x, y: t.y, w: t.w, h: heightOf(t) };
+        const el = document.getElementById("tbl-" + t.id);
+        if (el) {
+          el.style.top = t.y + "px";
+          el.style.left = t.x + "px";
+          el.style.width = t.w + "px";
+        }
+      });
+      svg.innerHTML = "";
+      board.querySelectorAll(".rel-label").forEach((n) => n.remove());
+      svg.setAttribute("width", String(BOARD_W));
+      svg.setAttribute("height", String(h));
+      board.style.minWidth = BOARD_W + "px";
+      board.style.minHeight = h + "px";
+      const ns = "http://www.w3.org/2000/svg";
+      const belowCompany = geom.company.y + geom.company.h + 40;
+      const gapY = geom.user.y - 40;
+      const beforeBottom = geom.leave_request.y - 52;
+      const afterUser = geom.user.y + geom.user.h + 40;
+
+      rels.forEach((r) => {
+        const a = pt(r.a, r.aSide, r.aT);
+        const b = pt(r.b, r.bSide, r.bT);
+        const opt = {};
+        if (r.lane) opt.midY = belowCompany + r.lane;
+        if (r.via === "below-company") opt.midY = belowCompany;
+        if (r.via === "gap") opt.midY = gapY;
+        if (r.via === "before-bottom") opt.midY = beforeBottom;
+        if (r.via === "after-user") opt.midY = afterUser;
+        if (r.via === "rail") opt.midX = geom.public_holiday.x - 32;
+        if (r.id === "c-d") opt.midY = belowCompany;
+        const pts = route(a, r.aSide, b, r.bSide, opt);
+        const grp = document.createElementNS(ns, "g");
+        grp.dataset.rel = r.id;
+
+        const hit = document.createElementNS(ns, "path");
+        hit.setAttribute("d", dPath(pts));
+        hit.setAttribute("fill", "none");
+        hit.setAttribute("stroke", "transparent");
+        hit.setAttribute("stroke-width", "12");
+        hit.setAttribute("class", "hit");
+        hit.addEventListener("click", (e) => { e.stopPropagation(); select("rel:" + r.id); });
+
+        const path = document.createElementNS(ns, "path");
+        path.setAttribute("d", dPath(pts));
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", r.dashed ? "#555" : "#222");
+        path.setAttribute("stroke-width", "1.7");
+        if (r.dashed) path.setAttribute("stroke-dasharray", "6 4");
+        path.setAttribute("class", "line");
+
+        grp.appendChild(hit);
+        grp.appendChild(path);
+        grp.appendChild(markerGroup(a, r.aSide, r.aCard, r.dashed));
+        grp.appendChild(markerGroup(b, r.bSide, r.bCard, r.dashed));
+        svg.appendChild(grp);
+
+        const mid = labelPoint(pts);
+        const lab = document.createElement("div");
+        lab.className = "rel-label";
+        lab.dataset.rel = r.id;
+        lab.textContent = r.label;
+        lab.style.left = (mid.x - 24) + "px";
+        lab.style.top = (mid.y - 10) + "px";
+        lab.addEventListener("click", (e) => { e.stopPropagation(); select("rel:" + r.id); });
+        board.appendChild(lab);
+      });
+    }
+
+    function select(token) {
+      selected = token;
+      document.querySelectorAll(".tbl").forEach((el) => el.classList.remove("hot", "dim"));
+      document.querySelectorAll(".rel-label").forEach((el) => el.classList.remove("hot", "dim"));
+      document.querySelectorAll("#svg-logical g[data-rel]").forEach((g) => {
+        g.style.opacity = "";
+      });
+
+      if (!token) {
+        showNote(notes.default);
+        return;
+      }
+
+      if (token.startsWith("table:")) {
+        const id = token.slice(6);
+        const t = tables[id];
+        const related = new Set([id]);
+        rels.forEach((r) => {
+          if (r.a === id || r.b === id) { related.add(r.a); related.add(r.b); }
+        });
+        document.querySelectorAll(".tbl").forEach((el) => {
+          const tid = el.id.slice(4);
+          el.classList.toggle("hot", tid === id);
+          el.classList.toggle("dim", !related.has(tid));
+        });
+        document.querySelectorAll(".rel-label").forEach((el) => {
+          const r = rels.find((x) => x.id === el.dataset.rel);
+          const on = r && (r.a === id || r.b === id);
+          el.classList.toggle("hot", on);
+          el.classList.toggle("dim", !on);
+        });
+        document.querySelectorAll("#svg-logical g[data-rel]").forEach((g) => {
+          const r = rels.find((x) => x.id === g.dataset.rel);
+          const on = r && (r.a === id || r.b === id);
+          g.style.opacity = on ? "1" : "0.12";
+        });
+        showNote({
+          title: t.title,
+          body: t.why,
+          extra: [
+            "PK is the first row.",
+            "FK rows are blue — each is a relationship in the diagram.",
+            "UK / UK* = unique (UK* means unique together with company_id)."
+          ]
+        });
+        return;
+      }
+
+      if (token.startsWith("rel:")) {
+        const r = rels.find((x) => x.id === token.slice(4));
+        document.querySelectorAll(".tbl").forEach((el) => {
+          const tid = el.id.slice(4);
+          const on = tid === r.a || tid === r.b;
+          el.classList.toggle("hot", on);
+          el.classList.toggle("dim", !on);
+        });
+        document.querySelectorAll(".rel-label").forEach((el) => {
+          el.classList.toggle("hot", el.dataset.rel === r.id);
+          el.classList.toggle("dim", el.dataset.rel !== r.id);
+        });
+        document.querySelectorAll("#svg-logical g[data-rel]").forEach((g) => {
+          g.style.opacity = g.dataset.rel === r.id ? "1" : "0.1";
+        });
+        const aW = cardWords(r.aCard);
+        const bW = cardWords(r.bCard);
+        showNote({
+          title: tables[r.a].title + "  “" + r.label + "”  " + tables[r.b].title,
+          body: r.meaning,
+          html: '<div class="ends-graphic">' +
+            '<div class="mini-tbl">' + tables[r.a].title + '<span>' + aW.name + '</span></div>' +
+            crowLineSvg(r.aCard, r.bCard) +
+            '<div class="mini-tbl">' + tables[r.b].title + '<span>' + bW.name + '</span></div></div>' +
+            '<p>The ' + aW.how + ' sit on <b>' + tables[r.a].title + '</b> — ' + aW.means +
+            '. The ' + bW.how + ' sit on <b>' + tables[r.b].title + '</b> — ' + bW.means + '.</p>',
+          extra: [
+            r.dashed ? "Dashed line: isolation foreign key (company_id or optional team scope)." : "Solid line: main business relationship.",
+            "Same pattern everywhere: read the symbol next to each table, not the middle of the line."
+          ]
+        });
+      }
+    }
+
+    function cardWords(c) {
+      return {
+        one:  { name: "exactly one", how: "two bars", means: "there is one row, and it is required" },
+        oneo: { name: "zero or one", how: "ring and bar", means: "it is optional — the FK can be empty" },
+        many: { name: "many", how: "crow’s foot", means: "there can be several rows (including none)" }
+      }[c];
+    }
+
+    function crowLineSvg(aCard, bCard) {
+      function leftMark(card) {
+        if (card === "one") {
+          return '<line x1="2" y1="6" x2="2" y2="30" stroke="#222" stroke-width="1.8"/>' +
+                 '<line x1="10" y1="6" x2="10" y2="30" stroke="#222" stroke-width="1.8"/>';
+        }
+        if (card === "oneo") {
+          return '<circle cx="7" cy="18" r="4.2" fill="#fff" stroke="#222" stroke-width="1.8"/>' +
+                 '<line x1="16" y1="6" x2="16" y2="30" stroke="#222" stroke-width="1.8"/>';
+        }
+        return '<line x1="2" y1="6" x2="24" y2="18" stroke="#222" stroke-width="1.8"/>' +
+               '<line x1="2" y1="18" x2="24" y2="18" stroke="#222" stroke-width="1.8"/>' +
+               '<line x1="2" y1="30" x2="24" y2="18" stroke="#222" stroke-width="1.8"/>' +
+               '<circle cx="30" cy="18" r="4.2" fill="#fff" stroke="#222" stroke-width="1.8"/>';
+      }
+      function rightMark(card) {
+        if (card === "one") {
+          return '<line x1="210" y1="6" x2="210" y2="30" stroke="#222" stroke-width="1.8"/>' +
+                 '<line x1="218" y1="6" x2="218" y2="30" stroke="#222" stroke-width="1.8"/>';
+        }
+        if (card === "oneo") {
+          return '<circle cx="213" cy="18" r="4.2" fill="#fff" stroke="#222" stroke-width="1.8"/>' +
+                 '<line x1="204" y1="6" x2="204" y2="30" stroke="#222" stroke-width="1.8"/>';
+        }
+        return '<circle cx="190" cy="18" r="4.2" fill="#fff" stroke="#222" stroke-width="1.8"/>' +
+               '<line x1="196" y1="18" x2="218" y2="6" stroke="#222" stroke-width="1.8"/>' +
+               '<line x1="196" y1="18" x2="218" y2="18" stroke="#222" stroke-width="1.8"/>' +
+               '<line x1="196" y1="18" x2="218" y2="30" stroke="#222" stroke-width="1.8"/>';
+      }
+      return '<svg width="220" height="36" viewBox="0 0 220 36" aria-hidden="true">' +
+        '<line x1="18" y1="18" x2="202" y2="18" stroke="#222" stroke-width="1.8"/>' +
+        leftMark(aCard) + rightMark(bCard) + "</svg>";
+    }
+
+    function renderKey() {
+      const board = document.getElementById("board-logical");
+      let el = document.getElementById("crows-key");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "crows-key";
+        el.className = "key-box";
+        el.addEventListener("click", (e) => e.stopPropagation());
+        board.appendChild(el);
+      }
+      const x = tables.public_holiday.x;
+      const y = tables.leave_request.y;
+      const w = tables.onboarding_link.x + tables.onboarding_link.w - x;
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+      el.style.width = w + "px";
+      el.innerHTML =
+        "<h3>Worked example — one to many</h3>" +
+        '<div class="key-body">' +
+        "<p>Ignore the middle of the line. Read the <b>symbol touching each table</b>.</p>" +
+        '<div class="key-demo">' +
+        '<div class="mini-tbl">COMPANY<span>two bars = one</span></div>' +
+        crowLineSvg("one", "many") +
+        '<div class="mini-tbl">DEPARTMENT<span>crow’s foot = many</span></div>' +
+        "</div>" +
+        '<div class="key-read">One company <b>has</b> many departments.<br>' +
+        "Each department belongs to <b>exactly one</b> company.</div>" +
+        "<p style='margin:10px 0 0'>A <b>ring</b> (circle) means that end is allowed to be empty. " +
+        "Example: <i>reviews</i> — a request has no reviewer until someone approves or rejects.</p>" +
+        "</div>";
+    }
+
+    function showNote(n) {
+      document.getElementById("note-body").innerHTML =
+        "<b>" + n.title + "</b>" + n.body +
+        (n.html || "") +
+        (n.extra && n.extra.length ? "<ul>" + n.extra.map((x) => "<li>" + x + "</li>").join("") + "</ul>" : "");
+    }
+
+    /* Conceptual map */
+    const cents = {
+      company: { x: 720, y: 48, w: 220, h: 64, title: "Company", sub: "tenant / isolation root", core: true },
+      department: { x: 48, y: 220, w: 180, h: 58, title: "Department", sub: "team" },
+      user: { x: 300, y: 220, w: 180, h: 58, title: "User", sub: "4 roles, one login" },
+      leave_type: { x: 560, y: 220, w: 180, h: 58, title: "Leave type", sub: "company-owned" },
+      public_holiday: { x: 820, y: 220, w: 190, h: 58, title: "Public holiday", sub: "not counted" },
+      onboarding_link: { x: 1080, y: 220, w: 200, h: 58, title: "Onboarding link", sub: "one company" },
+      date_block: { x: 1350, y: 220, w: 190, h: 58, title: "Date block", sub: "refuses submit" },
+      leave_request: { x: 300, y: 500, w: 220, h: 64, title: "Leave request", sub: "stored working days" },
+      leave_balance: { x: 700, y: 500, w: 220, h: 64, title: "Leave balance", sub: "User × LeaveType", assoc: true }
+    };
+
+    function renderConcept() {
+      const board = document.getElementById("board-concept");
+      board.querySelectorAll(".ent").forEach((n) => n.remove());
+      const svg = document.getElementById("svg-concept");
+      svg.setAttribute("width", "1680");
+      svg.setAttribute("height", "900");
+      svg.innerHTML = "";
+      const ns = "http://www.w3.org/2000/svg";
+
+      Object.entries(cents).forEach(([id, e]) => {
+        const el = document.createElement("div");
+        el.className = "ent" + (e.core ? " core" : "") + (e.assoc ? " assoc" : "");
+        el.style.left = e.x + "px";
+        el.style.top = e.y + "px";
+        el.style.width = e.w + "px";
+        el.innerHTML = "<h4>" + e.title + "</h4><p>" + e.sub + "</p>";
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const t = tables[id];
+          document.querySelectorAll(".ent").forEach((n) => n.classList.remove("hot"));
+          el.classList.add("hot");
+          showNote({ title: t.title, body: t.why, extra: ["This is the conceptual view — open Logical ERD for columns and Crow’s Foot."] });
+        });
+        board.appendChild(el);
+      });
+
+      function box(id) { return cents[id]; }
+      function edge(id, side) {
+        const e = cents[id];
+        if (side === "n") return { x: e.x + e.w / 2, y: e.y };
+        if (side === "s") return { x: e.x + e.w / 2, y: e.y + e.h };
+        if (side === "w") return { x: e.x, y: e.y + e.h / 2 };
+        return { x: e.x + e.w, y: e.y + e.h / 2 };
+      }
+      function addPath(d) {
+        const path = document.createElementNS(ns, "path");
+        path.setAttribute("d", d);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "#222");
+        path.setAttribute("stroke-width", "1.6");
+        svg.appendChild(path);
+      }
+
+      const c = box("company");
+      const rail = c.y + c.h + 24;
+      ["department", "user", "leave_type", "public_holiday", "onboarding_link", "date_block"].forEach((id) => {
+        const top = edge(id, "n");
+        addPath("M" + (c.x + c.w / 2) + " " + (c.y + c.h) + " L" + (c.x + c.w / 2) + " " + rail +
+                " L" + top.x + " " + rail + " L" + top.x + " " + top.y);
+      });
+      const dE = edge("department", "e"), uW = edge("user", "w");
+      addPath("M" + dE.x + " " + dE.y + " L" + uW.x + " " + uW.y);
+      const uS = edge("user", "s"), lrN = edge("leave_request", "n");
+      addPath("M" + uS.x + " " + uS.y + " L" + uS.x + " " + ((uS.y + lrN.y) / 2) +
+              " L" + lrN.x + " " + ((uS.y + lrN.y) / 2) + " L" + lrN.x + " " + lrN.y);
+      const ltS = edge("leave_type", "s");
+      addPath("M" + (ltS.x - 20) + " " + ltS.y + " L" + (ltS.x - 20) + " " + (lrN.y - 16) +
+              " L" + (lrN.x + 30) + " " + (lrN.y - 16) + " L" + (lrN.x + 30) + " " + lrN.y);
+      const lbN = edge("leave_balance", "n");
+      addPath("M" + (ltS.x + 20) + " " + ltS.y + " L" + (ltS.x + 20) + " " + (lbN.y - 16) +
+              " L" + lbN.x + " " + (lbN.y - 16) + " L" + lbN.x + " " + lbN.y);
+
+      const cap = document.createElementNS(ns, "text");
+      cap.setAttribute("x", "810");
+      cap.setAttribute("y", "640");
+      cap.setAttribute("text-anchor", "middle");
+      cap.setAttribute("font-family", "Arial");
+      cap.setAttribute("font-size", "12");
+      cap.setAttribute("fill", "#5c5c5c");
+      cap.textContent = "LeaveBalance resolves User many-to-many LeaveType (days_remaining lives on the relationship).";
+      svg.appendChild(cap);
+    }
+
+    function drawAll() {
+      layout();
+      renderTables();
+      drawRels();
+      renderKey();
+      if (selected) select(selected);
+    }
+
+    document.getElementById("all-fields").addEventListener("change", (e) => {
+      showAll = e.target.checked;
+      selected = null;
+      drawAll();
+      showNote(notes.default);
+    });
+
+    document.querySelectorAll("[data-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-view]").forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        const v = btn.dataset.view;
+        document.querySelectorAll(".view").forEach((el) => el.classList.remove("on"));
+        document.getElementById("view-" + v).classList.add("on");
+        document.getElementById("all-fields-wrap").style.display = v === "logical" ? "" : "none";
+        document.getElementById("keybar").style.display = v === "logical" ? "" : "none";
+        if (v === "logical") showNote(notes.default);
+        if (v === "concept") showNote(notes.concept);
+        if (v === "iso") showNote(notes.iso);
+        selected = null;
+        if ((location.hash || "").slice(1) !== v) {
+          history.replaceState(null, "", "#" + v);
+        }
+      });
+    });
+
+    document.getElementById("board-logical").addEventListener("click", () => select(null));
+
+    function applyHash() {
+      const v = (location.hash || "#logical").slice(1);
+      const btn = document.querySelector('[data-view="' + v + '"]');
+      if (btn) btn.click();
+    }
+    window.addEventListener("hashchange", applyHash);
+
+    drawAll();
+    renderConcept();
+    showNote(notes.default);
+    applyHash();
+  </script>
+</body>
+</html>
