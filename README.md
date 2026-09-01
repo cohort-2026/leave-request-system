@@ -77,5 +77,33 @@ The client brief is available here:
 
 ## Development
 
-Development must not begin until the planning phase has been
-reviewed and approved by your mentor.
+The app is split into two TypeScript packages:
+
+- `backend/` — Express API on port 4000
+- `frontend/` — Vite + React on port 5173
+
+### Run both
+
+From the repo root, after `npm install` in each package:
+
+```powershell
+cd backend
+npm install
+cd ..\frontend
+npm install
+```
+
+Then from the repo root:
+
+```powershell
+npx --yes concurrently "npm --prefix backend run dev" "npm --prefix frontend run dev"
+```
+
+Or start them in two terminals with `npm run dev` inside `backend/` and `frontend/`.
+
+Check:
+
+- http://localhost:4000/api/health → `{ "ok": true }`
+- http://localhost:5173 → Vite React app
+
+See `Start Servers.md` for the same commands.
