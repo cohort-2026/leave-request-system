@@ -82,21 +82,33 @@ The app is split into two TypeScript packages:
 - `backend/` — Express API on port 4000
 - `frontend/` — Vite + React on port 5173
 
-### Run both
+### Install
 
-From the repo root, after `npm install` in each package:
+Lockfiles are committed. `node_modules/` is gitignored in the root, `frontend/`, and `backend/`. Do not commit `node_modules`.
+
+From the repo root, on a known-good lockfile:
 
 ```powershell
-cd backend
-npm install
-cd ..\frontend
-npm install
+npm ci
+npm run ci:all
 ```
 
-Then from the repo root:
+`npm ci` installs exactly what each lockfile specifies. Use `npm install` only when adding or updating a package.
+
+If code imports a package (`import ... from "react-router-dom"`), that package must already be in the matching `package.json`. Add the import and the install in the same change:
 
 ```powershell
-npx --yes concurrently "npm --prefix backend run dev" "npm --prefix frontend run dev"
+npm install <pkg> --prefix frontend
+```
+
+or `--prefix backend`. Never add an import without installing it there.
+
+### Run both
+
+From the repo root, after install:
+
+```powershell
+npm run dev
 ```
 
 Or start them in two terminals with `npm run dev` inside `backend/` and `frontend/`.
