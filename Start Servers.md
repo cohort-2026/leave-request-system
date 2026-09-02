@@ -1,9 +1,16 @@
 # How to start the backend and frontend
 
-From the repo root (`leave-request-system`):
+Install once from the repo root (`leave-request-system`) using the committed lockfiles:
 
 ```powershell
-npx --yes concurrently "npm --prefix backend run dev" "npm --prefix frontend run dev"
+npm ci
+npm run ci:all
+```
+
+Then start both:
+
+```powershell
+npm run dev
 ```
 
 - Backend: http://localhost:4000/api/health
