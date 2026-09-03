@@ -43,3 +43,10 @@ import { Button } from '../shared/components'
 <FileSlot label="Supporting file" name="attachment" />
 <FileSlot label="Staff list" name="roster" accept=".csv" />
 ```
+
+## Alert
+
+```tsx
+<Alert tone="info">Walkthrough buttons stand in for Express auth.</Alert>
+<Alert tone="error">Unknown staff number.</Alert>
+```
