@@ -85,7 +85,7 @@ a {
 
 .page h1,
 .page-header h1 {
-  margin: 0 0 var(--spacing-stack);
+  margin: 0;
   font-size: var(--text-title);
   line-height: var(--text-title--line-height);
   font-family: var(--font-sans);
@@ -194,10 +194,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-stack);
-}
-
-.page-header h1 {
-  margin: 0;
+  margin-bottom: var(--spacing-stack);
 }
 
 .data-table {
