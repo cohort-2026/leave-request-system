@@ -1,13 +1,13 @@
 /*
-  Product tokens for Member 5.1. Change a value here to move login, home,
-  and the shared primitives together.
+  Product tokens for Member 5.1 and 5.4. Change a value here to move login,
+  home, and the shared primitives together.
 
   Colours (issue #15): one primary, one text, one muted, one danger, one surface.
   Type: two title sizes, one body size, one font family.
   Spacing: named scale for layout and stacked labelled fields.
 
-  Member 5.4 can add focus / disabled / badge tokens here later. Do not
-  colour StatusBadge in this slice.
+  Member 5.4 (issue #18): focus ring, disabled opacity, StatusBadge colours.
+  Badge hex matches the wireframe pending / approved / rejected / blocked chips.
 */
 
 @theme static {
@@ -16,6 +16,13 @@
   --color-muted: #5c5c5c;
   --color-danger: #7a1f1f;
   --color-surface: #ffffff;
+  --color-focus: #2c3e6b;
+  --color-success: #1d5c2e;
+  --color-badge-pending: #fff3cd;
+  --color-badge-approved: #e7f3ea;
+  --color-badge-rejected: #f8e8e8;
+  --color-badge-waiting: #eeeeee;
+  --opacity-disabled: 45%;
 
   --font-sans: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
