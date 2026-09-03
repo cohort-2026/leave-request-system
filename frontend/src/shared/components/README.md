@@ -11,3 +11,10 @@ import { Button } from '../shared/components'
 <Button variant="secondary" onClick={onCancel}>Cancel</Button>
 <Button variant="danger" disabled>Reject</Button>
 ```
+
+## TextField
+
+```tsx
+<TextField label="Email" name="email" type="email" autoComplete="username" />
+<TextField label="Password" name="password" type="password" error="Required" />
+```
