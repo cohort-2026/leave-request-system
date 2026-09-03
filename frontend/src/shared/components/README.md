@@ -36,3 +36,10 @@ import { Button } from '../shared/components'
 <DateField label="Start" name="start" />
 <DateField label="End" name="end" />
 ```
+
+## FileSlot
+
+```tsx
+<FileSlot label="Supporting file" name="attachment" />
+<FileSlot label="Staff list" name="roster" accept=".csv" />
+```
