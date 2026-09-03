@@ -70,7 +70,6 @@ Title plus one optional action. `PageShell` composes this; keep the eyebrow on t
 <PageHeader title="My leave" action={<Button variant="primary">Book leave</Button>} />
 ```
 
-<<<<<<< HEAD
 ## Nav
 
 Role-aware links. `AppLayout` keeps brand and sign-out.
