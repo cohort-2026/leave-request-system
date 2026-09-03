@@ -53,7 +53,8 @@ import { Button } from '../shared/components'
 
 ## StatusBadge
 
-Shape and status names only. Badge colours are Member 5.4.
+Chip colours come from `--color-badge-*` in `theme.css`. The class paints the
+badge, not the table row.
 
 ```tsx
 <StatusBadge status="pending" />
