@@ -104,7 +104,7 @@ export function CalendarGrid({
                 const date = isoDate(year, month, day)
                 const mark = markByDate.get(date)
                 const weekend = dayIndex === 0 || dayIndex === 6
-                const label = mark?.label ?? (weekend ? 'Weekend' : undefined)
+                const label = mark?.label
 
                 return (
                   <td
