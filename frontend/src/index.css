@@ -146,12 +146,31 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+/* Shared primitives — Member 5.1. Focus and disabled polish — Member 5.4. */
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
-/* Shared primitives — Member 5.1. Focus and disabled polish is Member 5.4. */
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+button:disabled {
+  opacity: var(--opacity-disabled);
+}
+
+input:disabled,
+select:disabled {
+  background: color-mix(in srgb, var(--color-muted) 16%, var(--color-surface));
+  color: var(--color-muted);
+  border-color: color-mix(in srgb, var(--color-muted) 55%, var(--color-surface));
+}
 
 .button-primary {
   background: var(--color-primary);
@@ -186,6 +205,38 @@ button:disabled {
   border-color: var(--color-danger);
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
+}
+
+.status-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
+  border-radius: 4px;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.status-badge-pending {
+  background: var(--color-badge-pending);
+  color: var(--color-text);
+}
+
+.status-badge-approved {
+  background: var(--color-badge-approved);
+  color: var(--color-success);
+}
+
+.status-badge-rejected {
+  background: var(--color-badge-rejected);
+  color: var(--color-danger);
+}
+
+.status-badge-waiting {
+  background: var(--color-badge-waiting);
+  color: var(--color-muted);
 }
 
 .page-header {
