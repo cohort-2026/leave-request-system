@@ -70,6 +70,7 @@ Title plus one optional action. `PageShell` composes this; keep the eyebrow on t
 <PageHeader title="My leave" action={<Button variant="primary">Book leave</Button>} />
 ```
 
+<<<<<<< HEAD
 ## Nav
 
 Role-aware links. `AppLayout` keeps brand and sign-out.
@@ -108,5 +109,22 @@ Same request cells for my leave and the team queue. Renders `<td>` cells for the
 
 ```tsx
 <LeaveRequestRow request={row} onView={(id) => navigate(`/leave/${id}`)} />
+```
+
+## CalendarGrid
+
+One month table. Pages pass `year`, `month`, `view`, and marks. Holiday and blocked are different mark kinds, not different grids.
+
+```tsx
+<CalendarGrid
+  year={2026}
+  month={9}
+  view="own"
+  marks={[
+    { date: '2026-09-01', kind: 'leave' },
+    { date: '2026-09-24', kind: 'holiday', label: 'Heritage Day' },
+    { date: '2026-09-15', kind: 'blocked', label: 'Stocktake' },
+  ]}
+/>
 ```
 
