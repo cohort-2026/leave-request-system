@@ -61,3 +61,11 @@ Shape and status names only. Colours are Member 5.
 <StatusBadge status="rejected" />
 <StatusBadge status="waiting" />
 ```
+
+## PageHeader
+
+Title plus one optional action. `PageShell` composes this; keep the eyebrow on the shell.
+
+```tsx
+<PageHeader title="My leave" action={<Button variant="primary">Book leave</Button>} />
+```
