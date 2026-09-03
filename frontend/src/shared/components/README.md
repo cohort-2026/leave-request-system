@@ -129,3 +129,14 @@ One month table. Pages pass `year`, `month`, `view`, and marks. Holiday and bloc
 />
 ```
 
+## Modal
+
+Titled overlay. The page owns `open` and `onClose`. Reject reason stays on the review screen, not a new route. Native `dialog` traps focus.
+
+```tsx
+<Modal open={open} title="Reject reason" onClose={() => setOpen(false)}>
+  <TextField label="Reason" name="rejectReason" />
+  <Button variant="danger">Reject</Button>
+</Modal>
+```
+

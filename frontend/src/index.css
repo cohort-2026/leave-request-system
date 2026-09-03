@@ -323,6 +323,38 @@ select:disabled {
   font-size: 0.75rem;
 }
 
+.modal {
+  padding: 0;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  max-width: 28rem;
+  width: calc(100% - 2rem);
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.modal-panel {
+  padding: 1rem;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.modal-body {
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 800px) {
   .app-shell {
     grid-template-columns: 1fr;
