@@ -31,7 +31,16 @@ export function TeamQueuePage() {
 
   return (
     <PageShell title="Team queue" eyebrow="Manager · company admin">
-      <p className="muted">Leave requests still waiting for a decision.</p>
+      <p className="text-muted">
+        Leave requests still waiting for a decision.
+      </p>
+      <div className="flex flex-wrap gap-stack">
+        <p className="bg-surface p-section">
+          <span className="text-title">{sampleQueue.length}</span>
+          <br />
+          <span className="text-muted">Waiting for a decision</span>
+        </p>
+      </div>
       <DataTable
         data={sampleQueue}
         keyExtractor={(row) => row.id}
