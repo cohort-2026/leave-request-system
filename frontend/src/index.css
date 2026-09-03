@@ -146,12 +146,31 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+/* Shared primitives — Member 5.1. Focus and disabled polish — Member 5.4. */
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
-/* Shared primitives — Member 5.1. Focus and disabled polish is Member 5.4. */
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+button:disabled {
+  opacity: var(--opacity-disabled);
+}
+
+input:disabled,
+select:disabled {
+  background: color-mix(in srgb, var(--color-muted) 16%, var(--color-surface));
+  color: var(--color-muted);
+  border-color: color-mix(in srgb, var(--color-muted) 55%, var(--color-surface));
+}
 
 .button-primary {
   background: var(--color-primary);
