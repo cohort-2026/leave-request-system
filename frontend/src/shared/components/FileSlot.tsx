@@ -18,9 +18,10 @@ export function FileSlot({
   ...rest
 }: FileSlotProps) {
   const inputId = id ?? name
+  const classes = ['field', className].filter(Boolean).join(' ')
 
   return (
-    <label className={className} htmlFor={inputId}>
+    <label className={classes} htmlFor={inputId}>
       {label}
       <input id={inputId} name={name} type="file" {...rest} />
       {error ? <span className="field-error">{error}</span> : null}

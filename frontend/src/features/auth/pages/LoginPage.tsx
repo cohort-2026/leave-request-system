@@ -79,7 +79,7 @@ export function LoginPage() {
         stand in for Express auth so the team can click every route.
       </Alert>
       <form
-        className="stack"
+        className="flex flex-col gap-stack"
         onSubmit={(event) => {
           event.preventDefault()
         }}
@@ -100,9 +100,9 @@ export function LoginPage() {
           Log in (wired later)
         </Button>
       </form>
-      <div className="stack">
-        <p>Open the app as</p>
-        <div className="actions">
+      <div className="flex flex-col gap-stack">
+        <p className="text-body">Open the app as</p>
+        <div className="flex flex-wrap gap-stack">
           {demos.map((demo) => (
             <Button
               key={demo.label}
@@ -125,7 +125,7 @@ export function LoginPage() {
             </Button>
           ))}
         </div>
-        <p className="muted">Staff · {demos[0].hint}</p>
+        <p className="text-muted">Staff · {demos[0].hint}</p>
       </div>
       <p>
         <Link to={onboardPath('demo-token')}>Claim a staff number</Link>

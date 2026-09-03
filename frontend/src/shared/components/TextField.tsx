@@ -18,9 +18,10 @@ export function TextField({
   ...rest
 }: TextFieldProps) {
   const inputId = id ?? name
+  const classes = ['field', className].filter(Boolean).join(' ')
 
   return (
-    <label className={className} htmlFor={inputId}>
+    <label className={classes} htmlFor={inputId}>
       {label}
       <input id={inputId} name={name} {...rest} />
       {error ? <span className="field-error">{error}</span> : null}

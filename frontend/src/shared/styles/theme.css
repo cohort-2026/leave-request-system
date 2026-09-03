@@ -1,0 +1,33 @@
+/*
+  Product tokens for Member 5.1. Change a value here to move login, home,
+  and the shared primitives together.
+
+  Colours (issue #15): one primary, one text, one muted, one danger, one surface.
+  Type: two title sizes, one body size, one font family.
+  Spacing: named scale for layout and stacked labelled fields.
+
+  Member 5.4 can add focus / disabled / badge tokens here later. Do not
+  colour StatusBadge in this slice.
+*/
+
+@theme static {
+  --color-primary: #2c3e6b;
+  --color-text: #1a1a1a;
+  --color-muted: #5c5c5c;
+  --color-danger: #7a1f1f;
+  --color-surface: #ffffff;
+
+  --font-sans: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.25;
+  --text-title-sm: 1.125rem;
+  --text-title-sm--line-height: 1.3;
+  --text-body: 1rem;
+  --text-body--line-height: 1.45;
+
+  --spacing-field: 0.35rem;
+  --spacing-stack: 0.75rem;
+  --spacing-section: 1.5rem;
+  --spacing-page: 2rem;
+}
