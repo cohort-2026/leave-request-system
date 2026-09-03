@@ -50,3 +50,14 @@ import { Button } from '../shared/components'
 <Alert tone="info">Walkthrough buttons stand in for Express auth.</Alert>
 <Alert tone="error">Unknown staff number.</Alert>
 ```
+
+## StatusBadge
+
+Shape and status names only. Colours are Member 5.
+
+```tsx
+<StatusBadge status="pending" />
+<StatusBadge status="approved" />
+<StatusBadge status="rejected" />
+<StatusBadge status="waiting" />
+```
