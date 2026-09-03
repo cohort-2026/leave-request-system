@@ -1,4 +1,4 @@
-# Shared components (Member 4.1)
+# Shared components
 
 Plain controls with props and variants. No data fetching. No Tailwind tokens.
 
@@ -69,3 +69,44 @@ Title plus one optional action. `PageShell` composes this; keep the eyebrow on t
 ```tsx
 <PageHeader title="My leave" action={<Button variant="primary">Book leave</Button>} />
 ```
+
+## Nav
+
+Role-aware links. `AppLayout` keeps brand and sign-out.
+
+```tsx
+<Nav role={session.role} />
+```
+
+## EmptyState
+
+Used when a list has nothing to show.
+
+```tsx
+<EmptyState
+  title="No leave requests"
+  description="Book leave to see it here."
+/>
+```
+
+## DataTable
+
+Pass `columns` for a plain table, or `renderRow` for a list-row slot. Empty `data` renders `EmptyState`.
+
+```tsx
+<DataTable
+  data={people}
+  keyExtractor={(row) => row.id}
+  columns={columns}
+  emptyTitle="No people"
+/>
+```
+
+## LeaveRequestRow
+
+Same request cells for my leave and the team queue. Renders `<td>` cells for the `renderRow` slot.
+
+```tsx
+<LeaveRequestRow request={row} onView={(id) => navigate(`/leave/${id}`)} />
+```
+
