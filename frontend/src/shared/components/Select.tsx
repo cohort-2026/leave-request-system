@@ -20,9 +20,10 @@ export function Select({
   ...rest
 }: SelectProps) {
   const selectId = id ?? name
+  const classes = ['field', className].filter(Boolean).join(' ')
 
   return (
-    <label className={className} htmlFor={selectId}>
+    <label className={classes} htmlFor={selectId}>
       {label}
       <select id={selectId} name={name} {...rest}>
         {children}

@@ -1,6 +1,6 @@
 # Shared components
 
-Plain controls with props and variants. No data fetching. No Tailwind tokens.
+Plain controls with props and variants. No data fetching. Colour, type, and spacing come from `../styles/theme.css`. Do not put raw hex on a page if a token exists.
 
 ## Button
 
@@ -53,7 +53,7 @@ import { Button } from '../shared/components'
 
 ## StatusBadge
 
-Shape and status names only. Colours are Member 5.
+Shape and status names only. Badge colours are Member 5.4.
 
 ```tsx
 <StatusBadge status="pending" />
