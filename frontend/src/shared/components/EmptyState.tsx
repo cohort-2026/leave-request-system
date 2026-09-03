@@ -1,37 +1,28 @@
-// frontend/src/shared/components/EmptyState.tsx
-//
-// Generic "nothing here" placeholder. Used wherever a list can be empty:
-// no leave requests, no team items, no companies.
+/**
+ * Usage: <EmptyState title="No leave requests" />
+ */
+import type { ReactNode } from 'react'
 
-import type { ReactNode } from "react";
-
-export interface EmptyStateProps {
-  title: string;
-  description?: string;
-  /** Optional call-to-action, e.g. { label: "Request leave", onClick } */
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
-  icon?: ReactNode;
-  className?: string;
-  variant?: string;
+type EmptyStateProps = {
+  title: string
+  description?: string
+  action?: ReactNode
+  className?: string
 }
 
 export function EmptyState({
   title,
   description,
   action,
-  icon,
-  className,
-  variant,
+  className = '',
 }: EmptyStateProps) {
+  const classes = ['empty-state', className].filter(Boolean).join(' ')
+
   return (
-    <div className={className} data-variant={variant} role="status">
-      {icon}
+    <div className={classes} role="status">
       <p>{title}</p>
-      {description && <p>{description}</p>}
-      {action && <button onClick={action.onClick}>{action.label}</button>}
+      {description ? <p className="muted">{description}</p> : null}
+      {action ? <div className="actions">{action}</div> : null}
     </div>
-  );
+  )
 }

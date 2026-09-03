@@ -1,20 +1,9 @@
-// frontend/src/shared/components/Nav.tsx
-//
-// Extracted directly from AppLayout: same NavItem groups, same role
-// branching (isPlatform / isManager / isAdmin), same react-router NavLink
-// behavior. AppLayout now just renders <Nav role={session.role} />.
-//
-// NOTE: confirm the import path/name for the Role type below — it's
-// inferred from AppLayout's `session.role` usage (paths import assumes
-// this file lives at frontend/src/shared/components/Nav.tsx, so the
-// original '../../shared/constants/paths' becomes '../constants/paths').
-
+/**
+ * Usage: <Nav role={session.role} />
+ */
 import { NavLink } from 'react-router-dom'
 import { paths } from '../constants/paths'
-
-// TODO: replace with the real exported type, e.g.
-// import type { Role } from '../types/session'
-type Role = 'employee' | 'manager' | 'company_admin' | 'platform'
+import type { Role } from '../types/session'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
@@ -25,7 +14,9 @@ const companyNav: NavItem[] = [
   { to: paths.calendar, label: 'Calendar' },
 ]
 
-const managerNav: NavItem[] = [{ to: paths.teamQueue, label: 'Team queue', end: true }]
+const managerNav: NavItem[] = [
+  { to: paths.teamQueue, label: 'Team queue', end: true },
+]
 
 const adminNav: NavItem[] = [
   { to: paths.adminUsers, label: 'People', end: true },
@@ -44,9 +35,9 @@ const platformNav: NavItem[] = [
   { to: paths.platformNewCompany, label: 'New company' },
 ]
 
-function NavGroup({ items, className }: { items: NavItem[]; className?: string }) {
+function NavGroup({ items }: { items: NavItem[] }) {
   return (
-    <nav className={className ?? 'nav'}>
+    <nav className="nav">
       {items.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end}>
           {item.label}
@@ -56,26 +47,26 @@ function NavGroup({ items, className }: { items: NavItem[]; className?: string }
   )
 }
 
-export interface NavProps {
+type NavProps = {
   role: Role
   className?: string
-  variant?: string
 }
 
-export function Nav({ role, className, variant }: NavProps) {
+export function Nav({ role, className = '' }: NavProps) {
   const isPlatform = role === 'platform'
   const isManager = role === 'manager' || role === 'company_admin'
   const isAdmin = role === 'company_admin'
+  const classes = ['nav-groups', className].filter(Boolean).join(' ')
 
   return (
-    <div data-variant={variant}>
+    <div className={classes}>
       {isPlatform ? (
-        <NavGroup items={platformNav} className={className} />
+        <NavGroup items={platformNav} />
       ) : (
-        <NavGroup items={companyNav} className={className} />
+        <NavGroup items={companyNav} />
       )}
-      {isManager ? <NavGroup items={managerNav} className={className} /> : null}
-      {isAdmin ? <NavGroup items={adminNav} className={className} /> : null}
+      {isManager ? <NavGroup items={managerNav} /> : null}
+      {isAdmin ? <NavGroup items={adminNav} /> : null}
     </div>
   )
 }
