@@ -18,3 +18,14 @@ import { Button } from '../shared/components'
 <TextField label="Email" name="email" type="email" autoComplete="username" />
 <TextField label="Password" name="password" type="password" error="Required" />
 ```
+
+## Select
+
+```tsx
+<Select label="Leave type" name="leaveType" defaultValue="">
+  <option value="" disabled>
+    Choose a type
+  </option>
+  <option>Annual</option>
+</Select>
+```
