@@ -274,14 +274,78 @@ select:disabled {
   margin: 0;
 }
 
-.calendar-placeholder {
-  min-height: 12rem;
+.calendar-grid-wrap {
   display: grid;
-  place-items: center;
-  border: 1px dashed var(--color-muted);
-  border-radius: 8px;
-  color: var(--color-muted);
+  gap: var(--spacing-stack);
+}
+
+.calendar-grid {
+  width: 100%;
+  border-collapse: collapse;
   background: var(--color-surface);
+}
+
+.calendar-grid caption {
+  text-align: start;
+  font-weight: 600;
+  padding: 0 0 var(--spacing-field);
+}
+
+.calendar-grid th,
+.calendar-grid td {
+  border: 1px solid color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
+  padding: var(--spacing-field);
+  width: 14.28%;
+  vertical-align: top;
+  text-align: start;
+}
+
+.calendar-grid td {
+  min-height: 3.5rem;
+}
+
+.calendar-grid td[data-weekend='true'] {
+  color: var(--color-muted);
+}
+
+.calendar-grid small {
+  display: block;
+  font-size: 0.75rem;
+}
+
+.modal {
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
+  border-radius: 8px;
+  max-width: 28rem;
+  width: calc(100% - 2rem);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.modal::backdrop {
+  background: color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.modal-panel {
+  padding: var(--spacing-section);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-stack);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: var(--text-title-sm);
+  line-height: var(--text-title-sm--line-height);
+}
+
+.modal-body {
+  margin-top: var(--spacing-stack);
 }
 
 @media (max-width: 800px) {
