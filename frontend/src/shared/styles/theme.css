@@ -10,7 +10,7 @@
   Badge hex matches the wireframe pending / approved / rejected / blocked chips.
 */
 
-:root {
+@theme static {
   --color-primary: #2c3e6b;
   --color-text: #1a1a1a;
   --color-muted: #5c5c5c;
@@ -37,25 +37,4 @@
   --spacing-stack: 0.75rem;
   --spacing-section: 1.5rem;
   --spacing-page: 2rem;
-}
-.app-content {
-  min-width: 0;
-}
-
-.app-header {
-  min-height: 4rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-stack);
-  padding: var(--spacing-stack) var(--spacing-section);
-  background: var(--color-surface);
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
-}
-
-.app-header-user {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-stack);
 }
