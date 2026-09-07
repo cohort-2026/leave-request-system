@@ -3,6 +3,7 @@ import { useAuth } from '../../../app/providers/useAuth'
 import { onboardPath, paths } from '../../../shared/constants/paths'
 import type { Session } from '../../../shared/types/session'
 import { PageShell } from '../../../app/layouts/PageShell'
+import { Alert, Button, TextField } from '../../../shared/components'
 
 const demos: { label: string; hint: string; session: Session }[] = [
   {
@@ -73,34 +74,39 @@ export function LoginPage() {
 
   return (
     <PageShell title="Sign in" eyebrow="Public">
-      <p className="muted">
+      <Alert tone="info">
         Looks up the person. Does not create a company. Walkthrough buttons
         stand in for Express auth so the team can click every route.
-      </p>
+      </Alert>
       <form
         className="stack"
         onSubmit={(event) => {
           event.preventDefault()
         }}
       >
-        <label>
-          Email
-          <input type="email" name="email" autoComplete="username" />
-        </label>
-        <label>
-          Password
-          <input type="password" name="password" autoComplete="current-password" />
-        </label>
-        <button type="submit" disabled>
+        <TextField
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="username"
+        />
+        <TextField
+          label="Password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+        />
+        <Button variant="primary" type="submit" disabled>
           Log in (wired later)
-        </button>
+        </Button>
       </form>
       <div className="stack">
         <p>Open the app as</p>
         <div className="actions">
           {demos.map((demo) => (
-            <button
+            <Button
               key={demo.label}
+              variant="secondary"
               type="button"
               onClick={() => {
                 signIn(demo.session)
@@ -116,7 +122,7 @@ export function LoginPage() {
               }}
             >
               {demo.label}
-            </button>
+            </Button>
           ))}
         </div>
         <p className="muted">Staff · {demos[0].hint}</p>

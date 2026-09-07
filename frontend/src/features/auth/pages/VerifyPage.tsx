@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
+import { Button } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 
 export function VerifyPage() {
@@ -14,9 +15,9 @@ export function VerifyPage() {
       </p>
       {session ? (
         <p>
-          <button type="button" onClick={signOut}>
+          <Button variant="secondary" type="button" onClick={signOut}>
             Sign out
-          </button>
+          </Button>
         </p>
       ) : (
         <p>
