@@ -13,23 +13,27 @@ export function AppLayout() {
   return (
     <div className="app-shell">
       <aside className="app-side">
-        <div>
-          <p className="brand">Leave request</p>
-          <p className="muted">
-            {session.displayName}
-            <br />
-            {roleLabel[session.role]}
-            {session.companyName ? ` · ${session.companyName}` : ''}
-          </p>
-        </div>
         <Nav role={session.role} />
-        <button type="button" onClick={signOut}>
-          Sign out
-        </button>
       </aside>
-      <main className="app-main">
-        <Outlet />
-      </main>
+      <div className="app-content">
+        <header className="app-header">
+          <strong>{session.companyName ?? 'Leave request'}</strong>
+
+          <div className="app-header-user">
+            <span>
+              {session.displayName}
+              {session.role ? ` (${roleLabel[session.role]})` : ''}
+            </span>
+            <button type="button" onClick={signOut}>
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        <main className="app-main">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }
