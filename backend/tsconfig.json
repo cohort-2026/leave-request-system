@@ -13,5 +13,6 @@
     "moduleDetection": "force",
     "types": ["node"]
   },
-  "include": ["index.ts"]
+  "include": ["index.ts", "load-env.ts", "db.ts", "session.ts", "routes/auth.ts"],
+  "exclude": ["node_modules", "dist"]
 }
