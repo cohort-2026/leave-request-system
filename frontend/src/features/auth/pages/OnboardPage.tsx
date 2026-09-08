@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
+import { Alert, Button, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 
 export function OnboardPage() {
@@ -7,27 +8,26 @@ export function OnboardPage() {
 
   return (
     <PageShell title="Claim a staff number" eyebrow="Public · token-scoped">
-      <p className="muted">
+      <Alert tone="info">
         Invite token: <code>{token}</code>. Finds this company’s imported person
         by staff number and attaches a password to that same row.
-      </p>
+      </Alert>
       <form
-        className="stack"
+        className="flex flex-col gap-stack"
         onSubmit={(event) => {
           event.preventDefault()
         }}
       >
-        <label>
-          Staff number
-          <input name="employeeNumber" />
-        </label>
-        <label>
-          Password
-          <input type="password" name="password" />
-        </label>
-        <button type="submit" disabled>
+        <TextField label="Staff number" name="employeeNumber" autoComplete="username" />
+        <TextField
+          label="Password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+        />
+        <Button variant="primary" type="submit" disabled>
           Claim (wired later)
-        </button>
+        </Button>
       </form>
       <p>
         <Link to={paths.login}>Back to sign in</Link>
