@@ -35,7 +35,7 @@ a {
 .public-shell {
   min-height: 100svh;
   display: grid;
-  place-items: start center;
+  place-items: center;
   padding: var(--spacing-page) var(--spacing-stack);
 }
 
