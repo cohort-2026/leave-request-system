@@ -13,5 +13,6 @@
     "moduleDetection": "force",
     "types": ["node"]
   },
-  "include": ["index.ts"]
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
