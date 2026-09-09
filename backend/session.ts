@@ -1,4 +1,4 @@
-import type { CookieOptions } from "express";
+import type { CookieOptions, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
 export const SESSION_COOKIE = "lrs_session";
@@ -53,7 +53,7 @@ export function signSessionToken(userId: number): string {
   });
 }
 
-export function toPublicUser(row: UserRow): PublicUser {
+export function toPublicUser(row: Pick<UserRow, "id" | "email" | "role">): PublicUser {
   return {
     id: row.id,
     email: row.email,
@@ -62,4 +62,34 @@ export function toPublicUser(row: UserRow): PublicUser {
     status: "active",
     companyName: null,
   };
+}
+
+export function readSessionUserId(req: Request): number | null {
+  const token = req.cookies?.[SESSION_COOKIE];
+  if (typeof token !== "string" || token.length === 0) {
+    return null;
+  }
+
+  try {
+    const payload = jwt.verify(token, jwtSecret());
+    if (typeof payload !== "object" || payload === null) {
+      return null;
+    }
+    const id = Number(payload.sub);
+    if (!Number.isInteger(id) || id <= 0) {
+      return null;
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSessionCookie(res: Response): void {
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: sessionCookieOptions.httpOnly,
+    secure: sessionCookieOptions.secure,
+    sameSite: sessionCookieOptions.sameSite,
+    path: sessionCookieOptions.path,
+  });
 }
