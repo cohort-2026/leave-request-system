@@ -1,10 +1,10 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { pool } from "../db.js";
+import { requireAuth } from "../middleware/auth.js";
 import {
   SESSION_COOKIE,
   clearSessionCookie,
-  readSessionUserId,
   sessionCookieOptions,
   signSessionToken,
   toPublicUser,
@@ -14,7 +14,6 @@ import {
 export const authRouter = Router();
 
 const INVALID_LOGIN = "Invalid email or password";
-const UNAUTHORIZED = "Unauthorized";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -58,28 +57,10 @@ authRouter.post("/login", async (req, res) => {
   res.json(toPublicUser(user));
 });
 
-authRouter.get("/me", async (req, res) => {
-  const userId = readSessionUserId(req);
-  if (userId === null) {
-    res.status(401).json({ error: UNAUTHORIZED });
-    return;
-  }
-
-  const result = await pool.query<Pick<UserRow, "id" | "email" | "role">>(
-    `SELECT id, email, role
-     FROM users
-     WHERE id = $1
-     LIMIT 1`,
-    [userId],
-  );
-  const user = result.rows[0];
-
-  if (!user) {
-    res.status(401).json({ error: UNAUTHORIZED });
-    return;
-  }
-
-  res.json(toPublicUser(user));
+// Private example route: requireAuth runs first. If there's no valid
+// session, requireAuth responds 401 and this handler never runs.
+authRouter.get("/me", requireAuth, (req, res) => {
+  res.json(toPublicUser(req.user!));
 });
 
 authRouter.post("/logout", (_req, res) => {
