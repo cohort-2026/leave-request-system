@@ -38,7 +38,7 @@ Primary, text, muted, danger, and surface come from the wireframe ink / accent /
 - Focus rings use `--color-focus` on `:focus-visible`. Do not set `outline: none` without a visible replacement.
 - Disabled buttons and fields use `--opacity-disabled` and muted fill. Native `disabled` is enough; do not add new props.
 - StatusBadge colours are `--color-badge-*`. Colour the chip, not the table row.
-- App-shell chrome is Member 5.2. Public-card chrome (login, claim, invite-off, verify) is Member 5.3.
+- App-shell chrome is Member 5.2. Public-card chrome beyond login is Member 5.3.
 - Home, book leave, team queue, and company rules use these tokens (Member 5.5).
 
 ## Where hex is allowed

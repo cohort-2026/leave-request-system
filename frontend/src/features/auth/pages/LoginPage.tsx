@@ -1,135 +1,87 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../../app/providers/useAuth'
-import { onboardPath, paths } from '../../../shared/constants/paths'
-import type { Session } from '../../../shared/types/session'
 import { PageShell } from '../../../app/layouts/PageShell'
+import { useAuth } from '../../../app/providers/useAuth'
 import { Alert, Button, TextField } from '../../../shared/components'
-
-const demos: { label: string; hint: string; session: Session }[] = [
-  {
-    label: 'Staff',
-    hint: 'Home, my leave, book leave, calendar',
-    session: {
-      displayName: 'Thandi Nkosi',
-      role: 'staff',
-      status: 'active',
-      companyName: 'Acme',
-    },
-  },
-  {
-    label: 'Manager',
-    hint: 'Team queue plus own leave',
-    session: {
-      displayName: 'Sipho Dlamini',
-      role: 'manager',
-      status: 'active',
-      companyName: 'Acme',
-    },
-  },
-  {
-    label: 'Company admin',
-    hint: 'People, rules, import, approvals',
-    session: {
-      displayName: 'Lebo Maseko',
-      role: 'company_admin',
-      status: 'active',
-      companyName: 'Acme',
-    },
-  },
-  {
-    label: 'Platform',
-    hint: 'Company list only',
-    session: {
-      displayName: 'Platform operator',
-      role: 'platform',
-      status: 'active',
-      companyName: null,
-    },
-  },
-  {
-    label: 'Waiting for approval',
-    hint: 'Signed in, leave still closed',
-    session: {
-      displayName: 'New hire',
-      role: 'staff',
-      status: 'pending_approval',
-      companyName: 'Acme',
-    },
-  },
-  {
-    label: 'Email not verified',
-    hint: 'Opens the verify page',
-    session: {
-      displayName: 'Unverified user',
-      role: 'staff',
-      status: 'pending_verification',
-      companyName: 'Acme',
-    },
-  },
-]
+import { paths, homeFor } from '../../../shared/constants/paths'
+import { ApiError } from '../../../shared/utils/api'
+import { login } from '../api'
 
 export function LoginPage() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setErrors({})
+    setFormError('')
+    setSubmitting(true)
+
+    try {
+      const session = await login(email, password)
+      signIn(session)
+
+      if (session.status === 'pending_verification') {
+        navigate(paths.verify, { replace: true })
+        return
+      }
+      if (session.status === 'pending_approval') {
+        navigate(paths.pendingApproval, { replace: true })
+        return
+      }
+
+      navigate(homeFor(session.role), { replace: true })
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrors(error.fieldErrors)
+        setFormError(error.message)
+      } else {
+        setFormError('Unable to sign in. Please try again.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <PageShell title="Sign in" eyebrow="Public">
-      <Alert tone="info">
-        Looks up the person. Does not create a company. Walkthrough buttons
-        stand in for Express auth so the team can click every route.
-      </Alert>
-      <form
-        className="flex flex-col gap-stack"
-        onSubmit={(event) => {
-          event.preventDefault()
-        }}
-      >
+      {formError ? <Alert tone="error">{formError}</Alert> : null}
+      <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
         <TextField
           label="Email"
           name="email"
           type="email"
           autoComplete="username"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          error={errors.email}
+          required
+          disabled={submitting}
         />
         <TextField
           label="Password"
           name="password"
           type="password"
           autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          error={errors.password}
+          required
+          disabled={submitting}
         />
-        <Button variant="primary" type="submit" disabled>
-          Log in (wired later)
+        <Button variant="primary" type="submit" disabled={submitting}>
+          {submitting ? 'Signing in…' : 'Log in'}
         </Button>
       </form>
-      <div className="flex flex-col gap-stack">
-        <p className="text-body">Open the app as</p>
-        <div className="flex flex-wrap gap-stack">
-          {demos.map((demo) => (
-            <Button
-              key={demo.label}
-              variant="secondary"
-              type="button"
-              onClick={() => {
-                signIn(demo.session)
-                if (demo.session.status === 'pending_verification') {
-                  navigate(paths.verify)
-                  return
-                }
-                if (demo.session.status === 'pending_approval') {
-                  navigate(paths.pendingApproval)
-                  return
-                }
-                navigate(demo.session.role === 'platform' ? paths.platform : paths.home)
-              }}
-            >
-              {demo.label}
-            </Button>
-          ))}
-        </div>
-        <p className="text-muted">Staff · {demos[0].hint}</p>
-      </div>
       <p>
-        <Link to={onboardPath('demo-token')}>Claim a staff number</Link>
-        {' · '}
+        Don&apos;t have an account? <Link to={paths.register}>Register</Link>
+      </p>
+      <p>
         <Link to={paths.onboardDisabled}>Invite is off</Link>
       </p>
     </PageShell>

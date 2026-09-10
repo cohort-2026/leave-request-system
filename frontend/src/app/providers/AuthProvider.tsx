@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '../../shared/types/session'
 import { AuthContext, type AuthContextValue } from './auth-context'
 
-const storageKey = 'lrs.walkthrough-session'
+const storageKey = 'lrs.auth-session'
 
 function readSession(): Session | null {
   try {

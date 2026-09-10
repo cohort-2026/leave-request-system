@@ -35,7 +35,7 @@ a {
 .public-shell {
   min-height: 100svh;
   display: grid;
-  place-items: center;
+  place-items: start center;
   padding: var(--spacing-page) var(--spacing-stack);
 }
 
@@ -60,30 +60,6 @@ a {
   padding: var(--spacing-stack);
   background: var(--color-surface);
   border-right: 1px solid color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
-}
-
-.app-content {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.app-header {
-  min-height: 4rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-stack);
-  padding: var(--spacing-stack) var(--spacing-section);
-  background: var(--color-surface);
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
-}
-
-.app-header-user {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-stack);
 }
 
 .app-main {
