@@ -10,3 +10,5 @@ async function generateSeedHashes(): void {
 }
 
 generateSeedHashes();
+
+npx ts-node backend/scripts/generate-hashes.ts
