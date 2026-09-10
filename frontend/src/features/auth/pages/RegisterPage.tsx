@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
-import { ApiError } from '../../../shared/utils/api'
+import { ApiError } from '../../../services/api'
 import { register } from '../api'
 
 export function RegisterPage() {

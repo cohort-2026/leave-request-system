@@ -4,7 +4,7 @@ import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { paths, homeFor } from '../../../shared/constants/paths'
-import { ApiError } from '../../../shared/utils/api'
+import { ApiError } from '../../../services/api'
 import { login } from '../api'
 
 export function LoginPage() {

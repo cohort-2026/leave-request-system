@@ -1,5 +1,5 @@
 import type { Session } from '../../shared/types/session'
-import { apiRequest } from '../../shared/utils/api'
+import { apiRequest } from '../../services/api'
 
 type ServerUser = {
   displayName?: string
