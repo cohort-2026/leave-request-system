@@ -25,8 +25,13 @@ function getFieldErrors(errors: unknown): Record<string, string> {
     return Object.fromEntries(
       errors.flatMap((item) => {
         if (!item || typeof item !== 'object') return []
-        const field = 'field' in item ? item.field : 'path' in item ? item.path : null
-        const message = 'message' in item ? item.message : 'msg' in item ? item.msg : null
+
+        const field =
+          'field' in item ? item.field : 'path' in item ? item.path : null
+
+        const message =
+          'message' in item ? item.message : 'msg' in item ? item.msg : null
+
         return typeof field === 'string' && typeof message === 'string'
           ? [[field, message]]
           : []
@@ -41,9 +46,11 @@ function getFieldErrors(errors: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(errors).flatMap(([field, value]) => {
       if (typeof value === 'string') return [[field, value]]
+
       if (Array.isArray(value) && typeof value[0] === 'string') {
         return [[field, value[0]]]
       }
+
       return []
     }),
   )
@@ -65,7 +72,11 @@ async function parseError(response: Response) {
         ? body.error
         : 'Something went wrong. Please try again.'
 
-  return new ApiError(message, response.status, getFieldErrors(body.errors))
+  return new ApiError(
+    message,
+    response.status,
+    getFieldErrors(body.errors),
+  )
 }
 
 export async function apiRequest<T>(
@@ -73,6 +84,7 @@ export async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(options.headers)
+
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
@@ -93,3 +105,4 @@ export async function apiRequest<T>(
 
   return (await response.json()) as T
 }
+
