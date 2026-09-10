@@ -111,7 +111,7 @@ authRouter.post("/register", async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     const result = await pool.query<UserRow>(
-      "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING *",
+      "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role",
       [email.toLowerCase(), passwordHash, "staff"]
     );
 
@@ -125,3 +125,4 @@ authRouter.post("/register", async (req, res) => {
   res.status(500).json({ error: "Server error" });
   return;
 }
+});
