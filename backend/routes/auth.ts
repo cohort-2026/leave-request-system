@@ -54,3 +54,74 @@ authRouter.post("/login", async (req, res) => {
   res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
   res.json(toPublicUser(user));
 });
+authRouter.post("/register", async (req, res) => {
+  const rawEmail = req.body?.email;
+  const rawPassword = req.body?.password;
+
+  // 1. Present check - must be strings
+  if (typeof rawEmail!== 'string' || typeof rawPassword!== 'string') {
+    res.status(400).json({ error: "Email and password required" });
+    return;
+  }
+
+  const email = rawEmail.trim();
+  const password = rawPassword; // do NOT trim password - emoji/spaces allowed
+
+  // 2. Empty check
+  if (!email ||!password) {
+    res.status(400).json({ error: "Email and password required" });
+    return;
+  }
+
+  // 3. Huge check - fail cleanly, don't crash (8000 must fail)
+  // We allow up to 1024 chars - enough for emoji, but 8000 is rejected
+  const MAX_EMAIL_LEN = 254;
+  const MAX_PASSWORD_LEN = 1024;
+  const MIN_PASSWORD_LEN = 8; // Monday minimum default
+
+  if (email.length > MAX_EMAIL_LEN || password.length > MAX_PASSWORD_LEN) {
+    res.status(400).json({ error: "Email or password too long" });
+    return;
+  }
+
+  // 4. Email looks like an email (simple server check, ignore browser)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    res.status(400).json({ error: "Invalid email format" });
+    return;
+  }
+
+  // 5. Password Monday minimum
+  if (password.length < MIN_PASSWORD_LEN) {
+    res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LEN} characters` });
+    return;
+  }
+
+  try {
+    const exists = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [email.toLowerCase()]
+    );
+    if (exists.rows.length > 0) {
+      res.status(409).json({ error: "Email already used" });
+      return;
+    }
+
+    // Only hash AFTER all validation, so huge/empty never hits bcrypt
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const result = await pool.query<UserRow>(
+      "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING *",
+      [email.toLowerCase(), passwordHash, "staff"]
+    );
+
+    res.status(201).json(toPublicUser(result.rows[0]));
+    return;
+  } catch (err: any) {
+  if (err?.code === "23505" || String(err?.message || "").includes("duplicate key")) {
+    res.status(409).json({ error: "Email already used" });
+    return;
+  }
+  res.status(500).json({ error: "Server error" });
+  return;
+}
