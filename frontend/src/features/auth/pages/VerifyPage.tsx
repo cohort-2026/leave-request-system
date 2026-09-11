@@ -15,7 +15,7 @@ export function VerifyPage() {
       </Alert>
       {session ? (
         <p>
-          <Button variant="secondary" type="button" onClick={signOut}>
+          <Button variant="secondary" type="button" onClick={() => void signOut()}>
             Sign out
           </Button>
         </p>

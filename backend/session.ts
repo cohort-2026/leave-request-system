@@ -19,7 +19,7 @@ export type PublicUser = {
   role: Role;
   displayName: string;
   status: AccountStatus;
-  companyName: null;
+  companyName: string | null;
 };
 
 export type UserRow = {
