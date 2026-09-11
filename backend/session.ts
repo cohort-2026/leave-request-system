@@ -27,6 +27,9 @@ export type UserRow = {
   email: string;
   password_hash: string;
   role: Role;
+  display_name: string | null;
+  status: string;
+  company_name: string | null;
 };
 
 function jwtSecret(): string {
@@ -53,14 +56,22 @@ export function signSessionToken(userId: number): string {
   });
 }
 
-export function toPublicUser(row: Pick<UserRow, "id" | "email" | "role">): PublicUser {
+export function toPublicUser(
+  row: Pick<UserRow, "id" | "email" | "role"> &
+    Partial<Pick<UserRow, "display_name" | "status" | "company_name">>,
+): PublicUser {
+  const status =
+    row.status === "pending_verification" || row.status === "pending_approval"
+      ? row.status
+      : "active";
+
   return {
     id: row.id,
     email: row.email,
     role: row.role,
-    displayName: row.email,
-    status: "active",
-    companyName: null,
+    displayName: row.display_name?.trim() || row.email,
+    status,
+    companyName: row.company_name ?? null,
   };
 }
 

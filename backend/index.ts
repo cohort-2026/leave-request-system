@@ -3,6 +3,8 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
+import { pingRouter } from "./routes/ping.js";
+import { usersRouter } from "./routes/users.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -16,6 +18,8 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/ping", pingRouter);
+app.use("/api/users", usersRouter);
 
 app.use(
   (

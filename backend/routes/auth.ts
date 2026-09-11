@@ -1,10 +1,10 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { pool } from "../db.js";
+import { requireAuth } from "../middleware/auth.js";
 import {
   SESSION_COOKIE,
   clearSessionCookie,
-  readSessionUserId,
   sessionCookieOptions,
   signSessionToken,
   toPublicUser,
@@ -14,7 +14,6 @@ import {
 export const authRouter = Router();
 
 const INVALID_LOGIN = "Invalid email or password";
-const UNAUTHORIZED = "Unauthorized";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -66,7 +65,7 @@ authRouter.post("/register", async (req, res) => {
     const result = await pool.query<UserRow>(
       `INSERT INTO users (email, password_hash, role, status)
        VALUES ($1, $2, $3, 'active')
-       RETURNING id, email, role`,
+       RETURNING id, email, role, display_name, status, company_name`,
       [email.toLowerCase(), hash, "staff"],
     );
 
@@ -94,7 +93,7 @@ authRouter.post("/login", async (req, res) => {
   }
 
   const result = await pool.query<UserRow>(
-    `SELECT id, email, password_hash, role
+    `SELECT id, email, password_hash, role, display_name, status, company_name
      FROM users
      WHERE lower(email) = lower($1)
      LIMIT 1`,
@@ -118,28 +117,8 @@ authRouter.post("/login", async (req, res) => {
   res.json(toPublicUser(user));
 });
 
-authRouter.get("/me", async (req, res) => {
-  const userId = readSessionUserId(req);
-  if (userId === null) {
-    res.status(401).json({ error: UNAUTHORIZED });
-    return;
-  }
-
-  const result = await pool.query<Pick<UserRow, "id" | "email" | "role">>(
-    `SELECT id, email, role
-     FROM users
-     WHERE id = $1
-     LIMIT 1`,
-    [userId],
-  );
-  const user = result.rows[0];
-
-  if (!user) {
-    res.status(401).json({ error: UNAUTHORIZED });
-    return;
-  }
-
-  res.json(toPublicUser(user));
+authRouter.get("/me", requireAuth, (req, res) => {
+  res.json(toPublicUser(req.user!));
 });
 
 authRouter.post("/logout", (_req, res) => {
