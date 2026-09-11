@@ -16,7 +16,7 @@ export function PendingLayout() {
         ) : null}
         <Outlet />
         <p>
-          <button type="button" onClick={signOut}>
+          <button type="button" onClick={() => void signOut()}>
             Sign out
           </button>
         </p>
