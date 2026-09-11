@@ -6,6 +6,7 @@ import { NotFoundPage } from '../NotFoundPage'
 import { GuestOnly, RequireActive, RequireRole, SessionGate } from './guards'
 import { ForbiddenPage } from '../../features/auth/pages/ForbiddenPage'
 import { LoginPage } from '../../features/auth/pages/LoginPage'
+import { RegisterPage } from '../../features/auth/pages/RegisterPage'
 import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPage'
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
 import { PendingApprovalPage } from '../../features/auth/pages/PendingApprovalPage'
@@ -37,7 +38,10 @@ export const router = createBrowserRouter([
     children: [
       {
         element: <GuestOnly />,
-        children: [{ path: paths.login, element: <LoginPage /> }],
+        children: [
+          { path: paths.login, element: <LoginPage /> },
+          { path: paths.register, element: <RegisterPage /> },
+        ],
       },
       { path: paths.onboardDisabled, element: <OnboardDisabledPage /> },
       { path: paths.onboard, element: <OnboardPage /> },
