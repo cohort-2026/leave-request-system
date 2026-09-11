@@ -1,5 +1,5 @@
 import { Router } from "express";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { pool } from "../db.js";
 import {
   SESSION_COOKIE,
@@ -44,7 +44,7 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  const passwordMatches = await bcrypt.compare(password, user.password_hash);
+const passwordMatches = await bcrypt.compare(password, user.password_hash);
   if (!passwordMatches) {
     res.status(401).json({ error: INVALID_LOGIN });
     return;
@@ -108,11 +108,10 @@ authRouter.post("/register", async (req, res) => {
     }
 
     // Only hash AFTER all validation, so huge/empty never hits bcrypt
-    const passwordHash = await bcrypt.hash(password, 10);
-
+    const hash = await bcrypt.hash(password, 10); // Salt Rounds N=10, 2^10=1024 iterations ~100ms
     const result = await pool.query<UserRow>(
       "INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role",
-      [email.toLowerCase(), passwordHash, "staff"]
+      [email.toLowerCase(), hash, "staff"]
     );
 
     res.status(201).json(toPublicUser(result.rows[0]));
