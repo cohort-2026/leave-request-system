@@ -13,6 +13,13 @@
     "moduleDetection": "force",
     "types": ["node"]
   },
-  "include": ["index.ts", "load-env.ts", "db.ts", "session.ts", "routes/auth.ts"],
+  "include": [
+    "index.ts",
+    "load-env.ts",
+    "db.ts",
+    "session.ts",
+    "middleware/**/*.ts",
+    "routes/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

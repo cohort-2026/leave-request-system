@@ -24,7 +24,7 @@ export function AppLayout() {
               {session.displayName}
               {` · ${roleLabel[session.role]}`}
             </span>
-            <button type="button" onClick={signOut}>
+            <button type="button" onClick={() => void signOut()}>
               Sign out
             </button>
           </div>

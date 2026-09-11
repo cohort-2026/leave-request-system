@@ -4,7 +4,11 @@ import type { Role } from '../../shared/types/session'
 import { useAuth } from '../providers/useAuth'
 
 export function GuestOnly() {
-  const { session } = useAuth()
+  const { session, loading } = useAuth()
+
+  if (loading) {
+    return null
+  }
 
   if (session?.status === 'pending_verification') {
     return <Navigate to={paths.verify} replace />
@@ -20,8 +24,12 @@ export function GuestOnly() {
 }
 
 export function SessionGate() {
-  const { session } = useAuth()
+  const { session, loading } = useAuth()
   const location = useLocation()
+
+  if (loading) {
+    return null
+  }
 
   if (!session) {
     return <Navigate to={paths.login} replace state={{ from: location.pathname }} />

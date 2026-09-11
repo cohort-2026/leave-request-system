@@ -19,7 +19,7 @@ export type PublicUser = {
   role: Role;
   displayName: string;
   status: AccountStatus;
-  companyName: null;
+  companyName: string | null;
 };
 
 export type UserRow = {
@@ -27,6 +27,9 @@ export type UserRow = {
   email: string;
   password_hash: string;
   role: Role;
+  display_name: string | null;
+  status: string;
+  company_name: string | null;
 };
 
 function jwtSecret(): string {
@@ -39,9 +42,13 @@ function jwtSecret(): string {
   return secret;
 }
 
+// Path=/ so every /api call gets the cookie. SameSite=lax is enough because
+// localhost:5173 and localhost:4000 are same-site (port is not part of site).
+// Secure is false on local HTTP (Chrome will not store a Secure cookie on
+// http://) and true once NODE_ENV is production.
 export const sessionCookieOptions: CookieOptions = {
   httpOnly: true,
-  secure: false,
+  secure: process.env.NODE_ENV === "production",
   sameSite: "lax",
   path: "/",
   maxAge: SEVEN_DAYS_MS,
@@ -53,14 +60,22 @@ export function signSessionToken(userId: number): string {
   });
 }
 
-export function toPublicUser(row: Pick<UserRow, "id" | "email" | "role">): PublicUser {
+export function toPublicUser(
+  row: Pick<UserRow, "id" | "email" | "role"> &
+    Partial<Pick<UserRow, "display_name" | "status" | "company_name">>,
+): PublicUser {
+  const status =
+    row.status === "pending_verification" || row.status === "pending_approval"
+      ? row.status
+      : "active";
+
   return {
     id: row.id,
     email: row.email,
     role: row.role,
-    displayName: row.email,
-    status: "active",
-    companyName: null,
+    displayName: row.display_name?.trim() || row.email,
+    status,
+    companyName: row.company_name ?? null,
   };
 }
 
