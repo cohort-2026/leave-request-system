@@ -9,6 +9,9 @@ import { usersRouter } from "./routes/users.js";
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
+// Named origin + credentials: true is required for the cookie between
+// :5173 and :4000. origin: "*" (or omitting credentials) makes the browser
+// drop Set-Cookie and refuse to send lrs_session back.
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
