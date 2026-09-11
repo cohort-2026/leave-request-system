@@ -24,6 +24,66 @@ function asNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const MAX_EMAIL_LEN = 254;
+const MAX_PASSWORD_LEN = 1024;
+const MIN_PASSWORD_LEN = 8;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+authRouter.post("/register", async (req, res) => {
+  const rawEmail = req.body?.email;
+  const rawPassword = req.body?.password;
+
+  if (typeof rawEmail !== "string" || typeof rawPassword !== "string") {
+    res.status(400).json({ error: "Email and password required" });
+    return;
+  }
+
+  const email = rawEmail.trim();
+  const password = rawPassword;
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password required" });
+    return;
+  }
+
+  if (email.length > MAX_EMAIL_LEN || password.length > MAX_PASSWORD_LEN) {
+    res.status(400).json({ error: "Email or password too long" });
+    return;
+  }
+
+  if (!EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "Invalid email format" });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LEN) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const result = await pool.query<UserRow>(
+      `INSERT INTO users (email, password_hash, role, status)
+       VALUES ($1, $2, $3, 'active')
+       RETURNING id, email, role`,
+      [email.toLowerCase(), hash, "staff"],
+    );
+
+    res.status(201).json(toPublicUser(result.rows[0]));
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String(err.code)
+        : "";
+    if (code === "23505") {
+      res.status(409).json({ error: "Email already used" });
+      return;
+    }
+    throw err;
+  }
+});
+
 authRouter.post("/login", async (req, res) => {
   const email = asNonEmptyString(req.body?.email);
   const password = asNonEmptyString(req.body?.password);
