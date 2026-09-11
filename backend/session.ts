@@ -42,9 +42,13 @@ function jwtSecret(): string {
   return secret;
 }
 
+// Path=/ so every /api call gets the cookie. SameSite=lax is enough because
+// localhost:5173 and localhost:4000 are same-site (port is not part of site).
+// Secure is false on local HTTP (Chrome will not store a Secure cookie on
+// http://) and true once NODE_ENV is production.
 export const sessionCookieOptions: CookieOptions = {
   httpOnly: true,
-  secure: false,
+  secure: process.env.NODE_ENV === "production",
   sameSite: "lax",
   path: "/",
   maxAge: SEVEN_DAYS_MS,
