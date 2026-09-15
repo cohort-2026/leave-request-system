@@ -30,9 +30,30 @@ export function login(email: string, password: string) {
 }
 
 export function register(email: string, password: string) {
-  return apiRequest<void>('/api/auth/register', {
+  return apiRequest<ServerUser>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  }).then(mapSession)
+}
+
+export function verifyEmail(email: string, code: string) {
+  return apiRequest<ServerUser>('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  }).then(mapSession)
+}
+
+export function requestPasswordReset(email: string) {
+  return apiRequest<{ ok: true }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function resetPassword(email: string, code: string, password: string) {
+  return apiRequest<{ ok: true }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, password }),
   })
 }
 

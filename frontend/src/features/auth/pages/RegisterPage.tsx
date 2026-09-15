@@ -29,7 +29,7 @@ export function RegisterPage() {
 
     try {
       await register(email, password)
-      navigate(paths.login, { replace: true })
+      navigate(paths.verify, { replace: true, state: { email } })
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors)

@@ -11,30 +11,36 @@
 */
 
 @theme static {
-  --color-primary: #2c3e6b;
-  --color-text: #1a1a1a;
-  --color-muted: #5c5c5c;
-  --color-danger: #7a1f1f;
-  --color-surface: #ffffff;
-  --color-focus: #2c3e6b;
-  --color-success: #1d5c2e;
-  --color-badge-pending: #fff3cd;
-  --color-badge-approved: #e7f3ea;
-  --color-badge-rejected: #f8e8e8;
-  --color-badge-waiting: #eeeeee;
+  --color-primary: #0b6b67;
+  --color-primary-dark: #07514f;
+  --color-text: #172426;
+  --color-muted: #667477;
+  --color-danger: #b5483e;
+  --color-surface: #fffdf8;
+  --color-surface-raised: #ffffff;
+  --color-page: #f2efe8;
+  --color-line: #d8d6cc;
+  --color-focus: #d98652;
+  --color-success: #27745b;
+  --color-accent: #d98652;
+  --color-badge-pending: #f8e6b7;
+  --color-badge-approved: #dceee4;
+  --color-badge-rejected: #f5deda;
+  --color-badge-waiting: #e8e8e1;
   --opacity-disabled: 45%;
 
-  --font-sans: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-display: Georgia, 'Times New Roman', serif;
 
-  --text-title: 1.5rem;
-  --text-title--line-height: 1.25;
-  --text-title-sm: 1.125rem;
+  --text-title: 2rem;
+  --text-title--line-height: 1.1;
+  --text-title-sm: 1.25rem;
   --text-title-sm--line-height: 1.3;
   --text-body: 1rem;
   --text-body--line-height: 1.45;
 
-  --spacing-field: 0.35rem;
-  --spacing-stack: 0.75rem;
-  --spacing-section: 1.5rem;
-  --spacing-page: 2rem;
+  --spacing-field: 0.5rem;
+  --spacing-stack: 1rem;
+  --spacing-section: 2rem;
+  --spacing-page: 3rem;
 }

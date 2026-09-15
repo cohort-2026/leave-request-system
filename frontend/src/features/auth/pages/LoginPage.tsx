@@ -74,6 +74,9 @@ export function LoginPage() {
           required
           disabled={submitting}
         />
+        <p className="text-right text-sm">
+          <Link to={paths.forgotPassword}>Forgot your password?</Link>
+        </p>
         <Button variant="primary" type="submit" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Log in'}
         </Button>
