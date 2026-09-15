@@ -42,6 +42,20 @@ export function login(email: string, password: string) {
   }).then(mapSession)
 }
 
+export function forgotPassword(email: string) {
+  return apiRequest<{ message: string; resetUrl?: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function resetPassword(token: string, password: string) {
+  return apiRequest<{ message: string }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
+}
+
 export function register(email: string, password: string) {
   return apiRequest<void>('/api/auth/register', {
     method: 'POST',

@@ -49,9 +49,10 @@ export function LoginPage() {
   }
 
   return (
-    <PageShell title="Sign in" eyebrow="Public">
+    <PageShell title="Welcome back" eyebrow="Member sign in">
+      <p className="auth-lede">Sign in to keep your leave plans moving.</p>
       {formError ? <Alert tone="error">{formError}</Alert> : null}
-      <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
+      <form className="auth-form flex flex-col gap-stack" onSubmit={handleSubmit}>
         <TextField
           label="Email"
           name="email"
@@ -78,11 +79,11 @@ export function LoginPage() {
           {submitting ? 'Signing in…' : 'Log in'}
         </Button>
       </form>
-      <p>
+      <p className="auth-switch">
         Don&apos;t have an account? <Link to={paths.register}>Register</Link>
       </p>
-      <p>
-        <Link to={paths.onboardDisabled}>Invite is off</Link>
+      <p className="auth-secondary-link">
+        <Link to={paths.forgotPassword}>Forgot password?</Link>
       </p>
     </PageShell>
   )

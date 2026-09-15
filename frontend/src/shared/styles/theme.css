@@ -11,20 +11,23 @@
 */
 
 @theme static {
-  --color-primary: #2c3e6b;
-  --color-text: #1a1a1a;
-  --color-muted: #5c5c5c;
-  --color-danger: #7a1f1f;
-  --color-surface: #ffffff;
-  --color-focus: #2c3e6b;
-  --color-success: #1d5c2e;
+  --color-primary: #164b48;
+  --color-text: #172526;
+  --color-muted: #647271;
+  --color-danger: #9d3f32;
+  --color-surface: #fffdf8;
+  --color-focus: #d1744a;
+  --color-success: #276650;
+  --color-ink-soft: #e9f0eb;
+  --color-sand: #f4e9d8;
   --color-badge-pending: #fff3cd;
   --color-badge-approved: #e7f3ea;
   --color-badge-rejected: #f8e8e8;
   --color-badge-waiting: #eeeeee;
   --opacity-disabled: 45%;
 
-  --font-sans: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  --font-display: Georgia, 'Times New Roman', serif;
 
   --text-title: 1.5rem;
   --text-title--line-height: 1.25;
