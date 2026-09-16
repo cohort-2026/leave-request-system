@@ -24,6 +24,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [recoveryCode, setRecoveryCode] = useState('')
+  const [useRecovery, setUseRecovery] = useState(false)
   const [enrollment, setEnrollment] = useState<TotpEnrollmentChallenge | null>(
     null,
   )
@@ -50,6 +51,7 @@ export function LoginPage() {
     setStep('password')
     setCode('')
     setRecoveryCode('')
+    setUseRecovery(false)
     setEnrollment(null)
     setFormError('')
     setErrors({})
@@ -69,6 +71,9 @@ export function LoginPage() {
         return
       }
       setEnrollment(null)
+      setUseRecovery(false)
+      setCode('')
+      setRecoveryCode('')
       setStep('totp')
     } catch (error) {
       if (error instanceof ApiError) {
@@ -116,9 +121,8 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      const trimmedRecovery = recoveryCode.trim()
-      const session = trimmedRecovery
-        ? await verifyTotpRecovery(email, trimmedRecovery)
+      const session = useRecovery
+        ? await verifyTotpRecovery(email, recoveryCode.trim())
         : await verifyTotpLogin(email, code)
       goHome(session)
     } catch (error) {
@@ -143,7 +147,9 @@ export function LoginPage() {
     step === 'enroll'
       ? 'Set up authenticator'
       : step === 'totp'
-        ? 'Authenticator code'
+        ? useRecovery
+          ? 'Recovery code'
+          : 'Authenticator code'
         : step === 'recoveryCodes'
           ? 'Save recovery codes'
           : 'Sign in'
@@ -226,30 +232,67 @@ export function LoginPage() {
 
       {step === 'totp' ? (
         <form className="flex flex-col gap-stack" onSubmit={handleTotp}>
-          <TextField
-            label="6-digit code"
-            name="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            disabled={submitting}
-          />
-          <TextField
-            label="Recovery code"
-            name="recoveryCode"
-            autoComplete="off"
-            value={recoveryCode}
-            onChange={(event) => setRecoveryCode(event.target.value)}
-            disabled={submitting}
-          />
+          {useRecovery ? (
+            <TextField
+              label="Recovery code"
+              name="recoveryCode"
+              autoComplete="off"
+              value={recoveryCode}
+              onChange={(event) => setRecoveryCode(event.target.value)}
+              required
+              disabled={submitting}
+            />
+          ) : (
+            <TextField
+              label="6-digit code"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              required
+              disabled={submitting}
+            />
+          )}
           <Button
             variant="primary"
             type="submit"
-            disabled={submitting || (!code.trim() && !recoveryCode.trim())}
+            disabled={
+              submitting ||
+              (useRecovery ? !recoveryCode.trim() : !code.trim())
+            }
           >
             {submitting ? 'Verifying…' : 'Verify'}
           </Button>
+          <p>
+            {useRecovery ? (
+              <a
+                href="#authenticator"
+                onClick={(event) => {
+                  event.preventDefault()
+                  if (submitting) return
+                  setUseRecovery(false)
+                  setRecoveryCode('')
+                  setFormError('')
+                }}
+              >
+                Use authenticator code?
+              </a>
+            ) : (
+              <a
+                href="#recovery"
+                onClick={(event) => {
+                  event.preventDefault()
+                  if (submitting) return
+                  setUseRecovery(true)
+                  setCode('')
+                  setFormError('')
+                }}
+              >
+                Use recovery code?
+              </a>
+            )}
+          </p>
           <Button
             variant="secondary"
             type="button"
