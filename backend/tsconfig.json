@@ -19,6 +19,7 @@
     "db.ts",
     "session.ts",
     "mail/**/*.ts",
+    "totp/**/*.ts",
     "middleware/**/*.ts",
     "routes/**/*.ts"
   ],

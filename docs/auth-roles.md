@@ -7,6 +7,8 @@
 | `GET /api/health` | Anyone (no login) |
 | `POST /api/auth/register` | Anyone (no login) |
 | `POST /api/auth/login` | Anyone (no login) |
+| `POST /api/auth/login/totp/enroll` | Anyone with a valid `lrs_mfa` enroll challenge |
+| `POST /api/auth/login/totp` | Anyone with a valid `lrs_mfa` login challenge |
 | `POST /api/auth/logout` | Anyone (idempotent; no cookie still returns 200) |
 | `GET /api/auth/me` | Any signed-in role (`requireAuth`) |
 | `GET /api/ping/signed-in` | Any signed-in role (`requireAuth`) |

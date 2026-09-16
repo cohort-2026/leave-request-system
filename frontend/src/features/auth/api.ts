@@ -9,6 +9,21 @@ type ServerUser = {
   companyName?: string | null
 }
 
+export type TotpEnrollmentChallenge = {
+  totpEnrollmentRequired: true
+  otpauthUrl: string
+  secret: string
+  qrSvg: string
+}
+
+export type TotpLoginChallenge = {
+  totpRequired: true
+}
+
+export type LoginResult = TotpEnrollmentChallenge | TotpLoginChallenge
+
+export type EnrollResult = Session & { recoveryCodes: string[] }
+
 function mapSession(user: ServerUser): Session {
   return {
     displayName: user.displayName ?? user.name ?? '',
@@ -23,9 +38,36 @@ export function getMe() {
 }
 
 export function login(email: string, password: string) {
-  return apiRequest<ServerUser>('/api/auth/login', {
+  return apiRequest<LoginResult>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  })
+}
+
+export function confirmTotpEnroll(email: string, code: string) {
+  return apiRequest<ServerUser & { recoveryCodes?: string[] }>(
+    '/api/auth/login/totp/enroll',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    },
+  ).then((user) => ({
+    ...mapSession(user),
+    recoveryCodes: Array.isArray(user.recoveryCodes) ? user.recoveryCodes : [],
+  }))
+}
+
+export function verifyTotpLogin(email: string, code: string) {
+  return apiRequest<ServerUser>('/api/auth/login/totp', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  }).then(mapSession)
+}
+
+export function verifyTotpRecovery(email: string, recoveryCode: string) {
+  return apiRequest<ServerUser>('/api/auth/login/totp', {
+    method: 'POST',
+    body: JSON.stringify({ email, recoveryCode }),
   }).then(mapSession)
 }
 

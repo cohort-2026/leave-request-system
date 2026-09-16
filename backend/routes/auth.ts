@@ -10,10 +10,20 @@ import {
   toPublicUser,
   type UserRow,
 } from "../session.js";
+import {
+  clearChallengeCookie,
+  confirmTotpEnroll,
+  startTotpAfterPassword,
+  verifyTotpLogin,
+  verifyTotpRecovery,
+} from "../totp/index.js";
 
 export const authRouter = Router();
 
 const INVALID_LOGIN = "Invalid email or password";
+const EMAIL_NOT_VERIFIED =
+  "Email not verified. Check your inbox or request a new link.";
+const LOGIN_TOTP_BAD = "This authenticator code is invalid or has expired.";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -112,6 +122,58 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
+  if (user.status === "pending_verification") {
+    res.status(403).json({ error: EMAIL_NOT_VERIFIED });
+    return;
+  }
+
+  clearSessionCookie(res);
+  const challenge = await startTotpAfterPassword(user, res);
+  res.json(challenge);
+});
+
+authRouter.post("/login/totp/enroll", async (req, res) => {
+  const email = asNonEmptyString(req.body?.email);
+  const code = asNonEmptyString(req.body?.code);
+
+  if (!email || !code) {
+    res.status(400).json({ error: LOGIN_TOTP_BAD });
+    return;
+  }
+
+  const enrolled = await confirmTotpEnroll(req, res, email, code);
+  if (!enrolled) {
+    res.status(400).json({ error: LOGIN_TOTP_BAD });
+    return;
+  }
+
+  const token = signSessionToken(enrolled.user.id);
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+  res.json({
+    ...toPublicUser(enrolled.user),
+    recoveryCodes: enrolled.recoveryCodes,
+  });
+});
+
+authRouter.post("/login/totp", async (req, res) => {
+  const email = asNonEmptyString(req.body?.email);
+  const recoveryCode = asNonEmptyString(req.body?.recoveryCode);
+  const code = asNonEmptyString(req.body?.code);
+
+  if (!email || (!code && !recoveryCode) || (code && recoveryCode)) {
+    res.status(400).json({ error: LOGIN_TOTP_BAD });
+    return;
+  }
+
+  const user = recoveryCode
+    ? await verifyTotpRecovery(req, res, email, recoveryCode)
+    : await verifyTotpLogin(req, res, email, code!);
+
+  if (!user) {
+    res.status(400).json({ error: LOGIN_TOTP_BAD });
+    return;
+  }
+
   const token = signSessionToken(user.id);
   res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
   res.json(toPublicUser(user));
@@ -123,5 +185,6 @@ authRouter.get("/me", requireAuth, (req, res) => {
 
 authRouter.post("/logout", (_req, res) => {
   clearSessionCookie(res);
+  clearChallengeCookie(res);
   res.json({ ok: true });
 });
