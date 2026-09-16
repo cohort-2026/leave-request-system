@@ -113,6 +113,14 @@ export function LoginPage() {
       <p className="auth-switch">
         Don&apos;t have an account? <Link to={paths.register}>Register</Link>
       </p>
+      <Button
+        variant="secondary"
+        type="button"
+        className="invite-button"
+        onClick={() => navigate(paths.joinInvite)}
+      >
+        Join with an organisation invite
+      </Button>
       <p className="auth-secondary-link">
         <Link to={paths.forgotPassword}>Forgot password?</Link>
       </p>

@@ -9,6 +9,7 @@ export const paths = {
   forgotPassword: '/forgot-password',
   resetPassword: '/reset-password',
   register: '/register',
+  joinInvite: '/join-invite',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',
