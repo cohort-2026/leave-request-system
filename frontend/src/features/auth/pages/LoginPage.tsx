@@ -116,6 +116,11 @@ export function LoginPage() {
       <p className="auth-secondary-link">
         <Link to={paths.forgotPassword}>Forgot password?</Link>
       </p>
+      <div className="auth-help">
+        <strong>Joining your organisation?</strong>
+        <span>Use the invite link sent by your organisation administrator.</span>
+        <span>Need help? Contact your organisation administrator.</span>
+      </div>
       <p className="auth-trust">
         Secure workspace access. Your organisation&apos;s data stays private.
       </p>

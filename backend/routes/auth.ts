@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request } from "express";
 import bcrypt from "bcrypt";
 import crypto from "node:crypto";
 import { pool } from "../db.js";
@@ -14,6 +15,38 @@ export const authRouter = Router();
 
 const INVALID_LOGIN = "Invalid email or password";
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 5;
+
+type LoginAttempt = { count: number; resetAt: number };
+const loginAttempts = new Map<string, LoginAttempt>();
+
+function loginAttemptKey(req: Request, email: string) {
+  return `${req.ip}:${email.toLowerCase()}`;
+}
+
+function isRateLimited(key: string): boolean {
+  const attempt = loginAttempts.get(key);
+  if (!attempt || attempt.resetAt <= Date.now()) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return attempt.count >= LOGIN_MAX_ATTEMPTS;
+}
+
+function recordFailedLogin(key: string) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(key);
+  if (!attempt || attempt.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return;
+  }
+  attempt.count += 1;
+}
+
+function clearFailedLogins(key: string) {
+  loginAttempts.delete(key);
+}
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -113,6 +146,13 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
+  const attemptKey = loginAttemptKey(req, email);
+  if (isRateLimited(attemptKey)) {
+    res.setHeader("Retry-After", Math.ceil(LOGIN_WINDOW_MS / 1000));
+    res.status(429).json({ error: "Too many sign-in attempts. Try again later." });
+    return;
+  }
+
   const result = await pool.query<UserRow>(
     `SELECT id, email, password_hash, role
      FROM users
@@ -123,16 +163,19 @@ authRouter.post("/login", async (req, res) => {
   const user = result.rows[0];
 
   if (!user) {
+    recordFailedLogin(attemptKey);
     res.status(401).json({ error: INVALID_LOGIN });
     return;
   }
 
   const passwordMatches = await bcrypt.compare(password, user.password_hash);
   if (!passwordMatches) {
+    recordFailedLogin(attemptKey);
     res.status(401).json({ error: INVALID_LOGIN });
     return;
   }
 
+  clearFailedLogins(attemptKey);
   const rememberMe = req.body?.rememberMe === true;
   const token = signSessionToken(user.id, rememberMe);
   res.cookie(SESSION_COOKIE, token, getSessionCookieOptions(rememberMe));
