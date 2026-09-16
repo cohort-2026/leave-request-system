@@ -3,6 +3,7 @@ import { AppLayout } from '../layouts/AppLayout'
 import { PendingLayout } from '../layouts/PendingLayout'
 import { PublicLayout } from '../layouts/PublicLayout'
 import { NotFoundPage } from '../NotFoundPage'
+import { LegalPage } from '../LegalPage'
 import { GuestOnly, RequireActive, RequireRole, SessionGate } from './guards'
 import { ForbiddenPage } from '../../features/auth/pages/ForbiddenPage'
 import { LoginPage } from '../../features/auth/pages/LoginPage'
@@ -47,6 +48,10 @@ export const router = createBrowserRouter([
           { path: paths.register, element: <RegisterPage /> },
         ],
       },
+      { path: paths.terms, element: <LegalPage /> },
+      { path: paths.privacy, element: <LegalPage /> },
+      { path: paths.security, element: <LegalPage /> },
+      { path: paths.dpa, element: <LegalPage /> },
       { path: paths.onboardDisabled, element: <OnboardDisabledPage /> },
       { path: paths.onboard, element: <OnboardPage /> },
       { path: paths.verify, element: <VerifyPage /> },

@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { pool } from "../db.js";
 import {
   SESSION_COOKIE,
-  sessionCookieOptions,
+  getSessionCookieOptions,
   signSessionToken,
   toPublicUser,
   type UserRow,
@@ -133,7 +133,8 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  const token = signSessionToken(user.id);
-  res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+  const rememberMe = req.body?.rememberMe === true;
+  const token = signSessionToken(user.id, rememberMe);
+  res.cookie(SESSION_COOKIE, token, getSessionCookieOptions(rememberMe));
   res.json(toPublicUser(user));
 });

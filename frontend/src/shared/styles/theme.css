@@ -11,23 +11,23 @@
 */
 
 @theme static {
-  --color-primary: #164b48;
-  --color-text: #172526;
-  --color-muted: #647271;
-  --color-danger: #9d3f32;
-  --color-surface: #fffdf8;
-  --color-focus: #d1744a;
-  --color-success: #276650;
-  --color-ink-soft: #e9f0eb;
-  --color-sand: #f4e9d8;
+  --color-primary: #2457d6;
+  --color-text: #182230;
+  --color-muted: #64748b;
+  --color-danger: #b42318;
+  --color-surface: #ffffff;
+  --color-focus: #2457d6;
+  --color-success: #087443;
+  --color-ink-soft: #e8eefc;
+  --color-sand: #f3f6fb;
   --color-badge-pending: #fff3cd;
   --color-badge-approved: #e7f3ea;
   --color-badge-rejected: #f8e8e8;
   --color-badge-waiting: #eeeeee;
   --opacity-disabled: 45%;
 
-  --font-sans: 'Trebuchet MS', 'Segoe UI', sans-serif;
-  --font-display: Georgia, 'Times New Roman', serif;
+  --font-sans: 'Avenir Next', 'Trebuchet MS', sans-serif;
+  --font-display: 'Avenir Next', 'Trebuchet MS', sans-serif;
 
   --text-title: 1.5rem;
   --text-title--line-height: 1.25;

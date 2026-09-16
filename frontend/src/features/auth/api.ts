@@ -35,10 +35,10 @@ export function getMe() {
   return apiRequest<SessionResponse>('/api/auth/me').then(mapSession)
 }
 
-export function login(email: string, password: string) {
+export function login(email: string, password: string, rememberMe = false) {
   return apiRequest<SessionResponse>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, rememberMe }),
   }).then(mapSession)
 }
 
