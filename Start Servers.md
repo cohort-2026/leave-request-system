@@ -36,7 +36,7 @@ npm run dev
 
 # How to run Mailpit (local email)
 
-Verification and password-reset mail have no production domain. The API sends SMTP to Mailpit. Open http://localhost:8025 to read captured messages.
+Verification, login OTP, and password-reset mail have no production domain. The API sends SMTP to Mailpit. Open http://localhost:8025 to read captured messages.
 
 SMTP defaults (also in `backend/.env.example`): `127.0.0.1:1025`, no auth, no TLS.
 

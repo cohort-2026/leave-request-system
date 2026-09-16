@@ -16,6 +16,15 @@ import {
   resendVerification,
   sendVerificationEmail,
 } from "../verification/index.js";
+import {
+  consumeLoginOtp,
+  isSeedLoginEmail,
+  issueLoginOtp,
+  normalizeOtpCode,
+  recordLoginOtpFailure,
+  resendLoginOtp,
+  sendLoginOtpEmail,
+} from "../otp/index.js";
 
 export const authRouter = Router();
 
@@ -25,6 +34,11 @@ const EMAIL_NOT_VERIFIED =
 const VERIFY_LINK_BAD = "This verification link is invalid or has expired.";
 const RESEND_OK =
   "If that email is registered and still needs verifying, we sent a link.";
+const LOGIN_OTP_REQUIRED =
+  "Check your inbox (Mailpit in local dev) for a 6-digit sign-in code.";
+const LOGIN_OTP_BAD = "This login code is invalid or has expired.";
+const RESEND_OTP_OK =
+  "If that email just signed in, we sent a new code.";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -136,9 +150,73 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
+  if (isSeedLoginEmail(user.email)) {
+    const token = signSessionToken(user.id);
+    res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+    res.json(toPublicUser(user));
+    return;
+  }
+
+  const code = await issueLoginOtp(user.id);
+  try {
+    await sendLoginOtpEmail(user.email, code);
+  } catch {
+    res.status(500).json({ error: "Could not send login code" });
+    return;
+  }
+
+  res.json({ otpRequired: true, message: LOGIN_OTP_REQUIRED });
+});
+
+authRouter.post("/login/otp", async (req, res) => {
+  const email = asNonEmptyString(req.body?.email);
+  const rawCode = asNonEmptyString(req.body?.code);
+  const code = rawCode ? normalizeOtpCode(rawCode) : null;
+
+  if (!email || !code) {
+    res.status(400).json({ error: LOGIN_OTP_BAD });
+    return;
+  }
+
+  const result = await pool.query<UserRow>(
+    `SELECT id, email, password_hash, role, display_name, status, company_name
+     FROM users
+     WHERE lower(email) = lower($1)
+     LIMIT 1`,
+    [email],
+  );
+  const user = result.rows[0];
+
+  if (
+    !user ||
+    user.status === "pending_verification" ||
+    isSeedLoginEmail(user.email)
+  ) {
+    res.status(400).json({ error: LOGIN_OTP_BAD });
+    return;
+  }
+
+  const ok = await consumeLoginOtp(user.id, code);
+  if (!ok) {
+    await recordLoginOtpFailure(user.id);
+    res.status(400).json({ error: LOGIN_OTP_BAD });
+    return;
+  }
+
   const token = signSessionToken(user.id);
   res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
   res.json(toPublicUser(user));
+});
+
+authRouter.post("/resend-login-otp", async (req, res) => {
+  const email = asNonEmptyString(req.body?.email);
+  if (!email || email.length > MAX_EMAIL_LEN || !EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "Invalid email format" });
+    return;
+  }
+
+  await resendLoginOtp(email);
+  res.json({ ok: true, message: RESEND_OTP_OK });
 });
 
 authRouter.post("/verify-email", async (req, res) => {

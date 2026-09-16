@@ -20,6 +20,7 @@
     "session.ts",
     "mail/**/*.ts",
     "verification/**/*.ts",
+    "otp/**/*.ts",
     "middleware/**/*.ts",
     "routes/**/*.ts"
   ],

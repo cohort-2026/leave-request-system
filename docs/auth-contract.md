@@ -39,13 +39,30 @@ Body: `{ "email", "password" }`. Extra fields such as `role` are ignored. New us
 
 ### `POST /api/auth/login` — anyone
 
-Body: `{ "email", "password" }`. Success sets the cookie and returns the public user.
+Body: `{ "email", "password" }`.
 
 Wrong password and unknown email both return **401** `{ "error": "Invalid email or password" }`.
 
 Correct password on an unverified account returns **403** `{ "error": "Email not verified. Check your inbox (Mailpit in local dev) or request a new link." }` and does **not** set a cookie.
 
-Seeded demo users are `active` and can sign in without verifying.
+Seeded demo users (`staff@`, `manager@`, `admin@`, `platform@leave.local`) skip the login code: success sets the cookie and returns the public user.
+
+Other verified accounts do **not** get a cookie yet. The API emails a 6-digit code (Mailpit in local dev) and returns **200** `{ "otpRequired": true, "message": "..." }`. Submit that code to `POST /api/auth/login/otp`.
+
+- 500 `{ "error": "Could not send login code" }` if the mailer fails after a correct password
+
+### `POST /api/auth/login/otp` — anyone
+
+Body: `{ "email", "code" }` (6 digits). Consumes a single-use login code issued after a correct password. Success sets the cookie and returns the public user.
+
+- 200 public user
+- 400 `{ "error": "This login code is invalid or has expired." }` (missing, wrong, used, expired, or too many guesses)
+
+### `POST /api/auth/resend-login-otp` — anyone
+
+Body: `{ "email" }`. Always the same success payload when the email format is valid. Only sends a new code if that address already has an unused login OTP (password step succeeded). Cooldown is one minute per address. Invalid format is 400.
+
+- 200 `{ "ok": true, "message": "If that email just signed in, we sent a new code." }`
 
 ### `POST /api/auth/verify-email` — anyone
 
@@ -77,7 +94,7 @@ Clears the cookie. Returns `{ "ok": true }` even when there is no cookie.
 
 Rejected: putting the session in `localStorage` (any script can read it). Rejected: rolling our own hash. Rejected: Supabase Auth (this repo is Express + PostgreSQL).
 
-Seeded users are `active`. New registrations are `pending_verification` until they consume the emailed link. Minimum password length is 8. Roles are `staff`, `manager`, `company_admin`, `platform`.
+Seeded users are `active` and skip both email verification and the login OTP. New registrations are `pending_verification` until they consume the emailed link, then they need a login OTP after password. Minimum password length is 8. Roles are `staff`, `manager`, `company_admin`, `platform`.
 
 See `docs/auth-roles.md` for who may call which address.
 
@@ -85,4 +102,4 @@ See `docs/auth-roles.md` for who may call which address.
 
 Local development only. The API sends mail through `backend/mail` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, and `MAIL_FROM`. Defaults point at Mailpit (`127.0.0.1:1025`, UI `http://localhost:8025`). There is no production mail provider yet.
 
-Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Password-reset mail is not sent yet.
+Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Login for non-seed verified users sends a 6-digit OTP template. Password-reset mail is not sent yet.

@@ -22,11 +22,40 @@ export function getMe() {
   return apiRequest<ServerUser>('/api/auth/me').then(mapSession)
 }
 
+export type LoginResult =
+  | { otpRequired: true }
+  | { otpRequired?: false; session: Session }
+
 export function login(email: string, password: string) {
-  return apiRequest<ServerUser>('/api/auth/login', {
+  return apiRequest<ServerUser | { otpRequired: true }>(
+    '/api/auth/login',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    },
+  ).then((data): LoginResult => {
+    if ('otpRequired' in data && data.otpRequired) {
+      return { otpRequired: true }
+    }
+    return { session: mapSession(data) }
+  })
+}
+
+export function verifyLoginOtp(email: string, code: string) {
+  return apiRequest<ServerUser>('/api/auth/login/otp', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, code }),
   }).then(mapSession)
+}
+
+export function resendLoginOtp(email: string) {
+  return apiRequest<{ ok: true; message?: string }>(
+    '/api/auth/resend-login-otp',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+  )
 }
 
 export function register(email: string, password: string) {
