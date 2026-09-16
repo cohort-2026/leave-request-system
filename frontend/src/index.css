@@ -1116,19 +1116,6 @@ select:disabled {
   font-size: 0.8rem;
 }
 
-.invite-button {
-  width: 100%;
-  margin-top: 0.9rem;
-}
-
-.expect-button {
-  width: 100%;
-  margin-top: 0.55rem;
-  color: var(--color-primary);
-  background: #f8fbff;
-  border-color: #dbe5f5;
-}
-
 .feature-list {
   display: grid;
   gap: 0.75rem;
