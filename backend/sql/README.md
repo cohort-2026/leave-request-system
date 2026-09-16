@@ -5,6 +5,7 @@ Apply from `backend/` after `DATABASE_URL` is set:
 ```sh
 psql "$DATABASE_URL" -f sql/001_users.sql
 psql "$DATABASE_URL" -f sql/002_seed_users.sql
+psql "$DATABASE_URL" -f sql/003_email_verification.sql
 ```
 
 ## Demo password

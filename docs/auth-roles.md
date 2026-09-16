@@ -6,7 +6,9 @@
 | --- | --- |
 | `GET /api/health` | Anyone (no login) |
 | `POST /api/auth/register` | Anyone (no login) |
-| `POST /api/auth/login` | Anyone (no login) |
+| `POST /api/auth/login` | Anyone (no login). Unverified accounts get **403** and no cookie. |
+| `POST /api/auth/verify-email` | Anyone (no login). Token from the emailed link. |
+| `POST /api/auth/resend-verification` | Anyone (no login). Same success whether the email exists or not. |
 | `POST /api/auth/logout` | Anyone (idempotent; no cookie still returns 200) |
 | `GET /api/auth/me` | Any signed-in role (`requireAuth`) |
 | `GET /api/ping/signed-in` | Any signed-in role (`requireAuth`) |

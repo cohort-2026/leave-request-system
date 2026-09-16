@@ -41,3 +41,20 @@ export function logout() {
     method: 'POST',
   })
 }
+
+export function verifyEmail(token: string) {
+  return apiRequest<{ ok: true }>('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
+export function resendVerification(email: string) {
+  return apiRequest<{ ok: true; message?: string }>(
+    '/api/auth/resend-verification',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+  )
+}

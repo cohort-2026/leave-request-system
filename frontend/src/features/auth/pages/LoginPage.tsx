@@ -14,12 +14,14 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
+  const [needsVerify, setNeedsVerify] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErrors({})
     setFormError('')
+    setNeedsVerify(false)
     setSubmitting(true)
 
     try {
@@ -40,6 +42,7 @@ export function LoginPage() {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors)
         setFormError(error.message)
+        setNeedsVerify(error.status === 403)
       } else {
         setFormError('Unable to sign in. Please try again.')
       }
@@ -78,6 +81,11 @@ export function LoginPage() {
           {submitting ? 'Signing in…' : 'Log in'}
         </Button>
       </form>
+      {needsVerify ? (
+        <p>
+          <Link to={paths.verify}>Verify your email or request a new link</Link>
+        </p>
+      ) : null}
       <p>
         Don&apos;t have an account? <Link to={paths.register}>Register</Link>
       </p>
