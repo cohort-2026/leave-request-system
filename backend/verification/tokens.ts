@@ -35,15 +35,29 @@ export async function issueVerificationToken(userId: number): Promise<string> {
 export async function consumeVerificationToken(
   token: string,
 ): Promise<number | null> {
-  const result = await pool.query<{ user_id: number }>(
+  const hash = hashVerificationToken(token);
+
+  const consumed = await pool.query<{ user_id: number }>(
     `UPDATE email_verification_tokens
      SET used_at = NOW()
      WHERE token_hash = $1
        AND used_at IS NULL
        AND expires_at > NOW()
      RETURNING user_id`,
-    [hashVerificationToken(token)],
+    [hash],
   );
+  if (consumed.rows[0]) {
+    return consumed.rows[0].user_id;
+  }
 
-  return result.rows[0]?.user_id ?? null;
+  // Same link clicked twice (or React Strict Mode in dev): treat an already
+  // consumed token as success so the page does not show a false expiry.
+  const existing = await pool.query<{ user_id: number }>(
+    `SELECT user_id
+     FROM email_verification_tokens
+     WHERE token_hash = $1 AND used_at IS NOT NULL
+     LIMIT 1`,
+    [hash],
+  );
+  return existing.rows[0]?.user_id ?? null;
 }
