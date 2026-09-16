@@ -36,3 +36,19 @@ A SaaS platform serves many organisations that remain independent controllers. I
 Customers will expect clear answers about encryption, access control, audit logs, retention and deletion, backups, availability and breach response. Security claims must reflect the controls we actually operate; claims such as “bank-grade security” should not be made unless they can be evidenced. SOC 2 or ISO 27001 may become future assurance goals, but the product should first establish sound security practices and auditable controls.
 
 The ownership model also changes. In a client project, the contract may assign the deliverable to the client or provide exclusive use of its configuration. In SaaS, the company must retain ownership of the platform, source code, generic workflows, infrastructure and reusable product improvements, while granting customers a licence to use the service. Customer data and customer-specific configurations must remain appropriately protected and controlled by the customer. Any early custom-build agreement must preserve our right to reuse generic platform components so that the work can evolve into a product.
+
+## Product and Requirements Model
+
+### Single-Client Build
+
+For a single client, discovery can remain bounded by the organisation's leave policy document, public-holiday calendar, approval chain, payroll cut-off and existing systems. Edge cases belong to that organisation, such as a 15-year long-service extra day or a specific union rule. If a rule is awkward, it can be implemented directly because the solution only needs to satisfy that client's agreed scope.
+
+Stakeholders changing their minds during delivery is primarily a change-control and commercial issue. Unused features are waste, so the team should not build capabilities for hypothetical organisations unless they are already part of the agreed scope.
+
+### SaaS Product
+
+For SaaS, requirements must be expressed as reusable capabilities rather than one tenant's fixed rules. The platform should support configurable leave types, accrual methods, work-week definitions, multi-level approval, delegation, blackout dates and reporting. It needs a sensible default configuration for a typical small company on day one, while providing enough flexibility for mid-market HR policies without professional services for every tenant.
+
+The product should favour configuration and supported extension points over custom code for one tenant. Saying no to an isolated request is part of product work because tenant-specific code becomes technical debt that every other customer pays for through complexity, maintenance and risk.
+
+Onboarding, useful empty states, permissions, audit logs and administrator self-service are core product capabilities, not optional enhancements. They allow an organisation to understand, configure and operate the service without a project team embedded in its business. A public roadmap and release notes should communicate product progress and planned changes in place of a project status report.
