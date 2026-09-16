@@ -20,3 +20,7 @@ export function smtpConfig(): SmtpConfig {
     pass: process.env.SMTP_PASS ?? "",
   };
 }
+
+export function appOrigin(): string {
+  return process.env.APP_ORIGIN?.trim() || "http://localhost:5173";
+}
