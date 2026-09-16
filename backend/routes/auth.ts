@@ -17,13 +17,22 @@ import {
   verifyTotpLogin,
   verifyTotpRecovery,
 } from "../totp/index.js";
+import {
+  consumeVerificationToken,
+  issueVerificationToken,
+  resendVerification,
+  sendVerificationEmail,
+} from "../verification/index.js";
 
 export const authRouter = Router();
 
 const INVALID_LOGIN = "Invalid email or password";
 const EMAIL_NOT_VERIFIED =
-  "Email not verified. Check your inbox or request a new link.";
+  "Email not verified. Check your inbox (Mailpit in local dev) or request a new link.";
 const LOGIN_TOTP_BAD = "This authenticator code is invalid or has expired.";
+const VERIFY_LINK_BAD = "This verification link is invalid or has expired.";
+const RESEND_OK =
+  "If that email is registered and still needs verifying, we sent a link.";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -74,12 +83,20 @@ authRouter.post("/register", async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const result = await pool.query<UserRow>(
       `INSERT INTO users (email, password_hash, role, status)
-       VALUES ($1, $2, $3, 'active')
+       VALUES ($1, $2, $3, 'pending_verification')
        RETURNING id, email, role, display_name, status, company_name`,
       [email.toLowerCase(), hash, "staff"],
     );
+    const user = result.rows[0];
+    const token = await issueVerificationToken(user.id);
+    try {
+      await sendVerificationEmail(user.email, token);
+    } catch {
+      res.status(500).json({ error: "Could not send verification email" });
+      return;
+    }
 
-    res.status(201).json(toPublicUser(result.rows[0]));
+    res.status(201).json(toPublicUser(user));
   } catch (err: unknown) {
     const code =
       err && typeof err === "object" && "code" in err
@@ -132,6 +149,40 @@ authRouter.post("/login", async (req, res) => {
   res.json(challenge);
 });
 
+authRouter.post("/verify-email", async (req, res) => {
+  const token = asNonEmptyString(req.body?.token);
+  if (!token) {
+    res.status(400).json({ error: VERIFY_LINK_BAD });
+    return;
+  }
+
+  const userId = await consumeVerificationToken(token);
+  if (userId === null) {
+    res.status(400).json({ error: VERIFY_LINK_BAD });
+    return;
+  }
+
+  await pool.query(
+    `UPDATE users
+     SET status = 'active'
+     WHERE id = $1 AND status = 'pending_verification'`,
+    [userId],
+  );
+
+  res.json({ ok: true });
+});
+
+authRouter.post("/resend-verification", async (req, res) => {
+  const email = asNonEmptyString(req.body?.email);
+  if (!email || email.length > MAX_EMAIL_LEN || !EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "Invalid email format" });
+    return;
+  }
+
+  await resendVerification(email);
+  res.json({ ok: true, message: RESEND_OK });
+});
+
 authRouter.post("/login/totp/enroll", async (req, res) => {
   const email = asNonEmptyString(req.body?.email);
   const code = asNonEmptyString(req.body?.code);
@@ -165,10 +216,17 @@ authRouter.post("/login/totp", async (req, res) => {
     return;
   }
 
-  const user = recoveryCode
-    ? await verifyTotpRecovery(req, res, email, recoveryCode)
-    : await verifyTotpLogin(req, res, email, code!);
+  if (recoveryCode) {
+    const reset = await verifyTotpRecovery(req, res, email, recoveryCode);
+    if (!reset) {
+      res.status(400).json({ error: LOGIN_TOTP_BAD });
+      return;
+    }
+    res.json(reset);
+    return;
+  }
 
+  const user = await verifyTotpLogin(req, res, email, code!);
   if (!user) {
     res.status(400).json({ error: LOGIN_TOTP_BAD });
     return;

@@ -14,6 +14,7 @@ export type TotpEnrollmentChallenge = {
   otpauthUrl: string
   secret: string
   qrSvg: string
+  totpReset?: true
 }
 
 export type TotpLoginChallenge = {
@@ -65,10 +66,10 @@ export function verifyTotpLogin(email: string, code: string) {
 }
 
 export function verifyTotpRecovery(email: string, recoveryCode: string) {
-  return apiRequest<ServerUser>('/api/auth/login/totp', {
+  return apiRequest<TotpEnrollmentChallenge>('/api/auth/login/totp', {
     method: 'POST',
     body: JSON.stringify({ email, recoveryCode }),
-  }).then(mapSession)
+  })
 }
 
 export function register(email: string, password: string) {
@@ -82,4 +83,21 @@ export function logout() {
   return apiRequest<void>('/api/auth/logout', {
     method: 'POST',
   })
+}
+
+export function verifyEmail(token: string) {
+  return apiRequest<{ ok: true }>('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
+export function resendVerification(email: string) {
+  return apiRequest<{ ok: true; message?: string }>(
+    '/api/auth/resend-verification',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+  )
 }

@@ -32,11 +32,12 @@ Public user JSON (login, register, `/me`, `GET /api/users/:id`):
 
 ### `POST /api/auth/register` — anyone
 
-Body: `{ "email", "password" }`. Extra fields such as `role` are ignored. New users are always `staff`. Does **not** set a cookie; go to login next.
+Body: `{ "email", "password" }`. Extra fields such as `role` are ignored. New users are always `staff` with `status: "pending_verification"`. Does **not** set a cookie. Sends a verification email (Mailpit in local dev).
 
-- 201 public user
+- 201 public user (`pending_verification`)
 - 400 missing / invalid email, empty, shorter than 8, or longer than 1024
 - 409 email already used
+- 500 if the verification email could not be sent (the user row still exists; they can resend)
 
 ### `POST /api/auth/login` — anyone
 
@@ -44,14 +45,27 @@ Body: `{ "email", "password" }`.
 
 Wrong password and unknown email both return **401** `{ "error": "Invalid email or password" }`.
 
-Correct password on an unverified account (`pending_verification`) returns **403** `{ "error": "Email not verified. Check your inbox or request a new link." }` and does **not** set a cookie.
+Correct password on an unverified account (`pending_verification`) returns **403** `{ "error": "Email not verified. Check your inbox (Mailpit in local dev) or request a new link." }` and does **not** set a cookie.
 
 Verified accounts (including seeded demo users) do **not** get a cookie yet. A short-lived httpOnly `lrs_mfa` challenge cookie is set instead.
 
 - Not enrolled: **200** `{ "totpEnrollmentRequired": true, "otpauthUrl": "...", "secret": "...", "qrSvg": "..." }`. Scan the QR (or type the secret) in Google Authenticator / any RFC 6238 app, then confirm with `POST /api/auth/login/totp/enroll`.
-- Enrolled: **200** `{ "totpRequired": true }`. Submit the current 6-digit code (or a recovery code) to `POST /api/auth/login/totp`.
+- Enrolled: **200** `{ "totpRequired": true }`. Submit the current 6-digit code to `POST /api/auth/login/totp`, or a recovery code if the authenticator is lost.
 
 The TOTP secret is returned only on that first enrollment payload. It is stored encrypted. The mailer is not used for this step.
+
+### `POST /api/auth/verify-email` — anyone
+
+Body: `{ "token" }` (the secret from the emailed link, not a hash). Consumes a single-use token, sets `status` to `active`. Does **not** set a cookie; go to login next (TOTP after password).
+
+- 200 `{ "ok": true }`
+- 400 `{ "error": "This verification link is invalid or has expired." }` (missing, used, or expired)
+
+### `POST /api/auth/resend-verification` — anyone
+
+Body: `{ "email" }`. Always the same success payload when the email format is valid, whether or not the account exists. Cooldown is one minute per address. Invalid format is 400.
+
+- 200 `{ "ok": true, "message": "If that email is registered and still needs verifying, we sent a link." }`
 
 ### `POST /api/auth/login/totp/enroll` — anyone (after password, not enrolled)
 
@@ -62,11 +76,16 @@ Body: `{ "email", "code" }` (6 digits) plus the `lrs_mfa` cookie. Persists TOTP 
 
 ### `POST /api/auth/login/totp` — anyone (after password, enrolled)
 
-Body: `{ "email", "code" }` **or** `{ "email", "recoveryCode" }` (not both), plus the `lrs_mfa` cookie. Password cannot be skipped: there is no way to finish login with only email + TOTP. Success sets `lrs_session` and returns the public user.
+Body: `{ "email", "code" }` **or** `{ "email", "recoveryCode" }` (not both), plus the `lrs_mfa` cookie. Password cannot be skipped: there is no way to finish login with only email + TOTP.
 
-TOTP is RFC 6238 (SHA-1, 6 digits, 30s, ±1 period). The same 30s window cannot be reused. Five failed TOTP guesses lock the factor for 15 minutes. Recovery codes are hashed; each works once and does not disable TOTP.
+A valid 6-digit code sets `lrs_session` and returns the public user.
 
-- 200 public user
+A valid recovery code means the authenticator is lost. It does **not** set a session. The old TOTP secret and remaining recovery codes are deleted, a new enroll challenge is issued, and the response is the same shape as first-time enrollment plus `totpReset: true`. Confirm the new authenticator with `POST /api/auth/login/totp/enroll` (new recovery codes are shown once).
+
+TOTP is RFC 6238 (SHA-1, 6 digits, 30s, ±1 period). The same 30s window cannot be reused. Five failed TOTP guesses lock the factor for 15 minutes. Recovery codes are hashed; each works once.
+
+- 200 public user (6-digit code)
+- 200 `{ "totpEnrollmentRequired": true, "totpReset": true, "otpauthUrl": "...", "secret": "...", "qrSvg": "..." }` (recovery code)
 - 400 `{ "error": "This authenticator code is invalid or has expired." }`
 
 ### `GET /api/auth/me` — signed in
@@ -87,7 +106,7 @@ Clears the cookie. Returns `{ "ok": true }` even when there is no cookie.
 
 Rejected: putting the session in `localStorage` (any script can read it). Rejected: rolling our own hash. Rejected: Supabase Auth (this repo is Express + PostgreSQL).
 
-Seeded users are `active` (no verification link) but still enroll TOTP on first login, then need an authenticator code on later logins. Minimum password length is 8. Roles are `staff`, `manager`, `company_admin`, `platform`.
+Seeded users are `active` (no verification link) but still enroll TOTP on first login, then need an authenticator code on later logins. New registrations are `pending_verification` until they consume the emailed link, then TOTP on first login. Minimum password length is 8. Roles are `staff`, `manager`, `company_admin`, `platform`.
 
 To clear TOTP for a local test user (lost phone; not a product API):
 
@@ -106,4 +125,4 @@ See `docs/auth-roles.md` for who may call which address.
 
 Local development only. The API sends mail through `backend/mail` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, and `MAIL_FROM`. Defaults point at Mailpit (`127.0.0.1:1025`, UI `http://localhost:8025`). There is no production mail provider yet.
 
-Auth routes must not contain SMTP details. Login uses authenticator TOTP, not emailed codes. Verification and password-reset mail are not sent yet; this is the shared mailer only.
+Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Login uses authenticator TOTP, not emailed codes. Password-reset mail is not sent yet.

@@ -32,6 +32,7 @@ export function LoginPage() {
   const [pendingSession, setPendingSession] = useState<Session | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
+  const [needsVerify, setNeedsVerify] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   function goHome(session: Session) {
@@ -54,6 +55,7 @@ export function LoginPage() {
     setUseRecovery(false)
     setEnrollment(null)
     setFormError('')
+    setNeedsVerify(false)
     setErrors({})
   }
 
@@ -61,6 +63,7 @@ export function LoginPage() {
     event.preventDefault()
     setErrors({})
     setFormError('')
+    setNeedsVerify(false)
     setSubmitting(true)
 
     try {
@@ -79,6 +82,7 @@ export function LoginPage() {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors)
         setFormError(error.message)
+        setNeedsVerify(error.status === 403)
       } else {
         setFormError('Unable to sign in. Please try again.')
       }
@@ -121,9 +125,16 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      const session = useRecovery
-        ? await verifyTotpRecovery(email, recoveryCode.trim())
-        : await verifyTotpLogin(email, code)
+      if (useRecovery) {
+        const reset = await verifyTotpRecovery(email, recoveryCode.trim())
+        setEnrollment(reset)
+        setCode('')
+        setRecoveryCode('')
+        setUseRecovery(false)
+        setStep('enroll')
+        return
+      }
+      const session = await verifyTotpLogin(email, code)
       goHome(session)
     } catch (error) {
       if (error instanceof ApiError) {
@@ -145,7 +156,9 @@ export function LoginPage() {
 
   const title =
     step === 'enroll'
-      ? 'Set up authenticator'
+      ? enrollment?.totpReset
+        ? 'Replace authenticator'
+        : 'Set up authenticator'
       : step === 'totp'
         ? useRecovery
           ? 'Recovery code'
@@ -191,8 +204,9 @@ export function LoginPage() {
       {step === 'enroll' && enrollment ? (
         <form className="flex flex-col gap-stack" onSubmit={handleEnroll}>
           <Alert>
-            Scan this QR code with Google Authenticator (or any TOTP app). If
-            you cannot scan, type the secret by hand.
+            {enrollment.totpReset
+              ? 'Your previous authenticator was removed. Scan this QR with Google Authenticator to set up a new one. If you cannot scan, type the secret by hand.'
+              : 'Scan this QR code with Google Authenticator (or any TOTP app). If you cannot scan, type the secret by hand.'}
           </Alert>
           <div
             role="img"
@@ -233,15 +247,21 @@ export function LoginPage() {
       {step === 'totp' ? (
         <form className="flex flex-col gap-stack" onSubmit={handleTotp}>
           {useRecovery ? (
-            <TextField
-              label="Recovery code"
-              name="recoveryCode"
-              autoComplete="off"
-              value={recoveryCode}
-              onChange={(event) => setRecoveryCode(event.target.value)}
-              required
-              disabled={submitting}
-            />
+            <>
+              <Alert>
+                Use this if you lost Google Authenticator. It removes the
+                current authenticator so you can scan a new QR next.
+              </Alert>
+              <TextField
+                label="Recovery code"
+                name="recoveryCode"
+                autoComplete="off"
+                value={recoveryCode}
+                onChange={(event) => setRecoveryCode(event.target.value)}
+                required
+                disabled={submitting}
+              />
+            </>
           ) : (
             <TextField
               label="6-digit code"
@@ -323,6 +343,13 @@ export function LoginPage() {
         </div>
       ) : null}
 
+      {step === 'password' && needsVerify ? (
+        <p>
+          <Link to={paths.verify} state={{ email }}>
+            Verify your email or request a new link
+          </Link>
+        </p>
+      ) : null}
       {step === 'password' ? (
         <p>
           Don&apos;t have an account? <Link to={paths.register}>Register</Link>

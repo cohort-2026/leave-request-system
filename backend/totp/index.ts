@@ -24,14 +24,15 @@ export { clearChallengeCookie } from "./challenge.js";
 
 const MAX_TOTP_ATTEMPTS = 5;
 
-export type TotpStart =
-  | {
-      totpEnrollmentRequired: true;
-      otpauthUrl: string;
-      secret: string;
-      qrSvg: string;
-    }
-  | { totpRequired: true };
+export type TotpEnrollmentPayload = {
+  totpEnrollmentRequired: true;
+  otpauthUrl: string;
+  secret: string;
+  qrSvg: string;
+  totpReset?: true;
+};
+
+export type TotpStart = TotpEnrollmentPayload | { totpRequired: true };
 
 type TotpRow = {
   user_id: number;
@@ -49,6 +50,31 @@ export async function isEnrolled(userId: number): Promise<boolean> {
   return Boolean(result.rows[0]);
 }
 
+async function beginEnrollment(
+  user: UserRow,
+  res: Response,
+  totpReset?: true,
+): Promise<TotpEnrollmentPayload> {
+  const secret = newTotpSecret();
+  const token = await issueChallenge(user.id, "enroll", encryptSecret(secret));
+  setChallengeCookie(res, token);
+  const url = otpauthUrl(user.email, secret);
+  return {
+    totpEnrollmentRequired: true,
+    otpauthUrl: url,
+    secret,
+    qrSvg: qrSvgForUrl(url),
+    ...(totpReset ? { totpReset: true } : {}),
+  };
+}
+
+async function clearTotpFactor(userId: number): Promise<void> {
+  await pool.query(`DELETE FROM totp_recovery_codes WHERE user_id = $1`, [
+    userId,
+  ]);
+  await pool.query(`DELETE FROM user_totp WHERE user_id = $1`, [userId]);
+}
+
 export async function startTotpAfterPassword(
   user: UserRow,
   res: Response,
@@ -59,16 +85,7 @@ export async function startTotpAfterPassword(
     return { totpRequired: true };
   }
 
-  const secret = newTotpSecret();
-  const token = await issueChallenge(user.id, "enroll", encryptSecret(secret));
-  setChallengeCookie(res, token);
-  const url = otpauthUrl(user.email, secret);
-  return {
-    totpEnrollmentRequired: true,
-    otpauthUrl: url,
-    secret,
-    qrSvg: qrSvgForUrl(url),
-  };
+  return beginEnrollment(user, res);
 }
 
 async function matchingUser(
@@ -243,7 +260,7 @@ export async function verifyTotpRecovery(
   res: Response,
   email: string,
   rawCode: string,
-): Promise<UserRow | null> {
+): Promise<TotpEnrollmentPayload | null> {
   const challenge = await readOpenChallenge(req);
   if (!challenge || challenge.purpose !== "login") {
     return null;
@@ -265,14 +282,7 @@ export async function verifyTotpRecovery(
     return null;
   }
 
-  await pool.query(
-    `UPDATE user_totp
-     SET failed_attempts = 0,
-         locked_until = NULL
-     WHERE user_id = $1`,
-    [user.id],
-  );
   await consumeChallenge(challenge.id);
-  clearChallengeCookie(res);
-  return user;
+  await clearTotpFactor(user.id);
+  return beginEnrollment(user, res, true);
 }
