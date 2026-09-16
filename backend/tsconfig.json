@@ -18,6 +18,7 @@
     "load-env.ts",
     "db.ts",
     "session.ts",
+    "mail/**/*.ts",
     "middleware/**/*.ts",
     "routes/**/*.ts"
   ],
