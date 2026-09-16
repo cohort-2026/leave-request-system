@@ -119,3 +119,27 @@ Check:
 - http://localhost:5173 → Vite React app
 
 See `Start Servers.md` for the same commands.
+
+### Local email (Mailpit)
+
+There is no production mail domain. Transactional mail is sent over SMTP to **Mailpit** and viewed in its UI.
+
+- SMTP: `127.0.0.1:1025` (no auth, no TLS)
+- UI: http://localhost:8025
+
+Start Mailpit (pick one), then prove the mailer:
+
+```powershell
+winget install --id axllent.mailpit -e
+mailpit
+```
+
+```powershell
+docker run --rm -p 8025:8025 -p 1025:1025 axllent/mailpit
+```
+
+```powershell
+npm run mail:test --prefix backend
+```
+
+Copy SMTP keys from `backend/.env.example` into `backend/.env` if you want them explicit; the mailer already defaults to Mailpit. See `Start Servers.md` for the same steps.

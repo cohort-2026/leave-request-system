@@ -62,3 +62,9 @@ Rejected: putting the session in `localStorage` (any script can read it). Reject
 Seeded users are `active`. Minimum password length is 8. Roles are `staff`, `manager`, `company_admin`, `platform`.
 
 See `docs/auth-roles.md` for who may call which address.
+
+## Transactional email
+
+Local development only. The API sends mail through `backend/mail` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, and `MAIL_FROM`. Defaults point at Mailpit (`127.0.0.1:1025`, UI `http://localhost:8025`). There is no production mail provider yet.
+
+Auth routes must not contain SMTP details. Verification and password-reset mail are not sent yet; this is the shared mailer only.
