@@ -116,20 +116,6 @@ export function LoginPage() {
       <p className="auth-secondary-link">
         <Link to={paths.forgotPassword}>Forgot password?</Link>
       </p>
-      <div className="auth-help">
-        <strong>Joining your organisation?</strong>
-        <span>Use the invite link sent by your organisation administrator.</span>
-        <span>Need help? Contact your organisation administrator.</span>
-      </div>
-      <p className="auth-trust">
-        Secure workspace access. Your organisation&apos;s data stays private.
-      </p>
-      <nav className="auth-legal-links" aria-label="Legal and security information">
-        <Link to={paths.privacy}>Privacy</Link>
-        <Link to={paths.terms}>Terms</Link>
-        <Link to={paths.security}>Security</Link>
-        <Link to={paths.dpa}>DPA</Link>
-      </nav>
     </PageShell>
   )
 }
