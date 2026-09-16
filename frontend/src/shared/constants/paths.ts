@@ -1,6 +1,7 @@
 import type { Role } from '../types/session'
 
 export const paths = {
+  welcome: '/',
   login: '/login',
   terms: '/terms',
   privacy: '/privacy',

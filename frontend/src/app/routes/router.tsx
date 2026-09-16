@@ -12,6 +12,7 @@ import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage'
 import { RegisterPage } from '../../features/auth/pages/RegisterPage'
 import { JoinInvitePage } from '../../features/auth/pages/JoinInvitePage'
 import { WhatToExpectPage } from '../../features/auth/pages/WhatToExpectPage'
+import { LandingPage } from '../../features/auth/pages/LandingPage'
 import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPage'
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
 import { PendingApprovalPage } from '../../features/auth/pages/PendingApprovalPage'
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       {
         element: <GuestOnly />,
         children: [
+          { path: paths.welcome, element: <LandingPage /> },
           { path: paths.login, element: <LoginPage /> },
           { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
           { path: paths.resetPassword, element: <ResetPasswordPage /> },

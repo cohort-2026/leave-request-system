@@ -1,7 +1,14 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { paths } from '../../shared/constants/paths'
 
 export function PublicLayout() {
+  const { pathname } = useLocation()
+  const isLanding = pathname === paths.welcome
+
+  if (isLanding) {
+    return <Outlet />
+  }
+
   return (
     <div className="public-shell">
       <div className="public-frame">
