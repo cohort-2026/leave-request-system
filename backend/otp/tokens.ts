@@ -4,17 +4,6 @@ import { pool } from "../db.js";
 const TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
-export const SEED_LOGIN_EMAILS = new Set([
-  "staff@leave.local",
-  "manager@leave.local",
-  "admin@leave.local",
-  "platform@leave.local",
-]);
-
-export function isSeedLoginEmail(email: string): boolean {
-  return SEED_LOGIN_EMAILS.has(email.toLowerCase());
-}
-
 export function normalizeOtpCode(value: string): string | null {
   const digits = value.replace(/\s+/g, "");
   if (!/^\d{6}$/.test(digits)) {

@@ -1,10 +1,6 @@
 import { sendMail, loginOtp } from "../mail/index.js";
 import { pool } from "../db.js";
-import {
-  hasOpenLoginOtp,
-  isSeedLoginEmail,
-  issueLoginOtp,
-} from "./tokens.js";
+import { hasOpenLoginOtp, issueLoginOtp } from "./tokens.js";
 
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const lastSendByEmail = new Map<string, number>();
@@ -36,10 +32,6 @@ export async function resendLoginOtp(email: string): Promise<void> {
   }
 
   markSent(normalized);
-
-  if (isSeedLoginEmail(normalized)) {
-    return;
-  }
 
   const result = await pool.query<{ id: number; status: string }>(
     `SELECT id, status

@@ -1,7 +1,6 @@
 export {
   consumeLoginOtp,
   hasOpenLoginOtp,
-  isSeedLoginEmail,
   issueLoginOtp,
   normalizeOtpCode,
   recordLoginOtpFailure,

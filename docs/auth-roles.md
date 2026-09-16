@@ -6,7 +6,7 @@
 | --- | --- |
 | `GET /api/health` | Anyone (no login) |
 | `POST /api/auth/register` | Anyone (no login) |
-| `POST /api/auth/login` | Anyone (no login). Unverified accounts get **403** and no cookie. Verified non-seed accounts get `{ otpRequired: true }` and no cookie. Seed demo users get a cookie. |
+| `POST /api/auth/login` | Anyone (no login). Unverified accounts get **403** and no cookie. Verified accounts get `{ otpRequired: true }` and no cookie. |
 | `POST /api/auth/login/otp` | Anyone (no login). Email + 6-digit code. Cookie is set only on success. |
 | `POST /api/auth/resend-login-otp` | Anyone (no login). Same success whether a new code was sent or not. |
 | `POST /api/auth/verify-email` | Anyone (no login). Token from the emailed link. |

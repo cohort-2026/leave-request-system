@@ -18,7 +18,6 @@ import {
 } from "../verification/index.js";
 import {
   consumeLoginOtp,
-  isSeedLoginEmail,
   issueLoginOtp,
   normalizeOtpCode,
   recordLoginOtpFailure,
@@ -150,13 +149,6 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  if (isSeedLoginEmail(user.email)) {
-    const token = signSessionToken(user.id);
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
-    res.json(toPublicUser(user));
-    return;
-  }
-
   const code = await issueLoginOtp(user.id);
   try {
     await sendLoginOtpEmail(user.email, code);
@@ -187,11 +179,7 @@ authRouter.post("/login/otp", async (req, res) => {
   );
   const user = result.rows[0];
 
-  if (
-    !user ||
-    user.status === "pending_verification" ||
-    isSeedLoginEmail(user.email)
-  ) {
+  if (!user || user.status === "pending_verification") {
     res.status(400).json({ error: LOGIN_OTP_BAD });
     return;
   }
