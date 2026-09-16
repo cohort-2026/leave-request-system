@@ -10,6 +10,7 @@ export const paths = {
   resetPassword: '/reset-password',
   register: '/register',
   joinInvite: '/join-invite',
+  whatToExpect: '/what-to-expect',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',

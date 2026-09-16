@@ -121,6 +121,14 @@ export function LoginPage() {
       >
         Join with an organisation invite
       </Button>
+      <Button
+        variant="secondary"
+        type="button"
+        className="expect-button"
+        onClick={() => navigate(paths.whatToExpect)}
+      >
+        What to expect in the app
+      </Button>
       <p className="auth-secondary-link">
         <Link to={paths.forgotPassword}>Forgot password?</Link>
       </p>
