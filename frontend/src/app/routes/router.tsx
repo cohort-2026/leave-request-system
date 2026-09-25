@@ -6,6 +6,8 @@ import { NotFoundPage } from '../NotFoundPage'
 import { GuestOnly, RequireActive, RequireRole, SessionGate } from './guards'
 import { ForbiddenPage } from '../../features/auth/pages/ForbiddenPage'
 import { LoginPage } from '../../features/auth/pages/LoginPage'
+import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage'
+import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage'
 import { RegisterPage } from '../../features/auth/pages/RegisterPage'
 import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPage'
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
@@ -43,6 +45,8 @@ export const router = createBrowserRouter([
           { path: paths.register, element: <RegisterPage /> },
         ],
       },
+      { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
+      { path: paths.resetPassword, element: <ResetPasswordPage /> },
       { path: paths.onboardDisabled, element: <OnboardDisabledPage /> },
       { path: paths.onboard, element: <OnboardPage /> },
       { path: paths.verify, element: <VerifyPage /> },

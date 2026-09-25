@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
 import { Alert, Button, TextField } from '../../../shared/components'
@@ -19,7 +19,13 @@ type Step = 'password' | 'enroll' | 'totp' | 'recoveryCodes'
 export function LoginPage() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [step, setStep] = useState<Step>('password')
+  const [resetNotice] = useState(
+    Boolean(
+      (location.state as { passwordReset?: unknown } | null)?.passwordReset,
+    ),
+  )
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -169,6 +175,9 @@ export function LoginPage() {
 
   return (
     <PageShell title={title} eyebrow="Public">
+      {resetNotice && step === 'password' ? (
+        <Alert tone="info">Password updated. You can sign in.</Alert>
+      ) : null}
       {formError ? <Alert tone="error">{formError}</Alert> : null}
 
       {step === 'password' ? (
@@ -351,9 +360,15 @@ export function LoginPage() {
         </p>
       ) : null}
       {step === 'password' ? (
-        <p>
-          Don&apos;t have an account? <Link to={paths.register}>Register</Link>
-        </p>
+        <>
+          <p>
+            <Link to={paths.forgotPassword}>Forgot password?</Link>
+          </p>
+          <p>
+            Don&apos;t have an account?{' '}
+            <Link to={paths.register}>Register</Link>
+          </p>
+        </>
       ) : null}
     </PageShell>
   )

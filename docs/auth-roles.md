@@ -9,6 +9,8 @@
 | `POST /api/auth/login` | Anyone (no login). Unverified accounts get **403** and no cookie. |
 | `POST /api/auth/verify-email` | Anyone (no login). Token from the emailed link. |
 | `POST /api/auth/resend-verification` | Anyone (no login). Same success whether the email exists or not. |
+| `POST /api/auth/forgot-password` | Anyone (no login). Same success whether the email exists or not. |
+| `POST /api/auth/reset-password` | Anyone (no login). Token from the emailed link. Does not set a session. |
 | `POST /api/auth/login/totp/enroll` | Anyone with a valid `lrs_mfa` enroll challenge |
 | `POST /api/auth/login/totp` | Anyone with a valid `lrs_mfa` login challenge |
 | `POST /api/auth/logout` | Anyone (idempotent; no cookie still returns 200) |
