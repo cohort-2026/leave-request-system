@@ -21,6 +21,7 @@
     "mail/**/*.ts",
     "totp/**/*.ts",
     "verification/**/*.ts",
+    "password-reset/**/*.ts",
     "middleware/**/*.ts",
     "routes/**/*.ts"
   ],
