@@ -23,6 +23,10 @@ import {
   resendVerification,
   sendVerificationEmail,
 } from "../verification/index.js";
+import {
+  completePasswordReset,
+  requestPasswordReset,
+} from "../password-reset/index.js";
 
 export const authRouter = Router();
 
@@ -33,6 +37,9 @@ const LOGIN_TOTP_BAD = "This authenticator code is invalid or has expired.";
 const VERIFY_LINK_BAD = "This verification link is invalid or has expired.";
 const RESEND_OK =
   "If that email is registered and still needs verifying, we sent a link.";
+const RESET_LINK_BAD = "This reset link is invalid or has expired.";
+const FORGOT_OK =
+  "If that email is registered, we sent a reset link.";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -181,6 +188,49 @@ authRouter.post("/resend-verification", async (req, res) => {
 
   await resendVerification(email);
   res.json({ ok: true, message: RESEND_OK });
+});
+
+authRouter.post("/forgot-password", async (req, res) => {
+  const email = asNonEmptyString(req.body?.email);
+  if (!email || email.length > MAX_EMAIL_LEN || !EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "Invalid email format" });
+    return;
+  }
+
+  await requestPasswordReset(email);
+  res.json({ ok: true, message: FORGOT_OK });
+});
+
+authRouter.post("/reset-password", async (req, res) => {
+  const token = asNonEmptyString(req.body?.token);
+  const password =
+    typeof req.body?.password === "string" ? req.body.password : "";
+
+  if (!token) {
+    res.status(400).json({ error: RESET_LINK_BAD });
+    return;
+  }
+
+  if (password.length > MAX_PASSWORD_LEN) {
+    res.status(400).json({ error: "Email or password too long" });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LEN) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+  const updated = await completePasswordReset(token, hash);
+  if (!updated) {
+    res.status(400).json({ error: RESET_LINK_BAD });
+    return;
+  }
+
+  clearSessionCookie(res);
+  clearChallengeCookie(res);
+  res.json({ ok: true });
 });
 
 authRouter.post("/login/totp/enroll", async (req, res) => {

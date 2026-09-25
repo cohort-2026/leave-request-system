@@ -2,6 +2,8 @@ import type { Role } from '../types/session'
 
 export const paths = {
   login: '/login',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
   register: '/register',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',

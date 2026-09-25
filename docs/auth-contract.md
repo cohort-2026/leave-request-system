@@ -67,6 +67,26 @@ Body: `{ "email" }`. Always the same success payload when the email format is va
 
 - 200 `{ "ok": true, "message": "If that email is registered and still needs verifying, we sent a link." }`
 
+### `POST /api/auth/forgot-password` — anyone
+
+Body: `{ "email" }`. Always the same success payload when the email format is valid, whether or not the account exists. Cooldown is one minute per address. Invalid format is 400. Does **not** say whether mail was sent. Does **not** set a cookie.
+
+If the account exists, a hashed one-time token is stored (1 hour TTL) and a Mailpit email is sent with `/reset-password?token=...`. Unverified accounts can still receive a reset; they still cannot sign in until they verify.
+
+- 200 `{ "ok": true, "message": "If that email is registered, we sent a reset link." }`
+- 400 `{ "error": "Invalid email format" }`
+
+### `POST /api/auth/reset-password` — anyone
+
+Body: `{ "token", "password" }` (the secret from the emailed link, not a hash). Password length matches register (8–1024). Consumes the token, bcrypt-hashes the new password, and invalidates any other unused reset tokens for that user. Open login challenges for that user are dropped so MFA after the old password cannot finish. Does **not** set a session cookie; go to login next (TOTP after password). Authenticator enrollment is unchanged.
+
+Reused or expired tokens return 400. A too-short password does not consume the token.
+
+- 200 `{ "ok": true }`
+- 400 `{ "error": "This reset link is invalid or has expired." }`
+- 400 `{ "error": "Password must be at least 8 characters" }`
+- 400 `{ "error": "Email or password too long" }`
+
 ### `POST /api/auth/login/totp/enroll` — anyone (after password, not enrolled)
 
 Body: `{ "email", "code" }` (6 digits) plus the `lrs_mfa` cookie. Persists TOTP only after a valid code. Success sets `lrs_session`, clears `lrs_mfa`, and returns the public user plus `recoveryCodes` (plain strings, shown once).
@@ -125,4 +145,4 @@ See `docs/auth-roles.md` for who may call which address.
 
 Local development only. The API sends mail through `backend/mail` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, and `MAIL_FROM`. Defaults point at Mailpit (`127.0.0.1:1025`, UI `http://localhost:8025`). There is no production mail provider yet.
 
-Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Login uses authenticator TOTP, not emailed codes. Password-reset mail is not sent yet.
+Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Forgot-password sends the reset template through `backend/mail`. Login uses authenticator TOTP, not emailed codes.
