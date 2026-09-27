@@ -6,6 +6,8 @@ export type AccountStatus =
   | 'active'
 
 export type Session = {
+  id: number
+  email: string
   displayName: string
   role: Role
   status: AccountStatus

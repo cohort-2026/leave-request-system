@@ -8,6 +8,7 @@ psql "$DATABASE_URL" -f sql/002_seed_users.sql
 psql "$DATABASE_URL" -f sql/003_login_totp.sql
 psql "$DATABASE_URL" -f sql/004_email_verification.sql
 psql "$DATABASE_URL" -f sql/005_password_reset.sql
+psql "$DATABASE_URL" -f sql/006_totp_reset.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -15,6 +16,8 @@ psql "$DATABASE_URL" -f sql/005_password_reset.sql
 `004_email_verification.sql` adds hashed email-verification tokens. New registrations are `pending_verification` until the emailed link is consumed. Seeded demo users stay `active`.
 
 `005_password_reset.sql` adds hashed password-reset tokens. Forgot-password emails a one-hour link. Reset does not sign the user in.
+
+`006_totp_reset.sql` adds hashed authenticator-reset tokens. The signed-in profile emails a one-hour link. TOTP is not removed until the link is consumed.
 
 ## Demo password
 

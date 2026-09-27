@@ -107,6 +107,8 @@ export function LoginPage() {
       const result = await confirmTotpEnroll(email, code)
       setRecoveryCodes(result.recoveryCodes)
       setPendingSession({
+        id: result.id,
+        email: result.email,
         displayName: result.displayName,
         role: result.role,
         status: result.status,

@@ -12,6 +12,7 @@ const companyNav: NavItem[] = [
   { to: paths.leave, label: 'My leave', end: true },
   { to: paths.leaveNew, label: 'Book leave' },
   { to: paths.calendar, label: 'Calendar' },
+  { to: paths.profile, label: 'Profile' },
 ]
 
 const managerNav: NavItem[] = [
@@ -33,6 +34,7 @@ const adminNav: NavItem[] = [
 const platformNav: NavItem[] = [
   { to: paths.platform, label: 'Companies', end: true },
   { to: paths.platformNewCompany, label: 'New company' },
+  { to: paths.profile, label: 'Profile' },
 ]
 
 function NavGroup({ items }: { items: NavItem[] }) {
