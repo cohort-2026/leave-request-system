@@ -75,6 +75,49 @@ async function clearTotpFactor(userId: number): Promise<void> {
   await pool.query(`DELETE FROM user_totp WHERE user_id = $1`, [userId]);
 }
 
+export async function beginEnrollmentAfterReset(
+  user: UserRow,
+  res: Response,
+): Promise<TotpEnrollmentPayload> {
+  return beginEnrollment(user, res, true);
+}
+
+export async function pendingEnrollmentFor(
+  req: Request,
+  userId: number,
+  email: string,
+): Promise<TotpEnrollmentPayload | null> {
+  const challenge = await readOpenChallenge(req);
+  if (
+    !challenge ||
+    challenge.purpose !== "enroll" ||
+    challenge.user_id !== userId ||
+    !challenge.pending_secret_cipher
+  ) {
+    return null;
+  }
+
+  if (await isEnrolled(userId)) {
+    return null;
+  }
+
+  let secret: string;
+  try {
+    secret = decryptSecret(challenge.pending_secret_cipher);
+  } catch {
+    return null;
+  }
+
+  const url = otpauthUrl(email, secret);
+  return {
+    totpEnrollmentRequired: true,
+    otpauthUrl: url,
+    secret,
+    qrSvg: qrSvgForUrl(url),
+    totpReset: true,
+  };
+}
+
 export async function startTotpAfterPassword(
   user: UserRow,
   res: Response,
@@ -106,19 +149,16 @@ async function matchingUser(
   return user;
 }
 
-export async function confirmTotpEnroll(
-  req: Request,
+async function finishTotpEnroll(
   res: Response,
-  email: string,
+  challenge: {
+    id: number;
+    pending_secret_cipher: string | null;
+  },
+  user: UserRow,
   rawCode: string,
 ): Promise<{ user: UserRow; recoveryCodes: string[] } | null> {
-  const challenge = await readOpenChallenge(req);
-  if (!challenge || challenge.purpose !== "enroll") {
-    return null;
-  }
-
-  const user = await matchingUser(challenge.user_id, email);
-  if (!user || user.status === "pending_verification") {
+  if (user.status === "pending_verification") {
     return null;
   }
 
@@ -156,6 +196,43 @@ export async function confirmTotpEnroll(
   await consumeChallenge(challenge.id);
   clearChallengeCookie(res);
   return { user, recoveryCodes };
+}
+
+export async function confirmTotpEnroll(
+  req: Request,
+  res: Response,
+  email: string,
+  rawCode: string,
+): Promise<{ user: UserRow; recoveryCodes: string[] } | null> {
+  const challenge = await readOpenChallenge(req);
+  if (!challenge || challenge.purpose !== "enroll") {
+    return null;
+  }
+
+  const user = await matchingUser(challenge.user_id, email);
+  if (!user) {
+    return null;
+  }
+
+  return finishTotpEnroll(res, challenge, user, rawCode);
+}
+
+export async function confirmTotpEnrollForSession(
+  req: Request,
+  res: Response,
+  user: UserRow,
+  rawCode: string,
+): Promise<{ user: UserRow; recoveryCodes: string[] } | null> {
+  const challenge = await readOpenChallenge(req);
+  if (!challenge || challenge.purpose !== "enroll") {
+    return null;
+  }
+
+  if (challenge.user_id !== user.id) {
+    return null;
+  }
+
+  return finishTotpEnroll(res, challenge, user, rawCode);
 }
 
 async function loadTotp(userId: number): Promise<TotpRow | null> {

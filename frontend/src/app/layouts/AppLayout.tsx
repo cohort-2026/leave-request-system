@@ -1,5 +1,6 @@
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import { Nav } from '../../shared/components'
+import { paths } from '../../shared/constants/paths'
 import { roleLabel } from '../../shared/types/session'
 import { useAuth } from '../providers/useAuth'
 
@@ -21,7 +22,7 @@ export function AppLayout() {
           <strong>{session.companyName ?? 'Leave request'}</strong>
           <div className="app-header-user">
             <span className="muted">
-              {session.displayName}
+              <Link to={paths.profile}>{session.displayName}</Link>
               {` · ${roleLabel[session.role]}`}
             </span>
             <button type="button" onClick={() => void signOut()}>

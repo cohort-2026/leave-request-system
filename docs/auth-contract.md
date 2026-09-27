@@ -112,6 +112,58 @@ TOTP is RFC 6238 (SHA-1, 6 digits, 30s, ±1 period). The same 30s window cannot 
 
 Returns the public user. Missing or bad cookie: **401** `{ "error": "Not signed in" }`.
 
+### `PATCH /api/auth/me` — signed in
+
+Body: `{ "displayName" }`. Updates **only** the caller's `display_name`. Extra fields such as `role`, `companyName`, `status`, and `email` are ignored. Empty / whitespace-only name stores `null` (the public JSON then falls back to the email). Max length 120.
+
+- 200 public user (new `displayName`)
+- 400 `{ "error": "Display name required" }`
+- 400 `{ "error": "Display name is too long" }`
+- 401 `{ "error": "Not signed in" }`
+
+### `POST /api/auth/change-password` — signed in
+
+Body: `{ "currentPassword", "newPassword" }`. Length rules match register (8–1024), bcrypt cost 10. Wrong current password does **not** change the hash. Success **keeps** `lrs_session` on this browser. Open login challenges for that user are dropped. Does **not** use `password_reset_tokens` or Mailpit. Public forgot/reset is unchanged.
+
+- 200 `{ "ok": true }`
+- 400 `{ "error": "Current password and new password required" }`
+- 400 `{ "error": "Password must be at least 8 characters" }`
+- 400 `{ "error": "Email or password too long" }`
+- 400 `{ "error": "Current password is incorrect" }`
+- 401 `{ "error": "Not signed in" }`
+
+### `POST /api/auth/totp/reset-request` — signed in
+
+No body. Emails a one-time link to the account address (`/reset-authenticator?token=...`). Cooldown is one minute per user. Does **not** wipe TOTP until the link is consumed. Uses `totp_reset_tokens` (hashed, 1 hour TTL). Does **not** reuse `password_reset_tokens` or `email_verification_tokens`.
+
+- 200 `{ "ok": true, "message": "Check your inbox (Mailpit in local dev) for a link to reset your authenticator." }`
+- 401 `{ "error": "Not signed in" }`
+- 500 `{ "error": "Could not send authenticator reset email" }`
+
+### `POST /api/auth/totp/reset-confirm` — anyone
+
+Body: `{ "token" }` (the secret from the emailed link, not a hash). Consumes the token, deletes `user_totp` and remaining `totp_recovery_codes` for that user. Does **not** clear `lrs_session`.
+
+If the request has a valid session for **that same user**, a new enroll challenge is issued (`lrs_mfa`) and the response is the login enrollment payload plus `totpReset: true`. Confirm the new authenticator with `POST /api/auth/totp/enroll`. If there is no matching session, TOTP is still wiped and the next login uses the not-enrolled path.
+
+Reused or expired tokens return 400.
+
+- 200 `{ "totpEnrollmentRequired": true, "totpReset": true, "otpauthUrl": "...", "secret": "...", "qrSvg": "..." }` (signed in as that user)
+- 200 `{ "ok": true, "totpReset": true }` (no matching session)
+- 400 `{ "error": "This authenticator reset link is invalid or has expired." }`
+
+### `GET /api/auth/totp/enrollment` — signed in
+
+Returns the pending enrollment payload after a signed-in authenticator reset. **404** when nothing is pending.
+
+### `POST /api/auth/totp/enroll` — signed in (after profile reset)
+
+Body: `{ "code" }` (6 digits) plus the `lrs_mfa` enroll challenge. Persists TOTP only after a valid code. Keeps `lrs_session`. Returns the public user plus `recoveryCodes` (plain strings, shown once).
+
+- 200 public user + `recoveryCodes`
+- 400 `{ "error": "This authenticator code is invalid or has expired." }`
+- 401 `{ "error": "Not signed in" }`
+
 ### `POST /api/auth/logout` — anyone
 
 Clears the cookie. Returns `{ "ok": true }` even when there is no cookie.
@@ -145,4 +197,4 @@ See `docs/auth-roles.md` for who may call which address.
 
 Local development only. The API sends mail through `backend/mail` using `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, and `MAIL_FROM`. Defaults point at Mailpit (`127.0.0.1:1025`, UI `http://localhost:8025`). There is no production mail provider yet.
 
-Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Forgot-password sends the reset template through `backend/mail`. Login uses authenticator TOTP, not emailed codes.
+Auth routes must not contain SMTP details. Register and resend send the verification template through `backend/mail`. Forgot-password sends the reset template through `backend/mail`. Signed-in authenticator reset sends the authenticator-reset template through `backend/mail`. Login uses authenticator TOTP, not emailed codes.

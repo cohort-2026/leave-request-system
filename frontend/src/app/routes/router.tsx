@@ -13,6 +13,8 @@ import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPa
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
 import { PendingApprovalPage } from '../../features/auth/pages/PendingApprovalPage'
 import { VerifyPage } from '../../features/auth/pages/VerifyPage'
+import { ResetAuthenticatorPage } from '../../features/auth/pages/ResetAuthenticatorPage'
+import { ProfilePage } from '../../features/auth/pages/ProfilePage'
 import { CalendarPage } from '../../features/calendar/pages/CalendarPage'
 import { BlocksPage } from '../../features/company/pages/BlocksPage'
 import { CalendarSettingsPage } from '../../features/company/pages/CalendarSettingsPage'
@@ -50,6 +52,7 @@ export const router = createBrowserRouter([
       { path: paths.onboardDisabled, element: <OnboardDisabledPage /> },
       { path: paths.onboard, element: <OnboardPage /> },
       { path: paths.verify, element: <VerifyPage /> },
+      { path: paths.resetAuthenticator, element: <ResetAuthenticatorPage /> },
     ],
   },
   {
@@ -68,6 +71,7 @@ export const router = createBrowserRouter([
             element: <AppLayout />,
             children: [
               { path: paths.forbidden, element: <ForbiddenPage /> },
+              { path: paths.profile, element: <ProfilePage /> },
               { path: paths.home, element: <HomePage /> },
               {
                 element: (

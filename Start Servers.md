@@ -44,6 +44,8 @@ Verification and password-reset mail have no production domain. The API sends SM
 
 Forgot password: `/forgot-password` emails a one-hour link to `/reset-password?token=...`. A successful reset does **not** sign the person in; they still need password + authenticator.
 
+Signed-in profile (`/profile`): change display name, change password (stays signed in), or email an authenticator reset to `/reset-authenticator?token=...`. TOTP stays in place until that link is used.
+
 SMTP defaults (also in `backend/.env.example`): `127.0.0.1:1025`, no auth, no TLS.
 
 Binary (Windows):

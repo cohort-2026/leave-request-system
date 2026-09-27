@@ -3,4 +3,5 @@ export type { MailContent } from "./types.js";
 export { testMessage } from "./templates/test-message.js";
 export { verifyEmail } from "./templates/verify-email.js";
 export { resetPasswordEmail } from "./templates/reset-password.js";
+export { resetAuthenticatorEmail } from "./templates/reset-authenticator.js";
 export { appOrigin } from "./config.js";

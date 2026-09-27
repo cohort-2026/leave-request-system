@@ -8,6 +8,8 @@ export const paths = {
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',
+  resetAuthenticator: '/reset-authenticator',
+  profile: '/profile',
   forbidden: '/forbidden',
   pendingApproval: '/pending-approval',
   home: '/',
