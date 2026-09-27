@@ -22,6 +22,7 @@
     "totp/**/*.ts",
     "verification/**/*.ts",
     "password-reset/**/*.ts",
+    "totp-reset/**/*.ts",
     "middleware/**/*.ts",
     "routes/**/*.ts"
   ],

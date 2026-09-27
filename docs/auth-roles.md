@@ -15,6 +15,12 @@
 | `POST /api/auth/login/totp` | Anyone with a valid `lrs_mfa` login challenge |
 | `POST /api/auth/logout` | Anyone (idempotent; no cookie still returns 200) |
 | `GET /api/auth/me` | Any signed-in role (`requireAuth`) |
+| `PATCH /api/auth/me` | Any signed-in role. Updates only that user's `display_name`. |
+| `POST /api/auth/change-password` | Any signed-in role. Requires the current password. Stays signed in. |
+| `POST /api/auth/totp/reset-request` | Any signed-in role. Emails a link; does not wipe TOTP yet. |
+| `POST /api/auth/totp/reset-confirm` | Anyone (no login). Token from the emailed link. Wipes TOTP. |
+| `GET /api/auth/totp/enrollment` | Any signed-in role with a pending enroll challenge |
+| `POST /api/auth/totp/enroll` | Any signed-in role with a valid `lrs_mfa` enroll challenge |
 | `GET /api/ping/signed-in` | Any signed-in role (`requireAuth`) |
 | `GET /api/ping/admin` | `company_admin` or `platform` (`requireAuth` + `requireRole`) |
 | `GET /api/users/:id` | Owner of that row, or `manager` / `company_admin` in the same company, or `platform`. Staff may not read another id. Failed checks are **403**. Missing rows are **404**. `password_hash` is never returned. |
