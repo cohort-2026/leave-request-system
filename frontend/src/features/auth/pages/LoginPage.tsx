@@ -370,6 +370,9 @@ export function LoginPage() {
             Don&apos;t have an account?{' '}
             <Link to={paths.register}>Register</Link>
           </p>
+          <p>
+            <Link to={paths.startCompany}>Start your company</Link>
+          </p>
         </>
       ) : null}
     </PageShell>
