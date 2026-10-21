@@ -11,6 +11,7 @@ export type Session = {
   displayName: string
   role: Role
   status: AccountStatus
+  companyId: number | null
   companyName: string | null
 }
 

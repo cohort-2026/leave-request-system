@@ -112,6 +112,7 @@ export function LoginPage() {
         displayName: result.displayName,
         role: result.role,
         status: result.status,
+        companyId: result.companyId,
         companyName: result.companyName,
       })
       setStep('recoveryCodes')

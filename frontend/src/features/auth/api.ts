@@ -8,6 +8,7 @@ type ServerUser = {
   name?: string
   role: Session['role']
   status?: Session['status']
+  companyId?: number | null
   companyName?: string | null
 }
 
@@ -34,6 +35,7 @@ function mapSession(user: ServerUser): Session {
     displayName: user.displayName ?? user.name ?? user.email ?? '',
     role: user.role,
     status: user.status ?? 'active',
+    companyId: user.companyId ?? null,
     companyName: user.companyName ?? null,
   }
 }
