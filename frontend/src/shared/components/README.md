@@ -17,6 +17,7 @@ import { Button } from '../shared/components'
 ```tsx
 <TextField label="Email" name="email" type="email" autoComplete="username" />
 <TextField label="Password" name="password" type="password" error="Required" />
+<TextField label="New password" name="newPassword" hint="Must be at least 8 characters." />
 ```
 
 ## Select
@@ -138,4 +139,3 @@ Titled overlay. The page owns `open` and `onClose`. Reject reason stays on the r
   <Button variant="danger">Reject</Button>
 </Modal>
 ```
-

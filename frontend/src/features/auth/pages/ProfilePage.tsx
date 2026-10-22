@@ -163,6 +163,7 @@ export function ProfilePage() {
         displayName: result.displayName,
         role: result.role,
         status: result.status,
+        companyId: result.companyId,
         companyName: result.companyName,
       })
       setEnrollment(null)
