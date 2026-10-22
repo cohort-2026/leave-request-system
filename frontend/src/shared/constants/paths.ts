@@ -6,6 +6,7 @@ export const paths = {
   resetPassword: '/reset-password',
   register: '/register',
   startCompany: '/start-company',
+  pricing: '/pricing',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',

@@ -1,9 +1,11 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from '../layouts/AppLayout'
+import { MarketingLayout } from '../layouts/MarketingLayout'
 import { PendingLayout } from '../layouts/PendingLayout'
 import { PublicLayout } from '../layouts/PublicLayout'
 import { NotFoundPage } from '../NotFoundPage'
 import { GuestOnly, RequireActive, RequireRole, SessionGate } from './guards'
+import { RootPage } from './RootPage'
 import { ForbiddenPage } from '../../features/auth/pages/ForbiddenPage'
 import { LoginPage } from '../../features/auth/pages/LoginPage'
 import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage'
@@ -22,7 +24,6 @@ import { CalendarSettingsPage } from '../../features/company/pages/CalendarSetti
 import { LeaveTypesPage } from '../../features/company/pages/LeaveTypesPage'
 import { OnboardingLinkPage } from '../../features/company/pages/OnboardingLinkPage'
 import { RulesPage } from '../../features/company/pages/RulesPage'
-import { HomePage } from '../../features/leave/pages/HomePage'
 import { LeaveDetailPage } from '../../features/leave/pages/LeaveDetailPage'
 import { LeaveListPage } from '../../features/leave/pages/LeaveListPage'
 import { NewLeavePage } from '../../features/leave/pages/NewLeavePage'
@@ -35,9 +36,15 @@ import { UserDetailPage } from '../../features/people/pages/UserDetailPage'
 import { UsersPage } from '../../features/people/pages/UsersPage'
 import { CompaniesPage } from '../../features/platform/pages/CompaniesPage'
 import { NewCompanyPage } from '../../features/platform/pages/NewCompanyPage'
+import { PricingPage } from '../../features/marketing/pages/PricingPage'
 import { paths } from '../../shared/constants/paths'
 
 export const router = createBrowserRouter([
+  { path: paths.home, element: <RootPage /> },
+  {
+    element: <MarketingLayout />,
+    children: [{ path: paths.pricing, element: <PricingPage /> }],
+  },
   {
     element: <PublicLayout />,
     children: [
@@ -74,7 +81,6 @@ export const router = createBrowserRouter([
             children: [
               { path: paths.forbidden, element: <ForbiddenPage /> },
               { path: paths.profile, element: <ProfilePage /> },
-              { path: paths.home, element: <HomePage /> },
               {
                 element: (
                   <RequireRole allow={['staff', 'manager', 'company_admin']} />

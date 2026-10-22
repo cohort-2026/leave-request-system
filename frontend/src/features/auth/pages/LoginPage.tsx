@@ -374,6 +374,7 @@ export function LoginPage() {
           <p>
             <Link to={paths.startCompany}>Start your company</Link>
           </p>
+          <p>Have an invite? Open the link from your admin.</p>
         </>
       ) : null}
     </PageShell>
