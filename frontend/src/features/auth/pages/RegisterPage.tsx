@@ -45,7 +45,11 @@ export function RegisterPage() {
   return (
     <PageShell title="Register" eyebrow="Public">
       {formError ? <Alert tone="error">{formError}</Alert> : null}
-      <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
+      <form
+        className="auth-form"
+        onSubmit={handleSubmit}
+        aria-busy={submitting}
+      >
         <TextField
           label="Email"
           name="email"
@@ -61,6 +65,7 @@ export function RegisterPage() {
           label="Password"
           name="password"
           type="password"
+          hint="Use at least 8 characters."
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -83,7 +88,7 @@ export function RegisterPage() {
           {submitting ? 'Registering…' : 'Register'}
         </Button>
       </form>
-      <p>
+      <p className="auth-footer">
         Already have an account? <Link to={paths.login}>Sign in</Link>
       </p>
     </PageShell>

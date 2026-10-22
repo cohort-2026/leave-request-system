@@ -17,6 +17,12 @@ import { Button } from '../shared/components'
 ```tsx
 <TextField label="Email" name="email" type="email" autoComplete="username" />
 <TextField label="Password" name="password" type="password" error="Required" />
+<TextField
+  label="New password"
+  name="newPassword"
+  type="password"
+  hint="Use at least 8 characters."
+/>
 ```
 
 ## Select
@@ -48,6 +54,7 @@ import { Button } from '../shared/components'
 
 ```tsx
 <Alert tone="info">Walkthrough buttons stand in for Express auth.</Alert>
+<Alert tone="success">Your email is verified.</Alert>
 <Alert tone="error">Unknown staff number.</Alert>
 ```
 
@@ -138,4 +145,3 @@ Titled overlay. The page owns `open` and `onClose`. Reject reason stays on the r
   <Button variant="danger">Reject</Button>
 </Modal>
 ```
-

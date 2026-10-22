@@ -178,12 +178,16 @@ export function LoginPage() {
   return (
     <PageShell title={title} eyebrow="Public">
       {resetNotice && step === 'password' ? (
-        <Alert tone="info">Password updated. You can sign in.</Alert>
+        <Alert tone="success">Password updated. You can sign in.</Alert>
       ) : null}
       {formError ? <Alert tone="error">{formError}</Alert> : null}
 
       {step === 'password' ? (
-        <form className="flex flex-col gap-stack" onSubmit={handlePassword}>
+        <form
+          className="auth-form"
+          onSubmit={handlePassword}
+          aria-busy={submitting}
+        >
           <TextField
             label="Email"
             name="email"
@@ -206,6 +210,9 @@ export function LoginPage() {
             required
             disabled={submitting}
           />
+          <div className="auth-inline-action">
+            <Link to={paths.forgotPassword}>Forgot password?</Link>
+          </div>
           <Button variant="primary" type="submit" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Log in'}
           </Button>
@@ -213,7 +220,11 @@ export function LoginPage() {
       ) : null}
 
       {step === 'enroll' && enrollment ? (
-        <form className="flex flex-col gap-stack" onSubmit={handleEnroll}>
+        <form
+          className="auth-form"
+          onSubmit={handleEnroll}
+          aria-busy={submitting}
+        >
           <Alert>
             {enrollment.totpReset
               ? 'Your previous authenticator was removed. Scan this QR with Google Authenticator to set up a new one. If you cannot scan, type the secret by hand.'
@@ -256,7 +267,11 @@ export function LoginPage() {
       ) : null}
 
       {step === 'totp' ? (
-        <form className="flex flex-col gap-stack" onSubmit={handleTotp}>
+        <form
+          className="auth-form"
+          onSubmit={handleTotp}
+          aria-busy={submitting}
+        >
           {useRecovery ? (
             <>
               <Alert>
@@ -336,7 +351,7 @@ export function LoginPage() {
       ) : null}
 
       {step === 'recoveryCodes' ? (
-        <div className="flex flex-col gap-stack">
+        <div className="auth-form">
           <Alert>
             Store these recovery codes somewhere safe. Each code works once if
             you lose the authenticator. They will not be shown again.
@@ -355,22 +370,16 @@ export function LoginPage() {
       ) : null}
 
       {step === 'password' && needsVerify ? (
-        <p>
+        <p className="auth-footer">
           <Link to={paths.verify} state={{ email }}>
             Verify your email or request a new link
           </Link>
         </p>
       ) : null}
       {step === 'password' ? (
-        <>
-          <p>
-            <Link to={paths.forgotPassword}>Forgot password?</Link>
-          </p>
-          <p>
-            Don&apos;t have an account?{' '}
-            <Link to={paths.register}>Register</Link>
-          </p>
-        </>
+        <p className="auth-footer">
+          Don&apos;t have an account? <Link to={paths.register}>Register</Link>
+        </p>
       ) : null}
     </PageShell>
   )

@@ -59,11 +59,16 @@ export function ResetPasswordPage() {
     <PageShell title="Reset password" eyebrow="Public">
       {formError ? <Alert tone="error">{formError}</Alert> : null}
       {token ? (
-        <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
+        <form
+          className="auth-form"
+          onSubmit={handleSubmit}
+          aria-busy={submitting}
+        >
           <TextField
             label="New password"
             name="password"
             type="password"
+            hint="Use at least 8 characters."
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -85,10 +90,10 @@ export function ResetPasswordPage() {
           </Button>
         </form>
       ) : null}
-      <p>
+      <p className="auth-footer">
         <Link to={paths.forgotPassword}>Request a new reset link</Link>
       </p>
-      <p>
+      <p className="auth-footer">
         <Link to={paths.login}>Back to sign in</Link>
       </p>
     </PageShell>
