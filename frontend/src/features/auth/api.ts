@@ -83,6 +83,26 @@ export function register(email: string, password: string) {
   })
 }
 
+export function signupCompany(
+  companyName: string,
+  displayName: string,
+  email: string,
+  password: string,
+) {
+  return apiRequest<{
+    id: number
+    email: string
+    displayName: string
+    role: Session['role']
+    status: Session['status']
+    companyName: string
+    company: { id: number; name: string; slug: string; trialEndsAt: string }
+  }>('/api/companies/signup', {
+    method: 'POST',
+    body: JSON.stringify({ companyName, displayName, email, password }),
+  })
+}
+
 export function logout() {
   return apiRequest<void>('/api/auth/logout', {
     method: 'POST',

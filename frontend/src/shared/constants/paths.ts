@@ -5,6 +5,7 @@ export const paths = {
   forgotPassword: '/forgot-password',
   resetPassword: '/reset-password',
   register: '/register',
+  startCompany: '/start-company',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',
