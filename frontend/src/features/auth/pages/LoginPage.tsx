@@ -179,12 +179,16 @@ export function LoginPage() {
   return (
     <PageShell title={title} eyebrow="Public">
       {resetNotice && step === 'password' ? (
-        <Alert tone="info">Password updated. You can sign in.</Alert>
+        <Alert tone="success">Password updated. You can sign in.</Alert>
       ) : null}
       {formError ? <Alert tone="error">{formError}</Alert> : null}
 
       {step === 'password' ? (
-        <form className="flex flex-col gap-stack" onSubmit={handlePassword}>
+        <form
+          className="auth-form"
+          onSubmit={handlePassword}
+          aria-busy={submitting}
+        >
           <TextField
             label="Email"
             name="email"
@@ -207,6 +211,9 @@ export function LoginPage() {
             required
             disabled={submitting}
           />
+          <div className="auth-inline-action">
+            <Link to={paths.forgotPassword}>Forgot password?</Link>
+          </div>
           <Button variant="primary" type="submit" disabled={submitting}>
             {submitting ? 'Signing in…' : 'Log in'}
           </Button>
@@ -214,7 +221,11 @@ export function LoginPage() {
       ) : null}
 
       {step === 'enroll' && enrollment ? (
-        <form className="flex flex-col gap-stack" onSubmit={handleEnroll}>
+        <form
+          className="auth-form"
+          onSubmit={handleEnroll}
+          aria-busy={submitting}
+        >
           <Alert>
             {enrollment.totpReset
               ? 'Your previous authenticator was removed. Scan this QR with Google Authenticator to set up a new one. If you cannot scan, type the secret by hand.'
@@ -223,13 +234,14 @@ export function LoginPage() {
           <div
             role="img"
             aria-label="Authenticator QR code"
-            className="max-w-48"
+            className="auth-qr"
             dangerouslySetInnerHTML={{ __html: enrollment.qrSvg }}
           />
           <TextField
             label="Secret"
             name="totp-secret"
             value={enrollment.secret}
+            hint="Type this into the authenticator app if you cannot scan the QR."
             readOnly
           />
           <TextField
@@ -239,6 +251,7 @@ export function LoginPage() {
             autoComplete="one-time-code"
             value={code}
             onChange={(event) => setCode(event.target.value)}
+            hint="Enter the code from Google Authenticator to confirm setup."
             required
             disabled={submitting}
           />
@@ -257,12 +270,16 @@ export function LoginPage() {
       ) : null}
 
       {step === 'totp' ? (
-        <form className="flex flex-col gap-stack" onSubmit={handleTotp}>
+        <form
+          className="auth-form"
+          onSubmit={handleTotp}
+          aria-busy={submitting}
+        >
           {useRecovery ? (
             <>
               <Alert>
-                Use this if you lost Google Authenticator. It removes the
-                current authenticator so you can scan a new QR next.
+                Use a recovery code if you lost Google Authenticator. This
+                removes the current authenticator so you can scan a new QR next.
               </Alert>
               <TextField
                 label="Recovery code"
@@ -270,21 +287,28 @@ export function LoginPage() {
                 autoComplete="off"
                 value={recoveryCode}
                 onChange={(event) => setRecoveryCode(event.target.value)}
+                hint="Each recovery code works once."
                 required
                 disabled={submitting}
               />
             </>
           ) : (
-            <TextField
-              label="6-digit code"
-              name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              required
-              disabled={submitting}
-            />
+            <>
+              <Alert>
+                Open Google Authenticator and enter the 6-digit code for this
+                account.
+              </Alert>
+              <TextField
+                label="6-digit code"
+                name="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                required
+                disabled={submitting}
+              />
+            </>
           )}
           <Button
             variant="primary"
@@ -296,7 +320,7 @@ export function LoginPage() {
           >
             {submitting ? 'Verifying…' : 'Verify'}
           </Button>
-          <p>
+          <p className="auth-inline-action">
             {useRecovery ? (
               <a
                 href="#authenticator"
@@ -337,12 +361,12 @@ export function LoginPage() {
       ) : null}
 
       {step === 'recoveryCodes' ? (
-        <div className="flex flex-col gap-stack">
+        <div className="auth-form">
           <Alert>
             Store these recovery codes somewhere safe. Each code works once if
             you lose the authenticator. They will not be shown again.
           </Alert>
-          <ul>
+          <ul className="auth-recovery-codes">
             {recoveryCodes.map((item) => (
               <li key={item}>
                 <code>{item}</code>
@@ -356,26 +380,24 @@ export function LoginPage() {
       ) : null}
 
       {step === 'password' && needsVerify ? (
-        <p>
+        <p className="auth-footer">
           <Link to={paths.verify} state={{ email }}>
             Verify your email or request a new link
           </Link>
         </p>
       ) : null}
       {step === 'password' ? (
-        <>
+        <div className="auth-footer">
           <p>
-            <Link to={paths.forgotPassword}>Forgot password?</Link>
-          </p>
-          <p>
-            Don&apos;t have an account?{' '}
-            <Link to={paths.register}>Register</Link>
+            Don&apos;t have an account? <Link to={paths.register}>Register</Link>
           </p>
           <p>
             <Link to={paths.startCompany}>Start your company</Link>
           </p>
-          <p>Have an invite? Open the link from your admin.</p>
-        </>
+          <p className="auth-help">
+            Have an invite? Open the link from your admin.
+          </p>
+        </div>
       ) : null}
     </PageShell>
   )

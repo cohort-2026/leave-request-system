@@ -38,8 +38,12 @@ export function ForgotPasswordPage() {
   return (
     <PageShell title="Forgot password" eyebrow="Public">
       {formError ? <Alert tone="error">{formError}</Alert> : null}
-      {message ? <Alert tone="info">{message}</Alert> : null}
-      <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
+      {message ? <Alert tone="success">{message}</Alert> : null}
+      <form
+        className="auth-form"
+        onSubmit={handleSubmit}
+        aria-busy={submitting}
+      >
         <TextField
           label="Email"
           name="email"
@@ -54,11 +58,11 @@ export function ForgotPasswordPage() {
           {submitting ? 'Sending…' : 'Send reset link'}
         </Button>
       </form>
-      <p>
+      <p className="auth-help">
         Open <a href="http://localhost:8025">Mailpit</a> to read the link in
         local development.
       </p>
-      <p>
+      <p className="auth-footer">
         <Link to={paths.login}>Back to sign in</Link>
       </p>
     </PageShell>

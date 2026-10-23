@@ -3,7 +3,7 @@
  */
 import type { HTMLAttributes, ReactNode } from 'react'
 
-export type AlertTone = 'info' | 'error'
+export type AlertTone = 'info' | 'success' | 'error'
 
 type AlertProps = {
   tone?: AlertTone
