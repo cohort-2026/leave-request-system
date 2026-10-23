@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
-import { resendVerification, verifyEmail } from '../api'
+import { getMe, resendVerification, verifyEmail } from '../api'
 
 function emailFromState(state: unknown): string {
   if (!state || typeof state !== 'object' || !('email' in state)) {
@@ -16,37 +16,58 @@ function emailFromState(state: unknown): string {
 }
 
 export function VerifyPage() {
-  const { session, signOut } = useAuth()
+  const { session, signIn, signOut } = useAuth()
+  const authRef = useRef({ session, signIn })
+  const verificationRequest = useRef<{
+    token: string
+    promise: ReturnType<typeof verifyEmail>
+  } | null>(null)
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const token = searchParams.get('token')?.trim() ?? ''
 
-  const [email, setEmail] = useState(emailFromState(location.state))
+  const [email, setEmail] = useState(
+    () => emailFromState(location.state) || session?.email || '',
+  )
   const [verifyState, setVerifyState] = useState<
     'idle' | 'working' | 'ok' | 'error'
   >(token ? 'working' : 'idle')
-  const [verifyMessage, setVerifyMessage] = useState(
-    token
-      ? ''
-      : 'Check Mailpit for the verification email, or request a new link.',
-  )
+  const [verifyMessage, setVerifyMessage] = useState('')
   const [resendMessage, setResendMessage] = useState('')
   const [resendError, setResendError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [resending, setResending] = useState(false)
 
   useEffect(() => {
-    if (!token) {
+    authRef.current = { session, signIn }
+  }, [session, signIn])
+
+  useEffect(() => {
+    if (!token || verifyState !== 'working') {
       return
     }
 
     let cancelled = false
-    setVerifyState('working')
+    if (verificationRequest.current?.token !== token) {
+      verificationRequest.current = { token, promise: verifyEmail(token) }
+    }
 
-    verifyEmail(token)
-      .then(() => {
+    verificationRequest.current.promise
+      .then(async () => {
+        if (cancelled) return
+        if (authRef.current.session) {
+          try {
+            const me = await getMe()
+            if (!cancelled) {
+              authRef.current.signIn(me)
+            }
+          } catch {
+            // Keep the existing session if /me cannot refresh.
+          }
+        }
         if (cancelled) return
         setVerifyState('ok')
-        setVerifyMessage('Email verified. You can sign in.')
+        setVerifyMessage('Your email is verified. You can now continue.')
       })
       .catch((error) => {
         if (cancelled) return
@@ -61,7 +82,7 @@ export function VerifyPage() {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [token, verifyState])
 
   async function handleResend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -86,10 +107,19 @@ export function VerifyPage() {
     }
   }
 
+  async function handleSignOut() {
+    setActionError('')
+    try {
+      await signOut()
+    } catch {
+      setActionError('Unable to sign out. Please try again.')
+    }
+  }
+
   return (
     <PageShell title="Verify email" eyebrow="Public">
       {verifyState === 'ok' ? (
-        <Alert tone="info">{verifyMessage}</Alert>
+        <Alert tone="success">{verifyMessage}</Alert>
       ) : null}
       {verifyState === 'error' ? (
         <Alert tone="error">{verifyMessage}</Alert>
@@ -97,19 +127,35 @@ export function VerifyPage() {
       {verifyState === 'working' ? (
         <Alert tone="info">Verifying your email…</Alert>
       ) : null}
-      {verifyState === 'idle' && verifyMessage ? (
-        <Alert tone="info">{verifyMessage}</Alert>
+      {verifyState === 'idle' ? (
+        <Alert tone="info">
+          {email ? (
+            <>
+              We sent a verification link to <strong>{email}</strong>. Check
+              your inbox, or resend it below.
+            </>
+          ) : (
+            'Check your inbox for the verification link, or enter your email to request another.'
+          )}
+        </Alert>
       ) : null}
 
       {verifyState === 'ok' ? (
-        <p>
-          <Link to={paths.login}>Sign in</Link>
-        </p>
+        <Link
+          to={paths.login}
+          className="button button-primary auth-full-button"
+        >
+          {session ? 'Continue to your account' : 'Sign in'}
+        </Link>
       ) : (
         <>
           {resendError ? <Alert tone="error">{resendError}</Alert> : null}
-          {resendMessage ? <Alert tone="info">{resendMessage}</Alert> : null}
-          <form className="flex flex-col gap-stack" onSubmit={handleResend}>
+          {resendMessage ? <Alert tone="success">{resendMessage}</Alert> : null}
+          <form
+            className="auth-form"
+            onSubmit={handleResend}
+            aria-busy={resending}
+          >
             <TextField
               label="Email"
               name="email"
@@ -124,22 +170,26 @@ export function VerifyPage() {
               {resending ? 'Sending…' : 'Resend verification email'}
             </Button>
           </form>
-          <p>
-            Open <a href="http://localhost:8025">Mailpit</a> to read the link
-            in local development.
+          <p className="auth-help">
+            In local development, open{' '}
+            <a href="http://localhost:8025">Mailpit</a> to find the email.
           </p>
-          <p>
+          <p className="auth-footer">
             <Link to={paths.login}>Back to sign in</Link>
           </p>
         </>
       )}
 
+      {actionError ? <Alert tone="error">{actionError}</Alert> : null}
       {session ? (
-        <p>
-          <Button variant="secondary" type="button" onClick={() => void signOut()}>
-            Sign out
-          </Button>
-        </p>
+        <Button
+          variant="secondary"
+          type="button"
+          className="auth-wide"
+          onClick={() => void handleSignOut()}
+        >
+          Sign out
+        </Button>
       ) : null}
     </PageShell>
   )
