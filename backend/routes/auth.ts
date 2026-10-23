@@ -34,6 +34,10 @@ import {
   completeTotpReset,
   requestTotpReset,
 } from "../totp-reset/index.js";
+import {
+  isOnboardingTableMissing,
+  onboardWithInvite,
+} from "../onboarding/index.js";
 
 export const authRouter = Router();
 
@@ -52,6 +56,10 @@ const TOTP_RESET_LINK_BAD =
 const TOTP_RESET_REQUEST_OK =
   "Check your inbox (Mailpit in local dev) for a link to reset your authenticator.";
 const CHANGE_PASSWORD_BAD = "Current password is incorrect";
+const REGISTER_CLOSED =
+  "Open registration is closed. Start a company at /start-company, use company SSO, or open an invite link from your admin.";
+const ONBOARD_LINK_BAD = "This invite link is invalid or has been disabled.";
+const INVITES_UNAVAILABLE = "Invite links are not available yet.";
 const MAX_DISPLAY_NAME_LEN = 120;
 
 function asNonEmptyString(value: unknown): string | null {
@@ -67,9 +75,30 @@ const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", (_req, res) => {
+  res.status(400).json({ error: REGISTER_CLOSED });
+});
+
+authRouter.post("/onboard", async (req, res) => {
+  const token = asNonEmptyString(req.body?.token);
   const rawEmail = req.body?.email;
   const rawPassword = req.body?.password;
+  const rawDisplayName = req.body?.displayName;
+
+  if (typeof rawDisplayName !== "string") {
+    res.status(400).json({ error: "Display name required" });
+    return;
+  }
+
+  const displayName = rawDisplayName.trim();
+  if (!displayName) {
+    res.status(400).json({ error: "Display name required" });
+    return;
+  }
+  if (displayName.length > MAX_DISPLAY_NAME_LEN) {
+    res.status(400).json({ error: "Display name is too long" });
+    return;
+  }
 
   if (typeof rawEmail !== "string" || typeof rawPassword !== "string") {
     res.status(400).json({ error: "Email and password required" });
@@ -99,18 +128,27 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
 
+  if (!token) {
+    res.status(400).json({ error: ONBOARD_LINK_BAD });
+    return;
+  }
+
   try {
     const hash = await bcrypt.hash(password, 10);
-    const result = await pool.query<UserRow>(
-      `INSERT INTO users (email, password_hash, role, status)
-       VALUES ($1, $2, $3, 'pending_verification')
-       RETURNING id, email, role, display_name, status, company_name`,
-      [email.toLowerCase(), hash, "staff"],
-    );
-    const user = result.rows[0];
-    const token = await issueVerificationToken(user.id);
+    const user = await onboardWithInvite({
+      token,
+      email: email.toLowerCase(),
+      passwordHash: hash,
+      displayName,
+    });
+    if (user === "invalid") {
+      res.status(400).json({ error: ONBOARD_LINK_BAD });
+      return;
+    }
+
+    const verifyToken = await issueVerificationToken(user.id);
     try {
-      await sendVerificationEmail(user.email, token);
+      await sendVerificationEmail(user.email, verifyToken);
     } catch {
       res.status(500).json({ error: "Could not send verification email" });
       return;
@@ -118,6 +156,10 @@ authRouter.post("/register", async (req, res) => {
 
     res.status(201).json(toPublicUser(user));
   } catch (err: unknown) {
+    if (isOnboardingTableMissing(err)) {
+      res.status(503).json({ error: INVITES_UNAVAILABLE });
+      return;
+    }
     const code =
       err && typeof err === "object" && "code" in err
         ? String(err.code)
