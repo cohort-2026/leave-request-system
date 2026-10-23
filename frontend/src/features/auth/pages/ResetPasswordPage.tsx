@@ -68,7 +68,7 @@ export function ResetPasswordPage() {
             label="New password"
             name="password"
             type="password"
-            hint="Use at least 8 characters."
+            hint="Must be at least 8 characters."
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}

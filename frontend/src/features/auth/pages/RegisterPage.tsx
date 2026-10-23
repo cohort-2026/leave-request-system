@@ -6,6 +6,9 @@ import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
 import { register } from '../api'
 
+const MIN_PASSWORD_LENGTH = 8
+const PASSWORD_TOO_SHORT = 'Password must be at least 8 characters'
+
 export function RegisterPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -25,6 +28,11 @@ export function RegisterPage() {
       return
     }
 
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setErrors({ password: `${PASSWORD_TOO_SHORT}.` })
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -32,8 +40,12 @@ export function RegisterPage() {
       navigate(paths.verify, { replace: true, state: { email } })
     } catch (error) {
       if (error instanceof ApiError) {
-        setErrors(error.fieldErrors)
-        setFormError(error.message)
+        if (error.status === 400 && error.message === PASSWORD_TOO_SHORT) {
+          setErrors({ ...error.fieldErrors, password: error.message })
+        } else {
+          setErrors(error.fieldErrors)
+          setFormError(error.message)
+        }
       } else {
         setFormError('Unable to register. Please try again.')
       }
@@ -65,11 +77,11 @@ export function RegisterPage() {
           label="Password"
           name="password"
           type="password"
-          hint="Use at least 8 characters."
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           error={errors.password}
+          hint="Must be at least 8 characters."
           required
           disabled={submitting}
         />

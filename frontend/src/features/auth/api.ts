@@ -8,6 +8,7 @@ type ServerUser = {
   name?: string
   role: Session['role']
   status?: Session['status']
+  companyId?: number | null
   companyName?: string | null
 }
 
@@ -34,6 +35,7 @@ function mapSession(user: ServerUser): Session {
     displayName: user.displayName ?? user.name ?? user.email ?? '',
     role: user.role,
     status: user.status ?? 'active',
+    companyId: user.companyId ?? null,
     companyName: user.companyName ?? null,
   }
 }
@@ -80,6 +82,26 @@ export function register(email: string, password: string) {
   return apiRequest<void>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  })
+}
+
+export function signupCompany(
+  companyName: string,
+  displayName: string,
+  email: string,
+  password: string,
+) {
+  return apiRequest<{
+    id: number
+    email: string
+    displayName: string
+    role: Session['role']
+    status: Session['status']
+    companyName: string
+    company: { id: number; name: string; slug: string; trialEndsAt: string }
+  }>('/api/companies/signup', {
+    method: 'POST',
+    body: JSON.stringify({ companyName, displayName, email, password }),
   })
 }
 

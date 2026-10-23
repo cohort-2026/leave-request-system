@@ -37,9 +37,9 @@ export function TextField({
       <input
         id={inputId}
         name={name}
+        {...rest}
         aria-describedby={describedBy || undefined}
         aria-invalid={error ? true : ariaInvalid}
-        {...rest}
       />
       {hint ? (
         <span id={`${inputId}-hint`} className="field-hint">

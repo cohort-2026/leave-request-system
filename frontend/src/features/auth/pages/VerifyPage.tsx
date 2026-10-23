@@ -5,7 +5,7 @@ import { useAuth } from '../../../app/providers/useAuth'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
-import { resendVerification, verifyEmail } from '../api'
+import { getMe, resendVerification, verifyEmail } from '../api'
 
 function emailFromState(state: unknown): string {
   if (!state || typeof state !== 'object' || !('email' in state)) {
@@ -53,12 +53,19 @@ export function VerifyPage() {
     }
 
     verificationRequest.current.promise
-      .then(() => {
+      .then(async () => {
         if (cancelled) return
-        const currentSession = authRef.current.session
-        if (currentSession) {
-          authRef.current.signIn({ ...currentSession, status: 'active' })
+        if (authRef.current.session) {
+          try {
+            const me = await getMe()
+            if (!cancelled) {
+              authRef.current.signIn(me)
+            }
+          } catch {
+            // Keep the existing session if /me cannot refresh.
+          }
         }
+        if (cancelled) return
         setVerifyState('ok')
         setVerifyMessage('Your email is verified. You can now continue.')
       })
@@ -178,6 +185,7 @@ export function VerifyPage() {
         <Button
           variant="secondary"
           type="button"
+          className="auth-wide"
           onClick={() => void handleSignOut()}
         >
           Sign out

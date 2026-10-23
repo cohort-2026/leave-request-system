@@ -21,7 +21,7 @@ import { Button } from '../shared/components'
   label="New password"
   name="newPassword"
   type="password"
-  hint="Use at least 8 characters."
+  hint="Must be at least 8 characters."
 />
 ```
 
