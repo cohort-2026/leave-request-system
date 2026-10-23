@@ -5,7 +5,11 @@
 | Address | Who may call it |
 | --- | --- |
 | `GET /api/health` | Anyone (no login) |
-| `POST /api/auth/register` | Anyone (no login) |
+| `POST /api/auth/register` | Anyone (no login). Always **400**; open staff signup is closed. |
+| `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
+| `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
+| `POST /api/companies/current/onboarding-link` | `company_admin` of a company. Creates or rotates the hashed invite URL. |
+| `POST /api/companies/current/onboarding-link/disable` | `company_admin` of a company. |
 | `POST /api/auth/login` | Anyone (no login). Unverified accounts get **403** and no cookie. |
 | `POST /api/auth/verify-email` | Anyone (no login). Token from the emailed link. |
 | `POST /api/auth/resend-verification` | Anyone (no login). Same success whether the email exists or not. |
@@ -27,4 +31,4 @@
 
 Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `admin` role.
 
-There is no people/team table this week, so same-company for manager / company_admin is `users.company_name`. Platform can read any row.
+There is no people/team table this week, so same-company for manager / company_admin is `users.company_name`. Platform can read any row. Invite links are also keyed by `company_name` until companies tenancy (`company_id`) ships. Platform is not in a company and cannot create invites. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`.
