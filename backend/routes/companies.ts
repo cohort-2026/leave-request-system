@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pool } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   disableOnboardingLink,
@@ -6,6 +7,7 @@ import {
   isOnboardingTableMissing,
   rotateOnboardingLink,
 } from "../onboarding/index.js";
+import { toPublicUser, type UserRow } from "../session.js";
 
 export const companiesRouter = Router();
 
@@ -34,6 +36,33 @@ function sendInviteUnavailable(
   res.status(503).json({ error: INVITES_UNAVAILABLE });
   return true;
 }
+
+companiesRouter.get(
+  "/current/users",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyName = companyNameOf(req, res);
+    if (!companyName) {
+      return;
+    }
+
+    const result = await pool.query<
+      Pick<
+        UserRow,
+        "id" | "email" | "role" | "display_name" | "status" | "company_name"
+      >
+    >(
+      `SELECT id, email, role, display_name, status, company_name
+       FROM users
+       WHERE company_name = $1
+       ORDER BY id`,
+      [companyName],
+    );
+
+    res.json({ users: result.rows.map(toPublicUser) });
+  },
+);
 
 companiesRouter.get(
   "/current/onboarding-link",

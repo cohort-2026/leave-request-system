@@ -13,7 +13,7 @@ Cookie name: `lrs_session`. httpOnly, Path `/`, SameSite `lax`, 7 days. Secure f
 
 A second cookie, `lrs_mfa`, is set after a correct password and consumed on TOTP success. httpOnly, Path `/`, SameSite `lax`, 10 minutes. It is not a session.
 
-Public user JSON (login, register, `/me`, `GET /api/users/:id`):
+Public user JSON (login, register, `/me`, `GET /api/users/:id`, people list, role PATCH):
 
 ```json
 {
@@ -69,6 +69,27 @@ Disables the active invite for this company. Idempotent if none is active. Exist
 
 - 200 `{ "ok": true, "active": false }`
 - 401 / 403 / 503 as for GET
+
+### `GET /api/companies/current/users` — `company_admin`
+
+Public user JSON for every person in **this** company (`users.company_name` until `company_id` ships). Ordered by id. Includes the caller. Does **not** include other companies or `platform` users.
+
+- 200 `{ "users": [ public user, ... ] }`
+- 401 `{ "error": "Not signed in" }`
+- 403 staff, manager, platform, or a company admin with no company
+
+### `PATCH /api/users/:id/role` — `company_admin`
+
+Body: `{ "role" }` where `role` is `staff` | `manager` | `company_admin`. Extra fields (`email`, `status`, `companyName`, `password`, …) are ignored. Updates **only** `users.role`. Does **not** change password, TOTP, recovery codes, verification status, or company. Does **not** set or clear cookies. The existing `lrs_session` stays valid; later `requireAuth` loads the new role from the database.
+
+- 200 public user (new role)
+- 400 `{ "error": "Unknown role" }` (missing, `platform`, or any other value)
+- 400 `{ "error": "Invalid user id" }`
+- 401 `{ "error": "Not signed in" }`
+- 403 `{ "error": "You cannot change your own role" }`
+- 403 `{ "error": "Cannot demote the last company admin" }`
+- 403 staff, manager, platform, other company, or a `platform` target
+- 404 `{ "error": "Not found" }`
 
 ### `POST /api/auth/login` — anyone
 
