@@ -85,6 +85,18 @@ export function register(email: string, password: string) {
   })
 }
 
+export function onboard(
+  token: string,
+  email: string,
+  password: string,
+  displayName: string,
+) {
+  return apiRequest<ServerUser>('/api/auth/onboard', {
+    method: 'POST',
+    body: JSON.stringify({ token, email, password, displayName }),
+  })
+}
+
 export function signupCompany(
   companyName: string,
   displayName: string,

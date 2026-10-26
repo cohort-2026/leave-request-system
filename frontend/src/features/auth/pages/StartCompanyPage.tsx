@@ -55,6 +55,10 @@ export function StartCompanyPage() {
         <p className="company-signup-intro">
           Create your company workspace and set up your administrator account.
         </p>
+        <p className="muted">
+          Employees are provisioned by their company (SCIM / SSO), or they use
+          an invite link if they were sent one.
+        </p>
         {formError ? <Alert tone="error">{formError}</Alert> : null}
         <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
           <TextField
