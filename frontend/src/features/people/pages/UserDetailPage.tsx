@@ -1,21 +1,32 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
+import { Alert, Button, Select } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
+import { ApiError } from '../../../services/api'
+import { roleLabel } from '../../../shared/types/session'
 import {
-  ROLES,
+  ASSIGNABLE_ROLES,
   getCompanyUser,
-  roleLabel,
+  isAssignableRole,
   updateUserRole,
+  type AssignableRole,
   type PublicUser,
-  type Role,
 } from './usersApi'
 
+function parseUserId(value: string | undefined): number | null {
+  if (!value) return null
+  const id = Number(value)
+  if (!Number.isInteger(id) || id <= 0) return null
+  return id
+}
+
 export function UserDetailPage() {
-  const { id } = useParams()
+  const { id: rawId } = useParams()
+  const id = parseUserId(rawId)
 
   const [person, setPerson] = useState<PublicUser | null>(null)
-  const [selectedRole, setSelectedRole] = useState<Role>('staff')
+  const [selectedRole, setSelectedRole] = useState<AssignableRole>('staff')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -23,20 +34,34 @@ export function UserDetailPage() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (!id) return
-    let cancelled = false
+    if (id === null) {
+      setLoading(false)
+      setLoadError('Invalid user id')
+      return
+    }
 
+    let cancelled = false
     setLoading(true)
     setLoadError(null)
+    setPerson(null)
+    setSaved(false)
+    setSaveError(null)
+
     getCompanyUser(id)
       .then((user) => {
         if (cancelled) return
         setPerson(user)
-        setSelectedRole(user.role)
+        if (isAssignableRole(user.role)) {
+          setSelectedRole(user.role)
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : 'Could not load this person.')
+          setLoadError(
+            err instanceof ApiError
+              ? err.message
+              : 'Could not load this person.',
+          )
         }
       })
       .finally(() => {
@@ -50,7 +75,7 @@ export function UserDetailPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!id || !person || selectedRole === person.role) return
+    if (id === null || !person || selectedRole === person.role) return
 
     setSaving(true)
     setSaveError(null)
@@ -58,11 +83,14 @@ export function UserDetailPage() {
     try {
       const updated = await updateUserRole(id, selectedRole)
       setPerson(updated)
-      setSelectedRole(updated.role)
+      if (isAssignableRole(updated.role)) {
+        setSelectedRole(updated.role)
+      }
       setSaved(true)
     } catch (err: unknown) {
-      // Covers last-admin, self-change and 403 messages from the API.
-      setSaveError(err instanceof Error ? err.message : 'Could not change the role.')
+      setSaveError(
+        err instanceof ApiError ? err.message : 'Could not change the role.',
+      )
     } finally {
       setSaving(false)
     }
@@ -70,44 +98,52 @@ export function UserDetailPage() {
 
   return (
     <PageShell title="One person" eyebrow="Company admin">
-      {loading && <p className="muted">Loading…</p>}
-      {loadError && <p role="alert">{loadError}</p>}
+      {loading ? <p className="muted">Loading…</p> : null}
+      {loadError ? <Alert tone="error">{loadError}</Alert> : null}
 
-      {person && (
-        <form onSubmit={handleSubmit}>
+      {person ? (
+        <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
           <p>
-            <strong>{person.name}</strong>
+            <strong>{person.displayName}</strong>
             {person.email ? <> ({person.email})</> : null}
           </p>
           <p className="muted">
             Current role: {roleLabel[person.role] ?? person.role}
           </p>
 
-          <label htmlFor="person-role">Role</label>{' '}
-          <select
+          <Select
+            label="Role"
+            name="role"
             id="person-role"
             value={selectedRole}
-            onChange={(e) => {
-              setSelectedRole(e.target.value as Role)
-              setSaved(false)
-              setSaveError(null)
-            }}
             disabled={saving}
+            onChange={(event) => {
+              const next = event.target.value
+              if (isAssignableRole(next)) {
+                setSelectedRole(next)
+                setSaved(false)
+                setSaveError(null)
+              }
+            }}
           >
-            {ROLES.map((role) => (
+            {ASSIGNABLE_ROLES.map((role) => (
               <option key={role} value={role}>
                 {roleLabel[role]}
               </option>
             ))}
-          </select>{' '}
-          <button type="submit" disabled={saving || selectedRole === person.role}>
-            {saving ? 'Saving…' : 'Save role'}
-          </button>
+          </Select>
 
-          {saveError && <p role="alert">{saveError}</p>}
-          {saved && <p role="status">Role updated.</p>}
+          <Button
+            type="submit"
+            disabled={saving || selectedRole === person.role}
+          >
+            {saving ? 'Saving…' : 'Save role'}
+          </Button>
+
+          {saveError ? <Alert tone="error">{saveError}</Alert> : null}
+          {saved ? <Alert tone="success">Role updated.</Alert> : null}
         </form>
-      )}
+      ) : null}
 
       <p>
         <Link to={paths.adminUsers}>Back to people</Link>
