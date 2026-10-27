@@ -21,8 +21,7 @@ export async function sendMail(input: SendMailInput): Promise<void> {
       html: input.html,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`Mail send failed: ${message}`);
+    console.error("Mail send failed");
     throw err;
   }
 }
