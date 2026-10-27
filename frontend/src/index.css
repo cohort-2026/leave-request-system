@@ -514,6 +514,14 @@ a {
   gap: var(--spacing-stack);
 }
 
+.staging-role {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-field);
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
 .app-main {
   padding: var(--spacing-section);
 }

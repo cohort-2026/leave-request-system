@@ -44,6 +44,13 @@ export function getMe() {
   return apiRequest<ServerUser>('/api/auth/me').then(mapSession)
 }
 
+export function assumeStagingRole(role: Session['role']) {
+  return apiRequest<ServerUser>('/api/auth/staging/assume-role', {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  }).then(mapSession)
+}
+
 export function login(email: string, password: string) {
   return apiRequest<LoginResult>('/api/auth/login', {
     method: 'POST',

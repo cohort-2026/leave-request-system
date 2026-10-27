@@ -9,6 +9,7 @@ import {
   sessionCookieOptions,
   signSessionToken,
   toPublicUser,
+  type Role,
   type UserRow,
 } from "../session.js";
 import {
@@ -38,6 +39,11 @@ import {
   isOnboardingTableMissing,
   onboardWithInvite,
 } from "../onboarding/index.js";
+import {
+  isStagingAuthBypass,
+  issueStagingSession,
+  STAGING_ROLE_EMAIL,
+} from "../staging.js";
 
 export const authRouter = Router();
 
@@ -206,9 +212,45 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
+  if (isStagingAuthBypass()) {
+    issueStagingSession(res, user.id);
+    res.json(toPublicUser(user));
+    return;
+  }
+
   clearSessionCookie(res);
   const challenge = await startTotpAfterPassword(user, res);
   res.json(challenge);
+});
+
+authRouter.post("/staging/assume-role", async (req, res) => {
+  if (!isStagingAuthBypass()) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const role = req.body?.role as Role | undefined;
+  const email = role ? STAGING_ROLE_EMAIL[role] : undefined;
+  if (!email) {
+    res.status(400).json({ error: "Unknown role" });
+    return;
+  }
+
+  const result = await pool.query<UserRow>(
+    `SELECT id, email, password_hash, role, display_name, status, company_name
+     FROM users
+     WHERE lower(email) = lower($1)
+     LIMIT 1`,
+    [email],
+  );
+  const user = result.rows[0];
+  if (!user) {
+    res.status(503).json({ error: "Staging seed user missing" });
+    return;
+  }
+
+  issueStagingSession(res, user.id);
+  res.json(toPublicUser(user));
 });
 
 authRouter.post("/verify-email", async (req, res) => {

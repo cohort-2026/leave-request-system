@@ -70,7 +70,11 @@ export function RequireActive() {
 }
 
 export function RequireRole({ allow }: { allow: Role[] }) {
-  const { session } = useAuth()
+  const { session, stagingPreview } = useAuth()
+
+  if (stagingPreview) {
+    return <Outlet />
+  }
 
   if (!session || !allow.includes(session.role)) {
     return <Navigate to={paths.forbidden} replace />

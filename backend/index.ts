@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth.js";
 import { companiesRouter } from "./routes/companies.js";
 import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
+import { isStagingAuthBypass } from "./staging.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -48,5 +49,8 @@ app.use(
 
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
+  if (isStagingAuthBypass()) {
+    console.log("Staging auth bypass is on — login and MFA are skipped");
+  }
 });
 

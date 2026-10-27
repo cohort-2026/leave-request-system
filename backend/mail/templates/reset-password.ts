@@ -1,6 +1,5 @@
 import { emailLayout } from "./layout.js";
 import type { MailContent } from "../types.js";
-import { emailLayout } from "./email-layout.js";
 
 export function resetPasswordEmail(input: { resetUrl: string }): MailContent {
   return emailLayout({
