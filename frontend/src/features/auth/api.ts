@@ -51,6 +51,13 @@ export function login(email: string, password: string) {
   })
 }
 
+export function startCompanySso(identifier: string) {
+  return apiRequest<{ authorizationUrl: string }>('/api/auth/sso/start', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
+  })
+}
+
 export function confirmTotpEnroll(email: string, code: string) {
   return apiRequest<ServerUser & { recoveryCodes?: string[] }>(
     '/api/auth/login/totp/enroll',

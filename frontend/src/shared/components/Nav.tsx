@@ -29,6 +29,7 @@ const adminNav: NavItem[] = [
   { to: paths.adminBlocks, label: 'Blocked dates' },
   { to: paths.adminRules, label: 'Company rules' },
   { to: paths.adminOnboarding, label: 'Invite link' },
+  { to: paths.adminSso, label: 'Company SSO' },
 ]
 
 const platformNav: NavItem[] = [

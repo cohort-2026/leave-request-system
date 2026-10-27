@@ -23,6 +23,7 @@ import { BlocksPage } from '../../features/company/pages/BlocksPage'
 import { CalendarSettingsPage } from '../../features/company/pages/CalendarSettingsPage'
 import { LeaveTypesPage } from '../../features/company/pages/LeaveTypesPage'
 import { OnboardingLinkPage } from '../../features/company/pages/OnboardingLinkPage'
+import { SsoSettingsPage } from '../../features/company/pages/SsoSettingsPage'
 import { RulesPage } from '../../features/company/pages/RulesPage'
 import { LeaveDetailPage } from '../../features/leave/pages/LeaveDetailPage'
 import { LeaveListPage } from '../../features/leave/pages/LeaveListPage'
@@ -115,6 +116,7 @@ export const router = createBrowserRouter([
                   },
                   { path: paths.adminBlocks, element: <BlocksPage /> },
                   { path: paths.adminOnboarding, element: <OnboardingLinkPage /> },
+                  { path: paths.adminSso, element: <SsoSettingsPage /> },
                 ],
               },
               {
