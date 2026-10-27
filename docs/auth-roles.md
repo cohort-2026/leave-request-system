@@ -6,6 +6,9 @@
 | --- | --- |
 | `GET /api/health` | Anyone (no login) |
 | `POST /api/auth/register` | Anyone (no login). Always **400**; open staff signup is closed. |
+| `GET /api/billing/plans` | Anyone (no login). Public ZAR catalog. |
+| `POST /api/companies/signup` | Anyone (no login). Creates a payment checkout, not a company. |
+| `POST /api/companies/signup/mock-pay` | Anyone (no login), local only. Completes checkout and creates the company admin. No session cookie. |
 | `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
 | `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
 | `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
@@ -33,4 +36,4 @@
 
 Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `admin` role.
 
-There is no people/team table this week, so same-company for manager / company_admin is `users.company_name`. Platform can read any row. Invite links and people list / role change are also keyed by `company_name` until companies tenancy (`company_id`) ships. Platform is not in a company and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.
+`companies` and `users.company_id` exist (issue 96). Same-company checks for manager / company_admin still use `users.company_name` until issue 97. Invite links and people list / role change are also keyed by `company_name` until then. Platform can read any row, is not in a company, and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.

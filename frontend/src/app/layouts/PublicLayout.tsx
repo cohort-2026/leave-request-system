@@ -3,7 +3,9 @@ import { paths } from '../../shared/constants/paths'
 
 export function PublicLayout() {
   const location = useLocation()
-  const isCompanySignup = location.pathname === paths.startCompany
+  const isCompanySignup =
+    location.pathname === paths.startCompany ||
+    location.pathname === paths.startCompanyPay
 
   return (
     <div

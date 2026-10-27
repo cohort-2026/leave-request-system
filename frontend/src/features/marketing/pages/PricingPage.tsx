@@ -12,8 +12,8 @@ export function PricingPage() {
         <p className="eyebrow">Pricing</p>
         <h1>Monthly plans in South African Rand</h1>
         <p>
-          Seat limits are the people in your company. Starter includes a 14-day
-          free trial.
+          Seat limits are the people in your company. The first month is due at
+          signup.
         </p>
       </section>
       <div className="marketing-plans">
@@ -24,17 +24,14 @@ export function PricingPage() {
               {plan.priceLabel} <span>/ month</span>
             </p>
             <p>Up to {plan.seatLimit} people</p>
-            {plan.trialDays ? (
-              <p className="marketing-plan-trial">
-                {plan.trialDays}-day free trial
-              </p>
-            ) : null}
             <Button
               variant="primary"
               type="button"
-              onClick={() => navigate(paths.startCompany)}
+              onClick={() =>
+                navigate(`${paths.startCompany}?plan=${plan.id}`)
+              }
             >
-              Start free trial
+              Get started
             </Button>
           </article>
         ))}

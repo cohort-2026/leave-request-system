@@ -12,7 +12,7 @@ export function LandingPage() {
         <h1>Leave requests for every company, in one product.</h1>
         <p>
           Staff book time off, managers approve it, and each company keeps its
-          own workspace. Start a 14-day Starter trial.
+          own workspace. Choose a plan and start your company.
         </p>
         <div className="actions">
           <Button
@@ -20,7 +20,7 @@ export function LandingPage() {
             type="button"
             onClick={() => navigate(paths.startCompany)}
           >
-            Start free trial
+            Start your company
           </Button>
           <Button
             variant="secondary"

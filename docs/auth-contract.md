@@ -32,9 +32,28 @@ Public user JSON (login, register, `/me`, `GET /api/users/:id`, people list, rol
 
 ### `POST /api/auth/register` — anyone
 
-Open staff signup is closed. This address always returns **400** and does **not** insert a user. Start a company at `/start-company` (`POST /api/companies/signup` when that API exists), use company SSO, or open an invite link (`POST /api/auth/onboard`).
+Open staff signup is closed. This address always returns **400** and does **not** insert a user. Start a company at `/start-company` (`POST /api/companies/signup`), use company SSO, or open an invite link (`POST /api/auth/onboard`).
 
 - 400 `{ "error": "Open registration is closed. Start a company at /start-company, use company SSO, or open an invite link from your admin." }`
+
+### `POST /api/companies/signup` — anyone
+
+Body: `{ "companyName", "email", "password", "displayName", "planCode" }`. Extra fields such as `role` are ignored. `planCode` is `starter` (default), `growth`, or `business`. This stores a **checkout** for one hour. It does **not** create a company or user and does **not** set a cookie. Complete it with `POST /api/companies/signup/mock-pay` (local) until a live payment sandbox is wired.
+
+- 201 `{ checkoutToken, email, companyName, plan, amountCents, vatCents, totalCents, currency, amountLabel, vatLabel, totalLabel, expiresAt }`
+- 400 missing / invalid email, empty display name, company name outside 2–80 characters, password shorter than 8 or longer than 1024, unknown plan
+- 409 email already used
+- 503 `{ "error": "Company signup is not available yet." }` if companies or billing SQL has not been applied
+
+### `POST /api/companies/signup/mock-pay` — anyone, local only
+
+Body: `{ "token" }` from the checkout. Creates the `companies` row (`status: "active"`), a `company_admin` with `status: "pending_verification"`, an `active` subscription for the chosen plan, and a paid ZAR invoice (ex-VAT + 15% VAT). Slug is derived from the company name. Does **not** set a cookie. Sends the verification email. Refused when `NODE_ENV === "production"`. Card numbers are not accepted.
+
+- 201 public user plus `{ company, subscription, invoice }`
+- 400 invalid, expired, or already completed checkout
+- 409 email already used
+- 500 if the verification email could not be sent (the company and user rows still exist; they can resend)
+- 503 production, or tables missing
 
 ### `POST /api/auth/onboard` — anyone
 

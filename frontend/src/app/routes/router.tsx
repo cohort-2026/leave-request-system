@@ -12,6 +12,7 @@ import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage
 import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage'
 import { RegisterPage } from '../../features/auth/pages/RegisterPage'
 import { StartCompanyPage } from '../../features/auth/pages/StartCompanyPage'
+import { StartCompanyPayPage } from '../../features/auth/pages/StartCompanyPayPage'
 import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPage'
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
 import { PendingApprovalPage } from '../../features/auth/pages/PendingApprovalPage'
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
           { path: paths.login, element: <LoginPage /> },
           { path: paths.register, element: <RegisterPage /> },
           { path: paths.startCompany, element: <StartCompanyPage /> },
+          { path: paths.startCompanyPay, element: <StartCompanyPayPage /> },
         ],
       },
       { path: paths.forgotPassword, element: <ForgotPasswordPage /> },

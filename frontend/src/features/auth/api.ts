@@ -104,12 +104,71 @@ export function onboard(
   })
 }
 
-export function signupCompany(
+export type SignupCheckout = {
+  checkoutToken: string
+  email: string
+  companyName: string
+  plan: {
+    code: string
+    name: string
+    seatLimit: number
+  }
+  amountCents: number
+  vatCents: number
+  totalCents: number
+  currency: string
+  amountLabel: string
+  vatLabel: string
+  totalLabel: string
+  expiresAt: string
+}
+
+const SIGNUP_CHECKOUT_KEY = 'lrs_signup_checkout'
+
+export function storeSignupCheckout(checkout: SignupCheckout) {
+  sessionStorage.setItem(SIGNUP_CHECKOUT_KEY, JSON.stringify(checkout))
+}
+
+export function readSignupCheckout(): SignupCheckout | null {
+  const raw = sessionStorage.getItem(SIGNUP_CHECKOUT_KEY)
+  if (!raw) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(raw) as SignupCheckout
+    if (!parsed.checkoutToken || !parsed.email) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export function clearSignupCheckout() {
+  sessionStorage.removeItem(SIGNUP_CHECKOUT_KEY)
+}
+
+export function startCompanyCheckout(
   companyName: string,
   displayName: string,
   email: string,
   password: string,
+  planCode: string,
 ) {
+  return apiRequest<SignupCheckout>('/api/companies/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      companyName,
+      displayName,
+      email,
+      password,
+      planCode,
+    }),
+  })
+}
+
+export function mockPayCompanySignup(token: string) {
   return apiRequest<{
     id: number
     email: string
@@ -117,10 +176,15 @@ export function signupCompany(
     role: Session['role']
     status: Session['status']
     companyName: string
-    company: { id: number; name: string; slug: string; trialEndsAt: string }
-  }>('/api/companies/signup', {
+    company: {
+      id: number
+      name: string
+      slug: string
+      trialEndsAt: string | null
+    }
+  }>('/api/companies/signup/mock-pay', {
     method: 'POST',
-    body: JSON.stringify({ companyName, displayName, email, password }),
+    body: JSON.stringify({ token }),
   })
 }
 
