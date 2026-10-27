@@ -12,6 +12,7 @@ const companyNav: NavItem[] = [
   { to: paths.leave, label: 'My leave', end: true },
   { to: paths.leaveNew, label: 'Book leave' },
   { to: paths.calendar, label: 'Calendar' },
+  { to: paths.profile, label: 'Profile' },
 ]
 
 const managerNav: NavItem[] = [
@@ -28,11 +29,13 @@ const adminNav: NavItem[] = [
   { to: paths.adminBlocks, label: 'Blocked dates' },
   { to: paths.adminRules, label: 'Company rules' },
   { to: paths.adminOnboarding, label: 'Invite link' },
+  { to: paths.adminSso, label: 'Company SSO' },
 ]
 
 const platformNav: NavItem[] = [
   { to: paths.platform, label: 'Companies', end: true },
   { to: paths.platformNewCompany, label: 'New company' },
+  { to: paths.profile, label: 'Profile' },
 ]
 
 function NavGroup({ items }: { items: NavItem[] }) {

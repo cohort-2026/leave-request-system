@@ -2,10 +2,16 @@ import type { Role } from '../types/session'
 
 export const paths = {
   login: '/login',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
   register: '/register',
+  startCompany: '/start-company',
+  pricing: '/pricing',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',
+  resetAuthenticator: '/reset-authenticator',
+  profile: '/profile',
   forbidden: '/forbidden',
   pendingApproval: '/pending-approval',
   home: '/',
@@ -25,6 +31,7 @@ export const paths = {
   adminCalendarSettings: '/admin/calendar-settings',
   adminBlocks: '/admin/blocks',
   adminOnboarding: '/admin/onboarding',
+  adminSso: '/admin/sso',
   platform: '/platform',
   platformNewCompany: '/platform/companies/new',
 } as const
