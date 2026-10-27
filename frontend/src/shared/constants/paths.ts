@@ -6,6 +6,7 @@ export const paths = {
   resetPassword: '/reset-password',
   register: '/register',
   startCompany: '/start-company',
+  pricing: '/pricing',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
   verify: '/verify',
@@ -30,6 +31,7 @@ export const paths = {
   adminCalendarSettings: '/admin/calendar-settings',
   adminBlocks: '/admin/blocks',
   adminOnboarding: '/admin/onboarding',
+  adminSso: '/admin/sso',
   platform: '/platform',
   platformNewCompany: '/platform/companies/new',
 } as const

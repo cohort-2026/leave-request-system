@@ -5,7 +5,12 @@
 | Address | Who may call it |
 | --- | --- |
 | `GET /api/health` | Anyone (no login) |
-| `POST /api/auth/register` | Anyone (no login) |
+| `POST /api/auth/register` | Anyone (no login). Always **400**; open staff signup is closed. |
+| `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
+| `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
+| `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
+| `POST /api/companies/current/onboarding-link` | `company_admin` of a company. Creates or rotates the hashed invite URL. |
+| `POST /api/companies/current/onboarding-link/disable` | `company_admin` of a company. |
 | `POST /api/auth/login` | Anyone (no login). Unverified accounts get **403** and no cookie. |
 | `POST /api/auth/verify-email` | Anyone (no login). Token from the emailed link. |
 | `POST /api/auth/resend-verification` | Anyone (no login). Same success whether the email exists or not. |
@@ -24,7 +29,8 @@
 | `GET /api/ping/signed-in` | Any signed-in role (`requireAuth`) |
 | `GET /api/ping/admin` | `company_admin` or `platform` (`requireAuth` + `requireRole`) |
 | `GET /api/users/:id` | Owner of that row, or `manager` / `company_admin` in the same company, or `platform`. Staff may not read another id. Failed checks are **403**. Missing rows are **404**. `password_hash` is never returned. |
+| `PATCH /api/users/:id/role` | `company_admin` of a company. Same-company target only. Cannot change own role, assign `platform`, change a `platform` user, or demote the last `company_admin`. |
 
 Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `admin` role.
 
-There is no people/team table this week, so same-company for manager / company_admin is `users.company_name`. Platform can read any row.
+There is no people/team table this week, so same-company for manager / company_admin is `users.company_name`. Platform can read any row. Invite links and people list / role change are also keyed by `company_name` until companies tenancy (`company_id`) ships. Platform is not in a company and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.

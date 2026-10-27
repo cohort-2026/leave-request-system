@@ -1,5 +1,6 @@
 import { emailLayout } from "./layout.js";
 import type { MailContent } from "../types.js";
+import { emailLayout } from "./email-layout.js";
 
 export function verifyEmail(input: { verifyUrl: string }): MailContent {
   return emailLayout({

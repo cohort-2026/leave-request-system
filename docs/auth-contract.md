@@ -13,7 +13,7 @@ Cookie name: `lrs_session`. httpOnly, Path `/`, SameSite `lax`, 7 days. Secure f
 
 A second cookie, `lrs_mfa`, is set after a correct password and consumed on TOTP success. httpOnly, Path `/`, SameSite `lax`, 10 minutes. It is not a session.
 
-Public user JSON (login, register, `/me`, `GET /api/users/:id`):
+Public user JSON (login, register, `/me`, `GET /api/users/:id`, people list, role PATCH):
 
 ```json
 {
@@ -32,12 +32,64 @@ Public user JSON (login, register, `/me`, `GET /api/users/:id`):
 
 ### `POST /api/auth/register` — anyone
 
-Body: `{ "email", "password" }`. Extra fields such as `role` are ignored. New users are always `staff` with `status: "pending_verification"`. Does **not** set a cookie. Sends a verification email (Mailpit in local dev).
+Open staff signup is closed. This address always returns **400** and does **not** insert a user. Start a company at `/start-company` (`POST /api/companies/signup` when that API exists), use company SSO, or open an invite link (`POST /api/auth/onboard`).
 
-- 201 public user (`pending_verification`)
-- 400 missing / invalid email, empty, shorter than 8, or longer than 1024
+- 400 `{ "error": "Open registration is closed. Start a company at /start-company, use company SSO, or open an invite link from your admin." }`
+
+### `POST /api/auth/onboard` — anyone
+
+Body: `{ "token", "email", "password", "displayName" }`. Extra fields such as `role` and `companyName` are ignored. The token must match one **active** company invite. New users are always `staff` in **that** company, `status: "pending_verification"`. Password rules match the old register (8–1024). Does **not** set a cookie. Sends the existing verification email (Mailpit in local dev). Then they sign in and enroll TOTP as today.
+
+- 201 public user (`pending_verification`, `companyName` from the invite)
+- 400 missing / invalid email, empty display name, password shorter than 8 or longer than 1024
+- 400 `{ "error": "This invite link is invalid or has been disabled." }` (unknown or disabled token)
 - 409 email already used
 - 500 if the verification email could not be sent (the user row still exists; they can resend)
+- 503 `{ "error": "Invite links are not available yet." }` if `onboarding_links` has not been applied
+
+### `GET /api/companies/current/onboarding-link` — `company_admin`
+
+Whether this company has an active invite link. Does **not** return the raw token (that value is only in the URL, and only when the link is created or rotated).
+
+- 200 `{ "active": true, "createdAt": "..." }` or `{ "active": false, "createdAt": null }`
+- 401 `{ "error": "Not signed in" }`
+- 403 staff, manager, platform, or a company admin with no company
+- 503 `{ "error": "Invite links are not available yet." }` if `onboarding_links` has not been applied
+
+### `POST /api/companies/current/onboarding-link` — `company_admin`
+
+Create or rotate this company's invite link. Disables any active link, stores a SHA-256 hash, and returns the public URL **once**. One active link per company.
+
+- 201 `{ "active": true, "url": "http://localhost:5173/onboard/...", "createdAt": "..." }`
+- 401 / 403 / 503 as for GET
+
+### `POST /api/companies/current/onboarding-link/disable` — `company_admin`
+
+Disables the active invite for this company. Idempotent if none is active. Existing tokens then fail onboard with 400.
+
+- 200 `{ "ok": true, "active": false }`
+- 401 / 403 / 503 as for GET
+
+### `GET /api/companies/current/users` — `company_admin`
+
+Public user JSON for every person in **this** company (`users.company_name` until `company_id` ships). Ordered by id. Includes the caller. Does **not** include other companies or `platform` users.
+
+- 200 `{ "users": [ public user, ... ] }`
+- 401 `{ "error": "Not signed in" }`
+- 403 staff, manager, platform, or a company admin with no company
+
+### `PATCH /api/users/:id/role` — `company_admin`
+
+Body: `{ "role" }` where `role` is `staff` | `manager` | `company_admin`. Extra fields (`email`, `status`, `companyName`, `password`, …) are ignored. Updates **only** `users.role`. Does **not** change password, TOTP, recovery codes, verification status, or company. Does **not** set or clear cookies. The existing `lrs_session` stays valid; later `requireAuth` loads the new role from the database.
+
+- 200 public user (new role)
+- 400 `{ "error": "Unknown role" }` (missing, `platform`, or any other value)
+- 400 `{ "error": "Invalid user id" }`
+- 401 `{ "error": "Not signed in" }`
+- 403 `{ "error": "You cannot change your own role" }`
+- 403 `{ "error": "Cannot demote the last company admin" }`
+- 403 staff, manager, platform, other company, or a `platform` target
+- 404 `{ "error": "Not found" }`
 
 ### `POST /api/auth/login` — anyone
 
