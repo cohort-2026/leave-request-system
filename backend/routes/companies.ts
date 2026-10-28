@@ -38,6 +38,53 @@ const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type CompanyUserRow = Pick<
+  UserRow,
+  "id" | "email" | "role" | "display_name" | "status" | "company_name"
+> & {
+  department_id: number | null;
+  department_name: string | null;
+};
+
+type DepartmentRow = {
+  id: number;
+  name: string;
+  manager_id: number | null;
+  manager_name: string | null;
+};
+
+function toPublicCompanyUser(row: CompanyUserRow) {
+  return {
+    ...toPublicUser(row),
+    departmentId: row.department_id,
+    departmentName: row.department_name,
+  };
+}
+
+function toPublicDepartment(row: DepartmentRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    managerId: row.manager_id,
+    managerName: row.manager_name,
+  };
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isDepartmentNameConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505" &&
+    "constraint" in error &&
+    error.constraint === "departments_company_name_unique_idx"
+  );
+}
+
 function companyNameOf(
   req: { user?: { company_name: string | null } },
   res: { status: (code: number) => { json: (body: unknown) => void } },
@@ -68,6 +115,148 @@ function asNonEmptyString(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
+
+companiesRouter.get(
+  "/current/departments",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyName = companyNameOf(req, res);
+    if (!companyName) {
+      return;
+    }
+
+    const result = await pool.query<DepartmentRow>(
+      `SELECT departments.id, departments.name, departments.manager_id,
+              COALESCE(users.display_name, users.email) AS manager_name
+       FROM departments
+       LEFT JOIN users
+         ON users.id = departments.manager_id
+        AND users.company_name = departments.company_name
+       WHERE departments.company_name = $1
+       ORDER BY LOWER(departments.name), departments.id`,
+      [companyName],
+    );
+
+    res.json({ departments: result.rows.map(toPublicDepartment) });
+  },
+);
+
+companiesRouter.post(
+  "/current/departments",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyName = companyNameOf(req, res);
+    if (!companyName) {
+      return;
+    }
+
+    const name = asNonEmptyString(req.body?.name);
+    if (!name) {
+      res.status(400).json({ error: "Department name required" });
+      return;
+    }
+    if (name.length > 80) {
+      res.status(400).json({
+        error: "Department name must be 80 characters or fewer",
+      });
+      return;
+    }
+
+    try {
+      const result = await pool.query<DepartmentRow>(
+        `INSERT INTO departments (company_name, name)
+         VALUES ($1, $2)
+         RETURNING id, name, manager_id, NULL::text AS manager_name`,
+        [companyName, name],
+      );
+      res.status(201).json(toPublicDepartment(result.rows[0]));
+    } catch (error: unknown) {
+      if (isDepartmentNameConflict(error)) {
+        res.status(409).json({
+          error: "A department with this name already exists",
+        });
+        return;
+      }
+      throw error;
+    }
+  },
+);
+
+companiesRouter.patch(
+  "/current/departments/:id/manager",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyName = companyNameOf(req, res);
+    if (!companyName) {
+      return;
+    }
+
+    const departmentId = Number(req.params.id);
+    if (!isPositiveInteger(departmentId)) {
+      res.status(400).json({ error: "Invalid department id" });
+      return;
+    }
+
+    const managerIdValue = req.body?.managerId;
+    if (managerIdValue !== null && !isPositiveInteger(managerIdValue)) {
+      res.status(400).json({ error: "Invalid manager id" });
+      return;
+    }
+    const managerId: number | null = managerIdValue;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      if (managerId !== null) {
+        const manager = await client.query(
+          `SELECT id
+           FROM users
+           WHERE id = $1 AND company_name = $2 AND role = 'manager'
+           FOR UPDATE`,
+          [managerId, companyName],
+        );
+        if (manager.rowCount === 0) {
+          await client.query("ROLLBACK");
+          res.status(400).json({
+            error: "Manager must have the manager role in your company",
+          });
+          return;
+        }
+      }
+
+      const updated = await client.query<DepartmentRow>(
+        `UPDATE departments
+         SET manager_id = $1
+         WHERE id = $2 AND company_name = $3
+         RETURNING id, name, manager_id,
+           (
+             SELECT COALESCE(users.display_name, users.email)
+             FROM users
+             WHERE users.id = departments.manager_id
+               AND users.company_name = departments.company_name
+           ) AS manager_name`,
+        [managerId, departmentId, companyName],
+      );
+      if (updated.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Department not found" });
+        return;
+      }
+
+      await client.query("COMMIT");
+      res.json(toPublicDepartment(updated.rows[0]));
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+);
 
 companiesRouter.post("/signup", async (req, res) => {
   const companyName = asNonEmptyString(req.body?.companyName);
@@ -223,20 +412,20 @@ companiesRouter.get(
       return;
     }
 
-    const result = await pool.query<
-      Pick<
-        UserRow,
-        "id" | "email" | "role" | "display_name" | "status" | "company_name"
-      >
-    >(
-      `SELECT id, email, role, display_name, status, company_name
+    const result = await pool.query<CompanyUserRow>(
+      `SELECT users.id, users.email, users.role, users.display_name, users.status,
+              users.company_name, users.department_id,
+              departments.name AS department_name
        FROM users
-       WHERE company_name = $1
-       ORDER BY id`,
+       LEFT JOIN departments
+         ON departments.id = users.department_id
+        AND departments.company_name = users.company_name
+       WHERE users.company_name = $1
+       ORDER BY users.id`,
       [companyName],
     );
 
-    res.json({ users: result.rows.map(toPublicUser) });
+    res.json({ users: result.rows.map(toPublicCompanyUser) });
   },
 );
 

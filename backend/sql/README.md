@@ -12,6 +12,7 @@ psql "$DATABASE_URL" -f sql/006_totp_reset.sql
 psql "$DATABASE_URL" -f sql/007_companies.sql
 psql "$DATABASE_URL" -f sql/008_onboarding_links.sql
 psql "$DATABASE_URL" -f sql/009_billing.sql
+psql "$DATABASE_URL" -f sql/010_departments.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -27,6 +28,8 @@ psql "$DATABASE_URL" -f sql/009_billing.sql
 `008_onboarding_links.sql` adds hashed company invite tokens (issues 101 and 102). One active link per company (`disabled_at IS NULL`). The raw token is never stored. Until issue 97, the table keys off `users.company_name`.
 
 `009_billing.sql` adds ZAR `plans`, `subscriptions`, `invoices`, and `signup_checkouts`. Signup stores a checkout first; mock-pay creates the company, an `active` subscription, and a paid invoice. Demo companies are backfilled onto Starter `active`.
+
+`010_departments.sql` adds company-scoped departments, optional department managers, and a nullable department assignment on users.
 
 ## Demo password
 
