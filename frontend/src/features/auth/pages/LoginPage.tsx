@@ -133,17 +133,10 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      const result = await confirmTotpEnroll(email, code)
-      setRecoveryCodes(result.recoveryCodes)
-      setPendingSession({
-        id: result.id,
-        email: result.email,
-        displayName: result.displayName,
-        role: result.role,
-        status: result.status,
-        companyId: result.companyId,
-        companyName: result.companyName,
-      })
+      const { recoveryCodes: codes, ...nextSession } =
+        await confirmTotpEnroll(email, code)
+      setRecoveryCodes(codes)
+      setPendingSession(nextSession)
       setStep('recoveryCodes')
     } catch (error) {
       if (error instanceof ApiError) {
