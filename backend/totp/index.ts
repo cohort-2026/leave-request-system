@@ -136,7 +136,7 @@ async function matchingUser(
   email: string,
 ): Promise<UserRow | null> {
   const result = await pool.query<UserRow>(
-    `SELECT id, email, password_hash, role, display_name, status, company_name
+    `SELECT id, email, password_hash, role, display_name, status, company_name, company_id
      FROM users
      WHERE id = $1
      LIMIT 1`,
