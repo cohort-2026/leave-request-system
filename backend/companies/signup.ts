@@ -292,7 +292,7 @@ export async function completePaidSignup(
          email, password_hash, role, status, display_name, company_name, company_id
        )
        VALUES ($1, $2, 'company_admin', 'pending_verification', $3, $4, $5)
-       RETURNING id, email, role, display_name, status, company_name`,
+       RETURNING id, email, role, display_name, status, company_name, company_id`,
       [
         checkout.email,
         checkout.password_hash,

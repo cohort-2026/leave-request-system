@@ -12,6 +12,12 @@ type ServerUser = {
   companyName?: string | null
 }
 
+function companyIdFrom(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null
+}
+
 export type TotpEnrollmentChallenge = {
   totpEnrollmentRequired: true
   otpauthUrl: string
@@ -35,7 +41,7 @@ function mapSession(user: ServerUser): Session {
     displayName: user.displayName ?? user.name ?? user.email ?? '',
     role: user.role,
     status: user.status ?? 'active',
-    companyId: user.companyId ?? null,
+    companyId: companyIdFrom(user.companyId),
     companyName: user.companyName ?? null,
   }
 }

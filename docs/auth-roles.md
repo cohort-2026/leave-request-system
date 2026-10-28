@@ -10,6 +10,7 @@
 | `POST /api/companies/signup` | Anyone (no login). Creates a payment checkout, not a company. |
 | `POST /api/companies/signup/mock-pay` | Anyone (no login), local only. Completes checkout and creates the company admin. No session cookie. |
 | `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
+| `GET /api/companies/current` | Any signed-in company user (`requireAuth` plus a `company_id`). Platform **403**. |
 | `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
 | `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
 | `POST /api/companies/current/onboarding-link` | `company_admin` of a company. Creates or rotates the hashed invite URL. |
@@ -36,4 +37,4 @@
 
 Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `admin` role.
 
-`companies` and `users.company_id` exist (issue 96). Same-company checks for manager / company_admin still use `users.company_name` until issue 97. Invite links and people list / role change are also keyed by `company_name` until then. Platform can read any row, is not in a company, and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.
+`companies` and `users.company_id` exist. Same-company checks for manager / company_admin use `users.company_id`. Invite links, people list, and role change are keyed by `company_id`. `users.company_name` stays as a display copy of `companies.name` and is not used for authorization. Platform can read any row, is not in a company, and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.

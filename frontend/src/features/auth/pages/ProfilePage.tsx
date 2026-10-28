@@ -156,19 +156,12 @@ export function ProfilePage() {
     setTotpMessage('')
     setTotpBusy(true)
     try {
-      const result = await confirmSignedInTotpEnroll(totpCode)
-      signIn({
-        id: result.id,
-        email: result.email,
-        displayName: result.displayName,
-        role: result.role,
-        status: result.status,
-        companyId: result.companyId,
-        companyName: result.companyName,
-      })
+      const { recoveryCodes: codes, ...nextSession } =
+        await confirmSignedInTotpEnroll(totpCode)
+      signIn(nextSession)
       setEnrollment(null)
       setTotpCode('')
-      setRecoveryCodes(result.recoveryCodes)
+      setRecoveryCodes(codes)
     } catch (error) {
       setTotpError(
         error instanceof ApiError
@@ -211,6 +204,7 @@ export function ProfilePage() {
           name="company"
           value={session.companyName ?? 'None'}
           readOnly
+          data-company-id={session.companyId ?? ''}
         />
         <TextField
           label="Status"

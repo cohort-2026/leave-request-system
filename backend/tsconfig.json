@@ -18,6 +18,7 @@
     "load-env.ts",
     "db.ts",
     "session.ts",
+    "tenancy.ts",
     "mail/**/*.ts",
     "totp/**/*.ts",
     "verification/**/*.ts",

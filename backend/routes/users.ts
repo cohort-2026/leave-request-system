@@ -6,10 +6,10 @@ import {
   type AuthedUser,
 } from "../middleware/auth.js";
 import { toPublicUser, type UserRow } from "../session.js";
+import { requireCompanyId, sameCompanyId } from "../tenancy.js";
 
 export const usersRouter = Router();
 
-const NOT_IN_COMPANY = "You are not in a company";
 const NOT_ALLOWED = "You are not allowed to do that";
 const UNKNOWN_ROLE = "Unknown role";
 const SELF_ROLE = "You cannot change your own role";
@@ -20,23 +20,14 @@ type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 type PublicUserRow = Pick<
   UserRow,
-  "id" | "email" | "role" | "display_name" | "status" | "company_name"
-> & {
-  department_id: number | null;
-  department_name: string | null;
-};
-
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
-}
-
-function toPublicCompanyUser(row: PublicUserRow) {
-  return {
-    ...toPublicUser(row),
-    departmentId: row.department_id,
-    departmentName: row.department_name,
-  };
-}
+  | "id"
+  | "email"
+  | "role"
+  | "display_name"
+  | "status"
+  | "company_name"
+  | "company_id"
+>;
 
 function isAssignableRole(value: unknown): value is AssignableRole {
   return (
@@ -47,7 +38,7 @@ function isAssignableRole(value: unknown): value is AssignableRole {
 
 function canReadUser(
   actor: AuthedUser,
-  row: Pick<UserRow, "id" | "role" | "company_name">,
+  row: Pick<UserRow, "id" | "role" | "company_id">,
 ): boolean {
   if (actor.id === row.id) {
     return true;
@@ -60,9 +51,7 @@ function canReadUser(
   }
   if (
     (actor.role === "manager" || actor.role === "company_admin") &&
-    actor.company_name &&
-    row.company_name &&
-    actor.company_name === row.company_name
+    sameCompanyId(actor.company_id, row.company_id)
   ) {
     return true;
   }
@@ -77,9 +66,7 @@ usersRouter.get("/:id", requireAuth, async (req, res) => {
   }
 
   const result = await pool.query<PublicUserRow>(
-    `SELECT users.id, users.email, users.role, users.display_name, users.status,
-            users.company_name, users.department_id,
-            departments.name AS department_name
+    `SELECT id, email, role, display_name, status, company_name, company_id
      FROM users
      LEFT JOIN departments
        ON departments.id = users.department_id
@@ -109,9 +96,8 @@ usersRouter.patch(
   requireRole("company_admin"),
   async (req, res) => {
     const actor = req.user!;
-    const actorCompany = actor.company_name?.trim() ?? "";
-    if (!actorCompany) {
-      res.status(403).json({ error: NOT_IN_COMPANY });
+    const actorCompanyId = requireCompanyId(actor, res);
+    if (actorCompanyId === null) {
       return;
     }
 
@@ -129,7 +115,7 @@ usersRouter.patch(
 
     const result = await changeCompanyUserRole({
       actorId: actor.id,
-      actorCompany,
+      actorCompanyId,
       targetId: id,
       nextRole,
     });
@@ -228,7 +214,7 @@ type ChangeRoleResult =
 
 async function changeCompanyUserRole(input: {
   actorId: number;
-  actorCompany: string;
+  actorCompanyId: number;
   targetId: number;
   nextRole: AssignableRole;
 }): Promise<ChangeRoleResult> {
@@ -242,16 +228,14 @@ async function changeCompanyUserRole(input: {
     await client.query(
       `SELECT id
        FROM users
-       WHERE company_name = $1 AND role = 'company_admin'
+       WHERE company_id = $1 AND role = 'company_admin'
        ORDER BY id
        FOR UPDATE`,
-      [input.actorCompany],
+      [input.actorCompanyId],
     );
 
     const found = await client.query<PublicUserRow>(
-      `SELECT users.id, users.email, users.role, users.display_name, users.status,
-              users.company_name, users.department_id,
-              departments.name AS department_name
+      `SELECT id, email, role, display_name, status, company_name, company_id
        FROM users
        LEFT JOIN departments
          ON departments.id = users.department_id
@@ -278,10 +262,7 @@ async function changeCompanyUserRole(input: {
       return { ok: false, status: 403, error: NOT_ALLOWED };
     }
 
-    if (
-      !target.company_name ||
-      target.company_name !== input.actorCompany
-    ) {
+    if (!sameCompanyId(target.company_id, input.actorCompanyId)) {
       await client.query("ROLLBACK");
       return { ok: false, status: 403, error: NOT_ALLOWED };
     }
@@ -293,8 +274,8 @@ async function changeCompanyUserRole(input: {
       const admins = await client.query<{ count: string }>(
         `SELECT COUNT(*)::text AS count
          FROM users
-         WHERE company_name = $1 AND role = 'company_admin'`,
-        [input.actorCompany],
+         WHERE company_id = $1 AND role = 'company_admin'`,
+        [input.actorCompanyId],
       );
       if (Number(admins.rows[0]?.count) <= 1) {
         await client.query("ROLLBACK");
@@ -310,7 +291,8 @@ async function changeCompanyUserRole(input: {
     await client.query(
       `UPDATE users
        SET role = $1
-       WHERE id = $2`,
+       WHERE id = $2
+       RETURNING id, email, role, display_name, status, company_name, company_id`,
       [input.nextRole, input.targetId],
     );
     if (target.role === "manager" && input.nextRole !== "manager") {

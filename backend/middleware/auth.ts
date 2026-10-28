@@ -16,6 +16,7 @@ export type AuthedUser = {
   display_name: string | null;
   status: string;
   company_name: string | null;
+  company_id: number | null;
 };
 
 declare global {
@@ -40,10 +41,16 @@ export async function requireAuth(
   const result = await pool.query<
     Pick<
       UserRow,
-      "id" | "email" | "role" | "display_name" | "status" | "company_name"
+      | "id"
+      | "email"
+      | "role"
+      | "display_name"
+      | "status"
+      | "company_name"
+      | "company_id"
     >
   >(
-    `SELECT id, email, role, display_name, status, company_name
+    `SELECT id, email, role, display_name, status, company_name, company_id
      FROM users
      WHERE id = $1
      LIMIT 1`,
@@ -63,6 +70,7 @@ export async function requireAuth(
     display_name: user.display_name,
     status: user.status,
     company_name: user.company_name,
+    company_id: user.company_id,
   };
 
   next();

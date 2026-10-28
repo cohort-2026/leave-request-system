@@ -12,7 +12,7 @@ psql "$DATABASE_URL" -f sql/006_totp_reset.sql
 psql "$DATABASE_URL" -f sql/007_companies.sql
 psql "$DATABASE_URL" -f sql/008_onboarding_links.sql
 psql "$DATABASE_URL" -f sql/009_billing.sql
-psql "$DATABASE_URL" -f sql/010_departments.sql
+psql "$DATABASE_URL" -f sql/010_company_id_tenancy.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -23,13 +23,13 @@ psql "$DATABASE_URL" -f sql/010_departments.sql
 
 `006_totp_reset.sql` adds hashed authenticator-reset tokens. The signed-in profile emails a one-hour link. TOTP is not removed until the link is consumed.
 
-`007_companies.sql` adds the `companies` table and `users.company_id` (issue 96). It backfills Acme, keeps `company_name` as a display copy, and seeds Khumalo Retail (`admin.khumalo@leave.local`). Authorization still uses `company_name` until issue 97.
+`007_companies.sql` adds the `companies` table and `users.company_id` (issue 96). It backfills Acme, keeps `company_name` as a display copy, and seeds Khumalo Retail (`admin.khumalo@leave.local`). Authorization uses `company_id` (issue 140).
 
-`008_onboarding_links.sql` adds hashed company invite tokens (issues 101 and 102). One active link per company (`disabled_at IS NULL`). The raw token is never stored. Until issue 97, the table keys off `users.company_name`.
+`008_onboarding_links.sql` adds hashed company invite tokens (issues 101 and 102). One active link per company (`disabled_at IS NULL`). The raw token is never stored. 008 keys the table off `company_name`; `010` moves that key to `company_id`.
 
 `009_billing.sql` adds ZAR `plans`, `subscriptions`, `invoices`, and `signup_checkouts`. Signup stores a checkout first; mock-pay creates the company, an `active` subscription, and a paid invoice. Demo companies are backfilled onto Starter `active`.
 
-`010_departments.sql` adds company-scoped departments, optional department managers, and a nullable department assignment on users.
+`010_company_id_tenancy.sql` (issue 139) adds `onboarding_links.company_id` as a foreign key to `companies`, backfills existing invite rows from `users.company_name` / `companies.name`, keeps at most one active link per `company_id`, and drops `onboarding_links.company_name`. It does not drop `users.company_name`.
 
 ## Demo password
 
