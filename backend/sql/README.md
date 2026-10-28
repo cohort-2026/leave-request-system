@@ -23,7 +23,7 @@ psql "$DATABASE_URL" -f sql/010_company_id_tenancy.sql
 
 `006_totp_reset.sql` adds hashed authenticator-reset tokens. The signed-in profile emails a one-hour link. TOTP is not removed until the link is consumed.
 
-`007_companies.sql` adds the `companies` table and `users.company_id` (issue 96). It backfills Acme, keeps `company_name` as a display copy, and seeds Khumalo Retail (`admin.khumalo@leave.local`). Authorization still uses `company_name` until issue 97.
+`007_companies.sql` adds the `companies` table and `users.company_id` (issue 96). It backfills Acme, keeps `company_name` as a display copy, and seeds Khumalo Retail (`admin.khumalo@leave.local`). Authorization uses `company_id` (issue 140).
 
 `008_onboarding_links.sql` adds hashed company invite tokens (issues 101 and 102). One active link per company (`disabled_at IS NULL`). The raw token is never stored. 008 keys the table off `company_name`; `010` moves that key to `company_id`.
 

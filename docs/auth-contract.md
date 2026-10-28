@@ -22,9 +22,12 @@ Public user JSON (login, register, `/me`, `GET /api/users/:id`, people list, rol
   "role": "staff",
   "displayName": "Staff",
   "status": "active",
+  "companyId": 1,
   "companyName": "Acme"
 }
 ```
+
+`companyId` is the `companies.id` for that user, or `null` for platform. `companyName` is the display copy of `companies.name`. Same-company authorization uses `companyId`, not the name string.
 
 `password_hash` is never returned.
 
@@ -59,7 +62,7 @@ Body: `{ "token" }` from the checkout. Creates the `companies` row (`status: "ac
 
 Body: `{ "token", "email", "password", "displayName" }`. Extra fields such as `role` and `companyName` are ignored. The token must match one **active** company invite. New users are always `staff` in **that** company, `status: "pending_verification"`. Password rules match the old register (8–1024). Does **not** set a cookie. Sends the existing verification email (Mailpit in local dev). Then they sign in and enroll TOTP as today.
 
-- 201 public user (`pending_verification`, `companyName` from the invite)
+- 201 public user (`pending_verification`, `companyId` and `companyName` from the invite)
 - 400 missing / invalid email, empty display name, password shorter than 8 or longer than 1024
 - 400 `{ "error": "This invite link is invalid or has been disabled." }` (unknown or disabled token)
 - 409 email already used
@@ -89,9 +92,17 @@ Disables the active invite for this company. Idempotent if none is active. Exist
 - 200 `{ "ok": true, "active": false }`
 - 401 / 403 / 503 as for GET
 
+### `GET /api/companies/current` — signed-in company user
+
+The caller's company. Staff, manager, and `company_admin` with a `company_id`. Platform and anyone without a company get **403**.
+
+- 200 `{ "id", "name", "slug", "status", "trialEndsAt" }` (`trialEndsAt` may be `null`)
+- 401 `{ "error": "Not signed in" }`
+- 403 `{ "error": "You are not in a company" }` (platform, or no `company_id`)
+
 ### `GET /api/companies/current/users` — `company_admin`
 
-Public user JSON for every person in **this** company (`users.company_name` until `company_id` ships). Ordered by id. Includes the caller. Does **not** include other companies or `platform` users.
+Public user JSON for every person in **this** company (`users.company_id`). Ordered by id. Includes the caller. Does **not** include other companies or `platform` users.
 
 - 200 `{ "users": [ public user, ... ] }`
 - 401 `{ "error": "Not signed in" }`

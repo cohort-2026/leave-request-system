@@ -16,6 +16,7 @@ import {
   rotateOnboardingLink,
 } from "../onboarding/index.js";
 import { toPublicUser, type UserRow } from "../session.js";
+import { NOT_IN_COMPANY, requireCompanyId } from "../tenancy.js";
 import {
   issueVerificationToken,
   sendVerificationEmail,
@@ -23,7 +24,6 @@ import {
 
 export const companiesRouter = Router();
 
-const NOT_IN_COMPANY = "You are not in a company";
 const INVITES_UNAVAILABLE = "Invite links are not available yet.";
 const SIGNUP_UNAVAILABLE = "Company signup is not available yet.";
 const MOCK_PAY_DISABLED =
@@ -37,18 +37,6 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function companyNameOf(
-  req: { user?: { company_name: string | null } },
-  res: { status: (code: number) => { json: (body: unknown) => void } },
-): string | null {
-  const name = req.user?.company_name?.trim();
-  if (!name) {
-    res.status(403).json({ error: NOT_IN_COMPANY });
-    return null;
-  }
-  return name;
-}
 
 function sendInviteUnavailable(
   err: unknown,
@@ -213,27 +201,67 @@ companiesRouter.post("/signup/mock-pay", async (req, res) => {
   }
 });
 
+companiesRouter.get("/current", requireAuth, async (req, res) => {
+  const companyId = requireCompanyId(req.user, res);
+  if (companyId === null) {
+    return;
+  }
+
+  const result = await pool.query<{
+    id: number;
+    name: string;
+    slug: string;
+    status: string;
+    trial_ends_at: Date | null;
+  }>(
+    `SELECT id, name, slug, status, trial_ends_at
+     FROM companies
+     WHERE id = $1
+     LIMIT 1`,
+    [companyId],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    res.status(403).json({ error: NOT_IN_COMPANY });
+    return;
+  }
+
+  res.json({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    status: row.status,
+    trialEndsAt: row.trial_ends_at ? row.trial_ends_at.toISOString() : null,
+  });
+});
+
 companiesRouter.get(
   "/current/users",
   requireAuth,
   requireRole("company_admin"),
   async (req, res) => {
-    const companyName = companyNameOf(req, res);
-    if (!companyName) {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
       return;
     }
 
     const result = await pool.query<
       Pick<
         UserRow,
-        "id" | "email" | "role" | "display_name" | "status" | "company_name"
+        | "id"
+        | "email"
+        | "role"
+        | "display_name"
+        | "status"
+        | "company_name"
+        | "company_id"
       >
     >(
-      `SELECT id, email, role, display_name, status, company_name
+      `SELECT id, email, role, display_name, status, company_name, company_id
        FROM users
-       WHERE company_name = $1
+       WHERE company_id = $1
        ORDER BY id`,
-      [companyName],
+      [companyId],
     );
 
     res.json({ users: result.rows.map(toPublicUser) });
@@ -245,13 +273,13 @@ companiesRouter.get(
   requireAuth,
   requireRole("company_admin"),
   async (req, res) => {
-    const companyName = companyNameOf(req, res);
-    if (!companyName) {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
       return;
     }
 
     try {
-      const link = await getActiveOnboardingLink(companyName);
+      const link = await getActiveOnboardingLink(companyId);
       res.json(link);
     } catch (err) {
       if (sendInviteUnavailable(err, res)) {
@@ -267,13 +295,13 @@ companiesRouter.post(
   requireAuth,
   requireRole("company_admin"),
   async (req, res) => {
-    const companyName = companyNameOf(req, res);
-    if (!companyName) {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
       return;
     }
 
     try {
-      const created = await rotateOnboardingLink(companyName, req.user!.id);
+      const created = await rotateOnboardingLink(companyId, req.user!.id);
       res.status(201).json({
         active: true,
         url: created.url,
@@ -293,13 +321,13 @@ companiesRouter.post(
   requireAuth,
   requireRole("company_admin"),
   async (req, res) => {
-    const companyName = companyNameOf(req, res);
-    if (!companyName) {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
       return;
     }
 
     try {
-      await disableOnboardingLink(companyName);
+      await disableOnboardingLink(companyId);
       res.json({ ok: true, active: false });
     } catch (err) {
       if (sendInviteUnavailable(err, res)) {
