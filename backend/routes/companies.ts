@@ -8,6 +8,7 @@ import {
   mockPayAllowed,
 } from "../companies/signup.js";
 import { pool } from "../db.js";
+import type { WorkingDayFlags } from "../leave/workingDays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   disableOnboardingLink,
@@ -36,7 +37,94 @@ const MIN_COMPANY_NAME_LEN = 2;
 const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
+const MAX_HOLIDAY_NAME_LEN = 120;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const WORKING_DAY_FIELDS = [
+  "mondayIsWorking",
+  "tuesdayIsWorking",
+  "wednesdayIsWorking",
+  "thursdayIsWorking",
+  "fridayIsWorking",
+  "saturdayIsWorking",
+  "sundayIsWorking",
+] as const;
+
+type WorkingDaySettings = WorkingDayFlags;
+
+type CalendarSettingsRow = WorkingDaySettings;
+
+type HolidayRow = {
+  id: number;
+  date: string;
+  name: string;
+};
+
+function isWorkingDaySettings(value: unknown): value is WorkingDaySettings {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const settings = value as Record<string, unknown>;
+  return WORKING_DAY_FIELDS.every(
+    (field) => typeof settings[field] === "boolean",
+  );
+}
+
+function isCalendarDate(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    Number(value.slice(0, 4)) === 0
+  ) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    err.code === "23505"
+  );
+}
+
+async function readCompanyCalendar(
+  companyId: number,
+): Promise<(CalendarSettingsRow & { holidays: HolidayRow[] }) | null> {
+  const settingsResult = await pool.query<CalendarSettingsRow>(
+    `SELECT
+       monday_is_working AS "mondayIsWorking",
+       tuesday_is_working AS "tuesdayIsWorking",
+       wednesday_is_working AS "wednesdayIsWorking",
+       thursday_is_working AS "thursdayIsWorking",
+       friday_is_working AS "fridayIsWorking",
+       saturday_is_working AS "saturdayIsWorking",
+       sunday_is_working AS "sundayIsWorking"
+     FROM companies
+     WHERE id = $1
+     LIMIT 1`,
+    [companyId],
+  );
+  const settings = settingsResult.rows[0];
+  if (!settings) {
+    return null;
+  }
+
+  const holidaysResult = await pool.query<HolidayRow>(
+    `SELECT id, holiday_date::TEXT AS date, name
+     FROM public_holidays
+     WHERE company_id = $1
+     ORDER BY holiday_date, id`,
+    [companyId],
+  );
+  return { ...settings, holidays: holidaysResult.rows };
+}
 
 function sendInviteUnavailable(
   err: unknown,
@@ -234,6 +322,164 @@ companiesRouter.get("/current", requireAuth, async (req, res) => {
     trialEndsAt: row.trial_ends_at ? row.trial_ends_at.toISOString() : null,
   });
 });
+
+companiesRouter.get(
+  "/current/calendar",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const calendar = await readCompanyCalendar(companyId);
+    if (!calendar) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    res.json(calendar);
+  },
+);
+
+companiesRouter.patch(
+  "/current/calendar",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+    if (!isWorkingDaySettings(req.body)) {
+      res.status(400).json({
+        error: "All seven working-day settings must be booleans",
+      });
+      return;
+    }
+
+    const result = await pool.query<CalendarSettingsRow>(
+      `UPDATE companies
+       SET
+         monday_is_working = $1,
+         tuesday_is_working = $2,
+         wednesday_is_working = $3,
+         thursday_is_working = $4,
+         friday_is_working = $5,
+         saturday_is_working = $6,
+         sunday_is_working = $7
+       WHERE id = $8
+       RETURNING
+         monday_is_working AS "mondayIsWorking",
+         tuesday_is_working AS "tuesdayIsWorking",
+         wednesday_is_working AS "wednesdayIsWorking",
+         thursday_is_working AS "thursdayIsWorking",
+         friday_is_working AS "fridayIsWorking",
+         saturday_is_working AS "saturdayIsWorking",
+         sunday_is_working AS "sundayIsWorking"`,
+      [
+        req.body.mondayIsWorking,
+        req.body.tuesdayIsWorking,
+        req.body.wednesdayIsWorking,
+        req.body.thursdayIsWorking,
+        req.body.fridayIsWorking,
+        req.body.saturdayIsWorking,
+        req.body.sundayIsWorking,
+        companyId,
+      ],
+    );
+    if (!result.rows[0]) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    const calendar = await readCompanyCalendar(companyId);
+    if (!calendar) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    res.json(calendar);
+  },
+);
+
+companiesRouter.post(
+  "/current/holidays",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const date = req.body?.date;
+    const name = asNonEmptyString(req.body?.name);
+    if (!isCalendarDate(date)) {
+      res.status(400).json({ error: "Date must be a valid YYYY-MM-DD date" });
+      return;
+    }
+    if (!name) {
+      res.status(400).json({ error: "Holiday name required" });
+      return;
+    }
+    if (name.length > MAX_HOLIDAY_NAME_LEN) {
+      res
+        .status(400)
+        .json({ error: "Holiday name must be 120 characters or fewer" });
+      return;
+    }
+
+    try {
+      const result = await pool.query<HolidayRow>(
+        `INSERT INTO public_holidays (company_id, holiday_date, name)
+         VALUES ($1, $2, $3)
+         RETURNING id, holiday_date::TEXT AS date, name`,
+        [companyId, date, name],
+      );
+      res.status(201).json({ holiday: result.rows[0] });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        res.status(409).json({
+          error: "A holiday already exists for that date",
+        });
+        return;
+      }
+      throw err;
+    }
+  },
+);
+
+companiesRouter.delete(
+  "/current/holidays/:id",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid holiday id" });
+      return;
+    }
+
+    const result = await pool.query(
+      `DELETE FROM public_holidays
+       WHERE id = $1 AND company_id = $2`,
+      [id, companyId],
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Holiday not found" });
+      return;
+    }
+
+    res.json({ ok: true });
+  },
+);
 
 companiesRouter.get(
   "/current/users",
