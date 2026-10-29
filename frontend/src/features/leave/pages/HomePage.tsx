@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
@@ -10,29 +11,36 @@ import {
 } from '../../../shared/components'
 import { leaveDetailPath, paths } from '../../../shared/constants/paths'
 import { roleLabel } from '../../../shared/types/session'
-
-const sampleRecent: LeaveRequestSummary[] = [
-  {
-    id: 'demo',
-    requesterName: 'Thandi Nkosi',
-    leaveType: 'Annual',
-    startDate: '2026-09-01',
-    endDate: '2026-09-04',
-    status: 'approved',
-  },
-  {
-    id: 'lr-sick',
-    requesterName: 'Thandi Nkosi',
-    leaveType: 'Sick',
-    startDate: '2026-09-07',
-    endDate: '2026-09-07',
-    status: 'pending',
-  },
-]
+import { getHomeSummary, getMyRecentLeave } from '../homeApi'
 
 export function HomePage() {
   const { session } = useAuth()
   const navigate = useNavigate()
+  
+  const [summary, setSummary] = useState<{ remainingDays: number; usedDays: number; totalAllowance: number } | null>(null)
+  const [recent, setRecent] = useState<LeaveRequestSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true)
+        setError('')
+        const [sum, rec] = await Promise.all([
+          getHomeSummary(),
+          getMyRecentLeave()
+        ])
+        setSummary(sum as any)
+        setRecent(rec as any)
+      } catch (e: any) {
+        setError(e?.message || 'Failed to load home data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   if (!session) {
     return <Navigate to={paths.login} replace />
@@ -61,18 +69,25 @@ export function HomePage() {
           <p className="text-muted">
             My leave, remaining days, and a way to book leave.
           </p>
-          <div className="flex flex-wrap gap-stack">
-            <p className="bg-surface p-section">
-              <span className="text-title">12</span>
-              <br />
-              <span className="text-muted">Annual days left</span>
-            </p>
-            <p className="bg-surface p-section">
-              <span className="text-title">1</span>
-              <br />
-              <span className="text-muted">Pending request</span>
-            </p>
-          </div>
+
+          {loading && <p className="text-muted">Loading your leave...</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          {!loading && !error && summary && (
+            <div className="flex flex-wrap gap-stack">
+              <p className="bg-surface p-section">
+                <span className="text-title">{summary.remainingDays}</span>
+                <br />
+                <span className="text-muted">Annual days left</span>
+              </p>
+              <p className="bg-surface p-section">
+                <span className="text-title">{summary.usedDays}</span>
+                <br />
+                <span className="text-muted">Used days</span>
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-stack">
             <Button
               variant="secondary"
@@ -89,8 +104,9 @@ export function HomePage() {
               Calendar
             </Button>
           </div>
+
           <DataTable
-            data={sampleRecent}
+            data={recent}
             keyExtractor={(row) => row.id}
             emptyTitle="No leave requests"
             emptyDescription="Book leave to see it here."
@@ -118,13 +134,6 @@ export function HomePage() {
             How many team requests are waiting, plus a way to book your own
             leave.
           </p>
-          <div className="flex flex-wrap gap-stack">
-            <p className="bg-surface p-section">
-              <span className="text-title">2</span>
-              <br />
-              <span className="text-muted">Team requests waiting</span>
-            </p>
-          </div>
           <div className="flex flex-wrap gap-stack">
             <Button
               variant="secondary"
