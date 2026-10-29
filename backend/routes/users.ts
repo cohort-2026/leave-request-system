@@ -18,6 +18,10 @@ const LAST_ADMIN = "Cannot demote the last company admin";
 const ASSIGNABLE_ROLES = ["staff", "manager", "company_admin"] as const;
 type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
 type PublicUserRow = Pick<
   UserRow,
   | "id"
@@ -27,7 +31,8 @@ type PublicUserRow = Pick<
   | "status"
   | "company_name"
   | "company_id"
->;
+> &
+  Partial<Pick<UserRow, "department_id" | "department_name">>;
 
 function isAssignableRole(value: unknown): value is AssignableRole {
   return (
@@ -66,11 +71,13 @@ usersRouter.get("/:id", requireAuth, async (req, res) => {
   }
 
   const result = await pool.query<PublicUserRow>(
-    `SELECT id, email, role, display_name, status, company_name, company_id
+    `SELECT users.id, users.email, users.role, users.display_name,
+            users.status, users.company_name, users.company_id,
+            users.department_id, departments.name AS department_name
      FROM users
      LEFT JOIN departments
        ON departments.id = users.department_id
-      AND departments.company_name = users.company_name
+      AND departments.company_id = users.company_id
      WHERE users.id = $1
      LIMIT 1`,
     [id],
@@ -87,7 +94,7 @@ usersRouter.get("/:id", requireAuth, async (req, res) => {
     return;
   }
 
-  res.json(toPublicCompanyUser(row));
+  res.json(toPublicUser(row));
 });
 
 usersRouter.patch(
@@ -125,7 +132,7 @@ usersRouter.patch(
       return;
     }
 
-    res.json(toPublicCompanyUser(result.user));
+    res.json(toPublicUser(result.user));
   },
 );
 
@@ -134,9 +141,8 @@ usersRouter.patch(
   requireAuth,
   requireRole("company_admin"),
   async (req, res) => {
-    const actorCompany = req.user!.company_name?.trim() ?? "";
-    if (!actorCompany) {
-      res.status(403).json({ error: NOT_IN_COMPANY });
+    const actorCompanyId = requireCompanyId(req.user, res);
+    if (actorCompanyId === null) {
       return;
     }
 
@@ -156,8 +162,8 @@ usersRouter.patch(
     }
     const departmentId: number | null = departmentIdValue;
 
-    const user = await pool.query<Pick<UserRow, "id" | "company_name">>(
-      `SELECT id, company_name
+    const user = await pool.query<Pick<UserRow, "id" | "company_id">>(
+      `SELECT id, company_id
        FROM users
        WHERE id = $1`,
       [id],
@@ -167,7 +173,7 @@ usersRouter.patch(
       res.status(404).json({ error: "Not found" });
       return;
     }
-    if (target.company_name !== actorCompany) {
+    if (!sameCompanyId(target.company_id, actorCompanyId)) {
       res.status(403).json({ error: NOT_ALLOWED });
       return;
     }
@@ -176,8 +182,8 @@ usersRouter.patch(
       const department = await pool.query(
         `SELECT id
          FROM departments
-         WHERE id = $1 AND company_name = $2`,
-        [departmentId, actorCompany],
+         WHERE id = $1 AND company_id = $2`,
+        [departmentId, actorCompanyId],
       );
       if (department.rowCount === 0) {
         res.status(400).json({ error: "Department must belong to your company" });
@@ -188,23 +194,21 @@ usersRouter.patch(
     const updated = await pool.query<PublicUserRow>(
       `UPDATE users
        SET department_id = $1
-       WHERE id = $2 AND company_name = $3
+       WHERE id = $2 AND company_id = $3
        RETURNING id, email, role, display_name, status, company_name,
-         department_id,
-         (
-           SELECT departments.name
-           FROM departments
-           WHERE departments.id = users.department_id
-             AND departments.company_name = users.company_name
-         ) AS department_name`,
-      [departmentId, id, actorCompany],
+         company_id, department_id,
+         (SELECT departments.name
+          FROM departments
+          WHERE departments.id = users.department_id
+            AND departments.company_id = users.company_id) AS department_name`,
+      [departmentId, id, actorCompanyId],
     );
     if (updated.rowCount === 0) {
       res.status(404).json({ error: "Not found" });
       return;
     }
 
-    res.json(toPublicCompanyUser(updated.rows[0]));
+    res.json(toPublicUser(updated.rows[0]));
   },
 );
 
@@ -235,11 +239,13 @@ async function changeCompanyUserRole(input: {
     );
 
     const found = await client.query<PublicUserRow>(
-      `SELECT id, email, role, display_name, status, company_name, company_id
+      `SELECT users.id, users.email, users.role, users.display_name,
+              users.status, users.company_name, users.company_id,
+              users.department_id, departments.name AS department_name
        FROM users
        LEFT JOIN departments
          ON departments.id = users.department_id
-        AND departments.company_name = users.company_name
+        AND departments.company_id = users.company_id
        WHERE users.id = $1
        LIMIT 1
        FOR UPDATE OF users`,
@@ -299,8 +305,8 @@ async function changeCompanyUserRole(input: {
       await client.query(
         `UPDATE departments
          SET manager_id = NULL
-         WHERE company_name = $1 AND manager_id = $2`,
-        [input.actorCompany, input.targetId],
+         WHERE company_id = $1 AND manager_id = $2`,
+        [input.actorCompanyId, input.targetId],
       );
     }
     await client.query("COMMIT");
