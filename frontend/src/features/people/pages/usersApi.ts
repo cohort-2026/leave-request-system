@@ -16,6 +16,8 @@ export type PublicUser = {
   displayName: string
   status: AccountStatus
   companyName: string | null
+  departmentId: number | null
+  departmentName: string | null
 }
 
 type UsersListResponse = {

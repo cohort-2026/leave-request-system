@@ -21,6 +21,8 @@ export type PublicUser = {
   status: AccountStatus;
   companyId: number | null;
   companyName: string | null;
+  departmentId: number | null;
+  departmentName: string | null;
 };
 
 export type UserRow = {
@@ -32,6 +34,8 @@ export type UserRow = {
   status: string;
   company_name: string | null;
   company_id: number | null;
+  department_id?: number | null;
+  department_name?: string | null;
 };
 
 function jwtSecret(): string {
@@ -67,7 +71,12 @@ export function toPublicUser(
     Partial<
       Pick<
         UserRow,
-        "display_name" | "status" | "company_name" | "company_id"
+        | "display_name"
+        | "status"
+        | "company_name"
+        | "company_id"
+        | "department_id"
+        | "department_name"
       >
     >,
 ): PublicUser {
@@ -84,6 +93,8 @@ export function toPublicUser(
     status,
     companyId: row.company_id ?? null,
     companyName: row.company_name ?? null,
+    departmentId: row.department_id ?? null,
+    departmentName: row.department_name ?? null,
   };
 }
 

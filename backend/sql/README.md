@@ -14,6 +14,7 @@ psql "$DATABASE_URL" -f sql/008_onboarding_links.sql
 psql "$DATABASE_URL" -f sql/009_billing.sql
 psql "$DATABASE_URL" -f sql/010_company_id_tenancy.sql
 psql "$DATABASE_URL" -f sql/011_working_calendar.sql
+psql "$DATABASE_URL" -f sql/012_departments.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -33,6 +34,8 @@ psql "$DATABASE_URL" -f sql/011_working_calendar.sql
 `010_company_id_tenancy.sql` (issue 139) adds `onboarding_links.company_id` as a foreign key to `companies`, backfills existing invite rows from `users.company_name` / `companies.name`, keeps at most one active link per `company_id`, and drops `onboarding_links.company_name`. It does not drop `users.company_name`.
 
 `011_working_calendar.sql` (issue 143) adds Monday–Friday working-day defaults and Saturday–Sunday non-working defaults to each company, backfills existing companies, and creates `public_holidays` with a unique date per company.
+
+`012_departments.sql` (issue 157) adds company-scoped departments and user assignments, with composite foreign keys preventing a manager or user from being assigned across companies.
 
 ## Demo password
 

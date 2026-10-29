@@ -18,6 +18,10 @@ const LAST_ADMIN = "Cannot demote the last company admin";
 const ASSIGNABLE_ROLES = ["staff", "manager", "company_admin"] as const;
 type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
 type PublicUserRow = Pick<
   UserRow,
   | "id"
@@ -27,7 +31,8 @@ type PublicUserRow = Pick<
   | "status"
   | "company_name"
   | "company_id"
->;
+> &
+  Partial<Pick<UserRow, "department_id" | "department_name">>;
 
 function isAssignableRole(value: unknown): value is AssignableRole {
   return (
@@ -66,9 +71,14 @@ usersRouter.get("/:id", requireAuth, async (req, res) => {
   }
 
   const result = await pool.query<PublicUserRow>(
-    `SELECT id, email, role, display_name, status, company_name, company_id
+    `SELECT users.id, users.email, users.role, users.display_name,
+            users.status, users.company_name, users.company_id,
+            users.department_id, departments.name AS department_name
      FROM users
-     WHERE id = $1
+     LEFT JOIN departments
+       ON departments.id = users.department_id
+      AND departments.company_id = users.company_id
+     WHERE users.id = $1
      LIMIT 1`,
     [id],
   );
@@ -126,6 +136,82 @@ usersRouter.patch(
   },
 );
 
+usersRouter.patch(
+  "/:id/department",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const actorCompanyId = requireCompanyId(req.user, res);
+    if (actorCompanyId === null) {
+      return;
+    }
+
+    const id = Number(req.params.id);
+    if (!isPositiveInteger(id)) {
+      res.status(400).json({ error: "Invalid user id" });
+      return;
+    }
+
+    const departmentIdValue = req.body?.departmentId;
+    if (
+      departmentIdValue !== null &&
+      !isPositiveInteger(departmentIdValue)
+    ) {
+      res.status(400).json({ error: "Invalid department id" });
+      return;
+    }
+    const departmentId: number | null = departmentIdValue;
+
+    const user = await pool.query<Pick<UserRow, "id" | "company_id">>(
+      `SELECT id, company_id
+       FROM users
+       WHERE id = $1`,
+      [id],
+    );
+    const target = user.rows[0];
+    if (!target) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (!sameCompanyId(target.company_id, actorCompanyId)) {
+      res.status(403).json({ error: NOT_ALLOWED });
+      return;
+    }
+
+    if (departmentId !== null) {
+      const department = await pool.query(
+        `SELECT id
+         FROM departments
+         WHERE id = $1 AND company_id = $2`,
+        [departmentId, actorCompanyId],
+      );
+      if (department.rowCount === 0) {
+        res.status(400).json({ error: "Department must belong to your company" });
+        return;
+      }
+    }
+
+    const updated = await pool.query<PublicUserRow>(
+      `UPDATE users
+       SET department_id = $1
+       WHERE id = $2 AND company_id = $3
+       RETURNING id, email, role, display_name, status, company_name,
+         company_id, department_id,
+         (SELECT departments.name
+          FROM departments
+          WHERE departments.id = users.department_id
+            AND departments.company_id = users.company_id) AS department_name`,
+      [departmentId, id, actorCompanyId],
+    );
+    if (updated.rowCount === 0) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    res.json(toPublicUser(updated.rows[0]));
+  },
+);
+
 type ChangeRoleResult =
   | { ok: true; user: PublicUserRow }
   | { ok: false; status: 403 | 404; error: string };
@@ -153,11 +239,16 @@ async function changeCompanyUserRole(input: {
     );
 
     const found = await client.query<PublicUserRow>(
-      `SELECT id, email, role, display_name, status, company_name, company_id
+      `SELECT users.id, users.email, users.role, users.display_name,
+              users.status, users.company_name, users.company_id,
+              users.department_id, departments.name AS department_name
        FROM users
-       WHERE id = $1
+       LEFT JOIN departments
+         ON departments.id = users.department_id
+        AND departments.company_id = users.company_id
+       WHERE users.id = $1
        LIMIT 1
-       FOR UPDATE`,
+       FOR UPDATE OF users`,
       [input.targetId],
     );
     const target = found.rows[0];
@@ -203,15 +294,23 @@ async function changeCompanyUserRole(input: {
       return { ok: true, user: target };
     }
 
-    const updated = await client.query<PublicUserRow>(
+    await client.query(
       `UPDATE users
        SET role = $1
        WHERE id = $2
        RETURNING id, email, role, display_name, status, company_name, company_id`,
       [input.nextRole, input.targetId],
     );
+    if (target.role === "manager" && input.nextRole !== "manager") {
+      await client.query(
+        `UPDATE departments
+         SET manager_id = NULL
+         WHERE company_id = $1 AND manager_id = $2`,
+        [input.actorCompanyId, input.targetId],
+      );
+    }
     await client.query("COMMIT");
-    return { ok: true, user: updated.rows[0] };
+    return { ok: true, user: { ...target, role: input.nextRole } };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

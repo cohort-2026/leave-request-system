@@ -40,6 +40,49 @@ const MIN_PASSWORD_LEN = 8;
 const MAX_HOLIDAY_NAME_LEN = 120;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type DepartmentRow = {
+  id: number;
+  name: string;
+  manager_id: number | null;
+  manager_name: string | null;
+};
+
+type CompanyUserRow = Pick<
+  UserRow,
+  | "id"
+  | "email"
+  | "role"
+  | "display_name"
+  | "status"
+  | "company_name"
+  | "company_id"
+> &
+  Partial<Pick<UserRow, "department_id" | "department_name">>;
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function toPublicDepartment(row: DepartmentRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    managerId: row.manager_id,
+    managerName: row.manager_name,
+  };
+}
+
+function isDepartmentNameConflict(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    err.code === "23505" &&
+    "constraint" in err &&
+    err.constraint === "departments_company_id_name_unique_idx"
+  );
+}
+
 const WORKING_DAY_FIELDS = [
   "mondayIsWorking",
   "tuesdayIsWorking",
@@ -144,6 +187,148 @@ function asNonEmptyString(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
+
+companiesRouter.get(
+  "/current/departments",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const result = await pool.query<DepartmentRow>(
+      `SELECT departments.id, departments.name, departments.manager_id,
+              COALESCE(users.display_name, users.email) AS manager_name
+       FROM departments
+       LEFT JOIN users
+         ON users.id = departments.manager_id
+        AND users.company_id = departments.company_id
+       WHERE departments.company_id = $1
+       ORDER BY LOWER(departments.name), departments.id`,
+      [companyId],
+    );
+
+    res.json({ departments: result.rows.map(toPublicDepartment) });
+  },
+);
+
+companiesRouter.post(
+  "/current/departments",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const name = asNonEmptyString(req.body?.name);
+    if (!name) {
+      res.status(400).json({ error: "Department name required" });
+      return;
+    }
+    if (name.length > 80) {
+      res.status(400).json({
+        error: "Department name must be 80 characters or fewer",
+      });
+      return;
+    }
+
+    try {
+      const result = await pool.query<DepartmentRow>(
+        `INSERT INTO departments (company_id, name)
+         VALUES ($1, $2)
+         RETURNING id, name, manager_id, NULL::text AS manager_name`,
+        [companyId, name],
+      );
+      res.status(201).json(toPublicDepartment(result.rows[0]));
+    } catch (error: unknown) {
+      if (isDepartmentNameConflict(error)) {
+        res.status(409).json({
+          error: "A department with this name already exists",
+        });
+        return;
+      }
+      throw error;
+    }
+  },
+);
+
+companiesRouter.patch(
+  "/current/departments/:id/manager",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const departmentId = Number(req.params.id);
+    if (!isPositiveInteger(departmentId)) {
+      res.status(400).json({ error: "Invalid department id" });
+      return;
+    }
+
+    const managerIdValue = req.body?.managerId;
+    if (managerIdValue !== null && !isPositiveInteger(managerIdValue)) {
+      res.status(400).json({ error: "Invalid manager id" });
+      return;
+    }
+    const managerId: number | null = managerIdValue;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      if (managerId !== null) {
+        const manager = await client.query(
+          `SELECT id
+           FROM users
+           WHERE id = $1 AND company_id = $2 AND role = 'manager'
+           FOR UPDATE`,
+          [managerId, companyId],
+        );
+        if (manager.rowCount === 0) {
+          await client.query("ROLLBACK");
+          res.status(400).json({
+            error: "Manager must have the manager role in your company",
+          });
+          return;
+        }
+      }
+
+      const updated = await client.query<DepartmentRow>(
+        `UPDATE departments
+         SET manager_id = $1
+         WHERE id = $2 AND company_id = $3
+         RETURNING id, name, manager_id,
+           (
+             SELECT COALESCE(users.display_name, users.email)
+             FROM users
+             WHERE users.id = departments.manager_id
+               AND users.company_id = departments.company_id
+           ) AS manager_name`,
+        [managerId, departmentId, companyId],
+      );
+      if (updated.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Department not found" });
+        return;
+      }
+
+      await client.query("COMMIT");
+      res.json(toPublicDepartment(updated.rows[0]));
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+);
 
 companiesRouter.post("/signup", async (req, res) => {
   const companyName = asNonEmptyString(req.body?.companyName);
@@ -491,22 +676,16 @@ companiesRouter.get(
       return;
     }
 
-    const result = await pool.query<
-      Pick<
-        UserRow,
-        | "id"
-        | "email"
-        | "role"
-        | "display_name"
-        | "status"
-        | "company_name"
-        | "company_id"
-      >
-    >(
-      `SELECT id, email, role, display_name, status, company_name, company_id
+    const result = await pool.query<CompanyUserRow>(
+      `SELECT users.id, users.email, users.role, users.display_name,
+              users.status, users.company_name, users.company_id,
+              users.department_id, departments.name AS department_name
        FROM users
-       WHERE company_id = $1
-       ORDER BY id`,
+       LEFT JOIN departments
+         ON departments.id = users.department_id
+        AND departments.company_id = users.company_id
+       WHERE users.company_id = $1
+       ORDER BY users.id`,
       [companyId],
     );
 
