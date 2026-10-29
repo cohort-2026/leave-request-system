@@ -1,46 +1,54 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
+import { ApiError } from '../../../services/api'
 import {
+  Alert,
   Button,
   DataTable,
   EmptyState,
   LeaveRequestRow,
-  type LeaveRequestSummary,
 } from '../../../shared/components'
 import { leaveDetailPath, paths } from '../../../shared/constants/paths'
 import { roleLabel } from '../../../shared/types/session'
-import { getHomeSummary, getMyRecentLeave } from '../homeApi'
+import { getHomeSummary, type HomeSummary } from '../homeApi'
+
+function getErrorMessage(error: unknown) {
+  return error instanceof ApiError
+    ? error.message
+    : 'Could not load your home data.'
+}
 
 export function HomePage() {
   const { session } = useAuth()
   const navigate = useNavigate()
-  
-  const [summary, setSummary] = useState<{ remainingDays: number; usedDays: number; totalAllowance: number } | null>(null)
-  const [recent, setRecent] = useState<LeaveRequestSummary[]>([])
+
+  const [summary, setSummary] = useState<HomeSummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true)
-        setError('')
-        const [sum, rec] = await Promise.all([
-          getHomeSummary(),
-          getMyRecentLeave()
-        ])
-        setSummary(sum as any)
-        setRecent(rec as any)
-      } catch (e: any) {
-        setError(e?.message || 'Failed to load home data')
-      } finally {
-        setLoading(false)
-      }
+    if (!session || session.role !== 'staff') {
+      return
     }
-    load()
-  }, [])
+
+    let cancelled = false
+    getHomeSummary()
+      .then((data) => {
+        if (!cancelled) setSummary(data)
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) setError(getErrorMessage(loadError))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
 
   if (!session) {
     return <Navigate to={paths.login} replace />
@@ -70,23 +78,29 @@ export function HomePage() {
             My leave, remaining days, and a way to book leave.
           </p>
 
-          {loading && <p className="text-muted">Loading your leave...</p>}
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {loading ? (
+            <p className="text-muted">Loading your leave…</p>
+          ) : null}
+          {error ? <Alert tone="error">{error}</Alert> : null}
 
-          {!loading && !error && summary && (
+          {!loading && !error && summary ? (
             <div className="flex flex-wrap gap-stack">
+              {summary.balances.map((balance) => (
+                <p key={balance.leaveType} className="bg-surface p-section">
+                  <span className="text-title">{balance.daysRemaining}</span>
+                  <br />
+                  <span className="text-muted">
+                    {balance.leaveType} days left
+                  </span>
+                </p>
+              ))}
               <p className="bg-surface p-section">
-                <span className="text-title">{summary.remainingDays}</span>
+                <span className="text-title">{summary.pendingCount}</span>
                 <br />
-                <span className="text-muted">Annual days left</span>
-              </p>
-              <p className="bg-surface p-section">
-                <span className="text-title">{summary.usedDays}</span>
-                <br />
-                <span className="text-muted">Used days</span>
+                <span className="text-muted">Pending requests</span>
               </p>
             </div>
-          )}
+          ) : null}
 
           <div className="flex flex-wrap gap-stack">
             <Button
@@ -105,27 +119,32 @@ export function HomePage() {
             </Button>
           </div>
 
-          <DataTable
-            data={recent}
-            keyExtractor={(row) => row.id}
-            emptyTitle="No leave requests"
-            emptyDescription="Book leave to see it here."
-            headerRow={
-              <tr>
-                <th>Person</th>
-                <th>Type</th>
-                <th>Dates</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            }
-            renderRow={(request) => (
-              <LeaveRequestRow
-                request={request}
-                onView={(id) => navigate(leaveDetailPath(id))}
-              />
-            )}
-          />
+          {!loading && !error && summary ? (
+            <DataTable
+              data={summary.recent.map((request) => ({
+                ...request,
+                id: String(request.id),
+              }))}
+              keyExtractor={(row) => row.id}
+              emptyTitle="No leave requests"
+              emptyDescription="Book leave to see it here."
+              headerRow={
+                <tr>
+                  <th>Person</th>
+                  <th>Type</th>
+                  <th>Dates</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              }
+              renderRow={(request) => (
+                <LeaveRequestRow
+                  request={request}
+                  onView={(id) => navigate(leaveDetailPath(id))}
+                />
+              )}
+            />
+          ) : null}
         </>
       ) : null}
       {session.role === 'manager' ? (
