@@ -37,6 +37,29 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const STAFF_REVIEWERS = ["manager", "company_admin"] as const;
+
+type StaffReviewer = (typeof STAFF_REVIEWERS)[number];
+type CompanyLeaveRulesRow = {
+  staff_reviewer: StaffReviewer;
+  manager_reviewer: "company_admin";
+  min_notice_days: number;
+};
+
+function isStaffReviewer(value: unknown): value is StaffReviewer {
+  return (
+    typeof value === "string" &&
+    (STAFF_REVIEWERS as readonly string[]).includes(value)
+  );
+}
+
+function toPublicCompanyLeaveRules(row: CompanyLeaveRulesRow) {
+  return {
+    staffReviewer: row.staff_reviewer,
+    managerReviewer: row.manager_reviewer,
+    minNoticeDays: row.min_notice_days,
+  };
+}
 
 function sendInviteUnavailable(
   err: unknown,
@@ -234,6 +257,149 @@ companiesRouter.get("/current", requireAuth, async (req, res) => {
     trialEndsAt: row.trial_ends_at ? row.trial_ends_at.toISOString() : null,
   });
 });
+
+companiesRouter.get(
+  "/current/rules",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO company_leave_rules (company_id)
+       VALUES ($1)
+       ON CONFLICT (company_id) DO NOTHING`,
+      [companyId],
+    );
+    const result = await pool.query<CompanyLeaveRulesRow>(
+      `SELECT staff_reviewer, manager_reviewer, min_notice_days
+       FROM company_leave_rules
+       WHERE company_id = $1`,
+      [companyId],
+    );
+    const rules = result.rows[0];
+    if (!rules) {
+      throw new Error("Company leave rules were not available after insert");
+    }
+
+    res.json(toPublicCompanyLeaveRules(rules));
+  },
+);
+
+companiesRouter.patch(
+  "/current/rules",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const body: unknown = req.body;
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      res.status(400).json({ error: "Invalid company rules" });
+      return;
+    }
+
+    const values = body as Record<string, unknown>;
+    const allowedFields = new Set([
+      "staffReviewer",
+      "managerReviewer",
+      "minNoticeDays",
+    ]);
+    const providedFields = Object.keys(values);
+    if (
+      providedFields.length === 0 ||
+      providedFields.some((field) => !allowedFields.has(field))
+    ) {
+      res.status(400).json({ error: "Provide at least one valid company rule" });
+      return;
+    }
+    const hasStaffReviewer = Object.prototype.hasOwnProperty.call(
+      values,
+      "staffReviewer",
+    );
+    let staffReviewer: StaffReviewer | undefined;
+    if (hasStaffReviewer) {
+      if (!isStaffReviewer(values.staffReviewer)) {
+        res.status(400).json({ error: "Invalid staff reviewer" });
+        return;
+      }
+      staffReviewer = values.staffReviewer;
+    }
+
+    const hasManagerReviewer = Object.prototype.hasOwnProperty.call(
+      values,
+      "managerReviewer",
+    );
+    if (hasManagerReviewer && values.managerReviewer !== "company_admin") {
+      res.status(400).json({
+        error: "Manager leave must be reviewed by a company admin",
+      });
+      return;
+    }
+
+    const hasMinNoticeDays = Object.prototype.hasOwnProperty.call(
+      values,
+      "minNoticeDays",
+    );
+    let minNoticeDays: number | undefined;
+    if (hasMinNoticeDays) {
+      const value = values.minNoticeDays;
+      if (
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value > 2_147_483_647
+      ) {
+        res.status(400).json({
+          error: "Minimum notice days must be a non-negative integer",
+        });
+        return;
+      }
+      minNoticeDays = value;
+    }
+
+    const assignments: string[] = [];
+    const parameters: (number | string)[] = [companyId];
+    if (staffReviewer !== undefined) {
+      parameters.push(staffReviewer);
+      assignments.push(`staff_reviewer = $${parameters.length}`);
+    }
+    if (hasManagerReviewer) {
+      parameters.push("company_admin");
+      assignments.push(`manager_reviewer = $${parameters.length}`);
+    }
+    if (minNoticeDays !== undefined) {
+      parameters.push(minNoticeDays);
+      assignments.push(`min_notice_days = $${parameters.length}`);
+    }
+
+    await pool.query(
+      `INSERT INTO company_leave_rules (company_id)
+       VALUES ($1)
+       ON CONFLICT (company_id) DO NOTHING`,
+      [companyId],
+    );
+    const updated = await pool.query<CompanyLeaveRulesRow>(
+      `UPDATE company_leave_rules
+       SET ${assignments.join(", ")}
+       WHERE company_id = $1
+       RETURNING staff_reviewer, manager_reviewer, min_notice_days`,
+      parameters,
+    );
+    const rules = updated.rows[0];
+    if (!rules) {
+      throw new Error("Company leave rules were not available after update");
+    }
+
+    res.json(toPublicCompanyLeaveRules(rules));
+  },
+);
 
 companiesRouter.get(
   "/current/users",
