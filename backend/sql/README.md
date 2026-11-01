@@ -37,6 +37,27 @@ psql "$DATABASE_URL" -f sql/012_departments.sql
 
 `012_departments.sql` (issue 157) adds company-scoped departments and user assignments, with composite foreign keys preventing a manager or user from being assigned across companies.
 
+'012_leave_types.sql'(issue 147) Create the table that stores each company’s leave kinds and their default allowances. Put the five starter types onto Acme and Khumalo so local logins can be used in later tickets. ## Migrations
+
+### `012_leave_types.sql`
+- **Purpose**: Creates the `leave_types` table to support company-specific leave configurations and seeds initial demo defaults for all existing companies.
+- **Table**: `leave_types`
+  - `id`: Identity Primary Key (`INT GENERATED ALWAYS AS IDENTITY`)
+  - `company_id`: Foreign key referencing `companies(id)`
+  - `name`: Name of the leave type (`TEXT`)
+  - `default_days`: Default allowance count (`INT NOT NULL`)
+  - `allowance_period`: Defaults to `'annual'` (`TEXT`)
+  - `is_active`: Status flag, defaults to `true` (`BOOLEAN`)
+  - `allow_backdate`: Whether backdating requests is permitted (`BOOLEAN NOT NULL DEFAULT false`)
+  - `requires_document_after_days`: Threshold days requiring documentation upload (`INT NULL`)
+  - `UNIQUE(company_id, name)`
+- **Seeded Defaults** (per company):
+  - Annual: 15 days, no backdate, no document required
+  - Sick: 10 days, backdate allowed, document required after 2 days
+  - Family responsibility: 3 days, backdate allowed, no document required
+  - Unpaid: 0 days, no backdate, no document required
+  - Study: 5 days, no backdate, no document required
+
 ## Demo password
 
 All four seed accounts use the same password: `Leave2026!`
