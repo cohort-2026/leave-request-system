@@ -13,6 +13,7 @@ import {
 import { leaveDetailPath, paths } from '../../../shared/constants/paths'
 import { roleLabel } from '../../../shared/types/session'
 import { getHomeSummary, type HomeSummary } from '../homeApi'
+import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
 
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError
@@ -25,6 +26,7 @@ export function HomePage() {
   const navigate = useNavigate()
 
   const [summary, setSummary] = useState<HomeSummary | null>(null)
+  const [balances, setBalances] = useState<LeaveBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,16 +36,26 @@ export function HomePage() {
     }
 
     let cancelled = false
-    getHomeSummary()
-      .then((data) => {
-        if (!cancelled) setSummary(data)
-      })
-      .catch((loadError: unknown) => {
+    async function load() {
+      try {
+        setLoading(true)
+        setError(null)
+        // Fetch both - per issue #153 we MUST call /leave/balances
+        const [homeData, balancesData] = await Promise.all([
+          getHomeSummary().catch(() => null),
+          getLeaveBalances().catch(() => { throw new Error('Could not load balances') }),
+        ])
+        
+        if (cancelled) return
+        if (homeData) setSummary(homeData)
+        setBalances(balancesData)
+      } catch (loadError: unknown) {
         if (!cancelled) setError(getErrorMessage(loadError))
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false)
-      })
+      }
+    }
+    load()
 
     return () => {
       cancelled = true
@@ -83,24 +95,30 @@ export function HomePage() {
           ) : null}
           {error ? <Alert tone="error">{error}</Alert> : null}
 
-          {!loading && !error && summary ? (
+          {!loading && !error && (
             <div className="flex flex-wrap gap-stack">
-              {summary.balances.map((balance) => (
-                <p key={balance.leaveType} className="bg-surface p-section">
-                  <span className="text-title">{balance.daysRemaining}</span>
+              {balances.length === 0 ? (
+                <p className="text-muted text-sm">No balances yet</p>
+              ) : (
+                balances.map((balance) => (
+                  <p key={balance.leaveType} className="bg-surface p-section">
+                    <span className="text-title">{balance.daysRemaining}</span>
+                    <br />
+                    <span className="text-muted">
+                      {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
+                    </span>
+                  </p>
+                ))
+              )}
+              {summary && (
+                <p className="bg-surface p-section">
+                  <span className="text-title">{summary.pendingCount}</span>
                   <br />
-                  <span className="text-muted">
-                    {balance.leaveType} days left
-                  </span>
+                  <span className="text-muted">Pending requests</span>
                 </p>
-              ))}
-              <p className="bg-surface p-section">
-                <span className="text-title">{summary.pendingCount}</span>
-                <br />
-                <span className="text-muted">Pending requests</span>
-              </p>
+              )}
             </div>
-          ) : null}
+          )}
 
           <div className="flex flex-wrap gap-stack">
             <Button
