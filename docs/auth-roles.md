@@ -11,9 +11,13 @@
 | `POST /api/companies/signup/mock-pay` | Anyone (no login), local only. Completes checkout and creates the company admin. No session cookie. |
 | `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
 | `GET /api/companies/current` | Any signed-in company user (`requireAuth` plus a `company_id`). Platform **403**. |
-| `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
+| `GET /api/companies/current/calendar` | `company_admin` of a company. Returns its seven working-day flags and holidays. |
+| `PATCH /api/companies/current/calendar` | `company_admin` of a company. Requires all seven weekday settings as booleans. Staff, managers, and platform are **403**. |
+| `POST /api/companies/current/holidays` | `company_admin` of a company. Adds a holiday using `{ date: "YYYY-MM-DD", name }`; duplicate dates in that company are **409**. |
+| `DELETE /api/companies/current/holidays/:id` | `company_admin` of a company. Deletes only a holiday belonging to that company; missing or other-company ids are **404**. |
 | `GET /api/companies/current/rules` | `company_admin` of a company. Returns that company’s reviewer and minimum-notice rules. |
 | `PATCH /api/companies/current/rules` | `company_admin` of a company. Updates valid reviewer settings and a non-negative integer minimum notice. |
+| `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
 | `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
 | `POST /api/companies/current/onboarding-link` | `company_admin` of a company. Creates or rotates the hashed invite URL. |
 | `POST /api/companies/current/onboarding-link/disable` | `company_admin` of a company. |
@@ -40,3 +44,7 @@
 Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `admin` role.
 
 `companies` and `users.company_id` exist. Same-company checks for manager / company_admin use `users.company_id`. Invite links, people list, and role change are keyed by `company_id`. `users.company_name` stays as a display copy of `companies.name` and is not used for authorization. Platform can read any row, is not in a company, and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.
+
+Calendar responses contain the seven `mondayIsWorking` through `sundayIsWorking` booleans and `holidays: [{ id, date, name }]`. PATCH returns the full calendar; POST returns `{ holiday: { id, date, name } }`; DELETE returns `{ ok: true }`.
+
+Working calendar settings and holidays are also scoped by `users.company_id`. `countWorkingDays` in `backend/leave/workingDays.ts` counts an inclusive date range using those weekday flags and skips matching holiday dates.

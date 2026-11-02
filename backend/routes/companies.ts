@@ -8,6 +8,7 @@ import {
   mockPayAllowed,
 } from "../companies/signup.js";
 import { pool } from "../db.js";
+import type { WorkingDayFlags } from "../leave/workingDays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   disableOnboardingLink,
@@ -36,6 +37,7 @@ const MIN_COMPANY_NAME_LEN = 2;
 const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
+const MAX_HOLIDAY_NAME_LEN = 120;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const STAFF_REVIEWERS = ["manager", "company_admin"] as const;
 
@@ -61,6 +63,135 @@ function toPublicCompanyLeaveRules(row: CompanyLeaveRulesRow) {
   };
 }
 
+type DepartmentRow = {
+  id: number;
+  name: string;
+  manager_id: number | null;
+  manager_name: string | null;
+};
+
+type CompanyUserRow = Pick<
+  UserRow,
+  | "id"
+  | "email"
+  | "role"
+  | "display_name"
+  | "status"
+  | "company_name"
+  | "company_id"
+> &
+  Partial<Pick<UserRow, "department_id" | "department_name">>;
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function toPublicDepartment(row: DepartmentRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    managerId: row.manager_id,
+    managerName: row.manager_name,
+  };
+}
+
+function isDepartmentNameConflict(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    err.code === "23505" &&
+    "constraint" in err &&
+    err.constraint === "departments_company_id_name_unique_idx"
+  );
+}
+
+const WORKING_DAY_FIELDS = [
+  "mondayIsWorking",
+  "tuesdayIsWorking",
+  "wednesdayIsWorking",
+  "thursdayIsWorking",
+  "fridayIsWorking",
+  "saturdayIsWorking",
+  "sundayIsWorking",
+] as const;
+
+type WorkingDaySettings = WorkingDayFlags;
+
+type CalendarSettingsRow = WorkingDaySettings;
+
+type HolidayRow = {
+  id: number;
+  date: string;
+  name: string;
+};
+
+function isWorkingDaySettings(value: unknown): value is WorkingDaySettings {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const settings = value as Record<string, unknown>;
+  return WORKING_DAY_FIELDS.every(
+    (field) => typeof settings[field] === "boolean",
+  );
+}
+
+function isCalendarDate(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    Number(value.slice(0, 4)) === 0
+  ) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    err.code === "23505"
+  );
+}
+
+async function readCompanyCalendar(
+  companyId: number,
+): Promise<(CalendarSettingsRow & { holidays: HolidayRow[] }) | null> {
+  const settingsResult = await pool.query<CalendarSettingsRow>(
+    `SELECT
+       monday_is_working AS "mondayIsWorking",
+       tuesday_is_working AS "tuesdayIsWorking",
+       wednesday_is_working AS "wednesdayIsWorking",
+       thursday_is_working AS "thursdayIsWorking",
+       friday_is_working AS "fridayIsWorking",
+       saturday_is_working AS "saturdayIsWorking",
+       sunday_is_working AS "sundayIsWorking"
+     FROM companies
+     WHERE id = $1
+     LIMIT 1`,
+    [companyId],
+  );
+  const settings = settingsResult.rows[0];
+  if (!settings) {
+    return null;
+  }
+
+  const holidaysResult = await pool.query<HolidayRow>(
+    `SELECT id, holiday_date::TEXT AS date, name
+     FROM public_holidays
+     WHERE company_id = $1
+     ORDER BY holiday_date, id`,
+    [companyId],
+  );
+  return { ...settings, holidays: holidaysResult.rows };
+}
+
 function sendInviteUnavailable(
   err: unknown,
   res: { status: (code: number) => { json: (body: unknown) => void } },
@@ -79,6 +210,148 @@ function asNonEmptyString(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
+
+companiesRouter.get(
+  "/current/departments",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const result = await pool.query<DepartmentRow>(
+      `SELECT departments.id, departments.name, departments.manager_id,
+              COALESCE(users.display_name, users.email) AS manager_name
+       FROM departments
+       LEFT JOIN users
+         ON users.id = departments.manager_id
+        AND users.company_id = departments.company_id
+       WHERE departments.company_id = $1
+       ORDER BY LOWER(departments.name), departments.id`,
+      [companyId],
+    );
+
+    res.json({ departments: result.rows.map(toPublicDepartment) });
+  },
+);
+
+companiesRouter.post(
+  "/current/departments",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const name = asNonEmptyString(req.body?.name);
+    if (!name) {
+      res.status(400).json({ error: "Department name required" });
+      return;
+    }
+    if (name.length > 80) {
+      res.status(400).json({
+        error: "Department name must be 80 characters or fewer",
+      });
+      return;
+    }
+
+    try {
+      const result = await pool.query<DepartmentRow>(
+        `INSERT INTO departments (company_id, name)
+         VALUES ($1, $2)
+         RETURNING id, name, manager_id, NULL::text AS manager_name`,
+        [companyId, name],
+      );
+      res.status(201).json(toPublicDepartment(result.rows[0]));
+    } catch (error: unknown) {
+      if (isDepartmentNameConflict(error)) {
+        res.status(409).json({
+          error: "A department with this name already exists",
+        });
+        return;
+      }
+      throw error;
+    }
+  },
+);
+
+companiesRouter.patch(
+  "/current/departments/:id/manager",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const departmentId = Number(req.params.id);
+    if (!isPositiveInteger(departmentId)) {
+      res.status(400).json({ error: "Invalid department id" });
+      return;
+    }
+
+    const managerIdValue = req.body?.managerId;
+    if (managerIdValue !== null && !isPositiveInteger(managerIdValue)) {
+      res.status(400).json({ error: "Invalid manager id" });
+      return;
+    }
+    const managerId: number | null = managerIdValue;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      if (managerId !== null) {
+        const manager = await client.query(
+          `SELECT id
+           FROM users
+           WHERE id = $1 AND company_id = $2 AND role = 'manager'
+           FOR UPDATE`,
+          [managerId, companyId],
+        );
+        if (manager.rowCount === 0) {
+          await client.query("ROLLBACK");
+          res.status(400).json({
+            error: "Manager must have the manager role in your company",
+          });
+          return;
+        }
+      }
+
+      const updated = await client.query<DepartmentRow>(
+        `UPDATE departments
+         SET manager_id = $1
+         WHERE id = $2 AND company_id = $3
+         RETURNING id, name, manager_id,
+           (
+             SELECT COALESCE(users.display_name, users.email)
+             FROM users
+             WHERE users.id = departments.manager_id
+               AND users.company_id = departments.company_id
+           ) AS manager_name`,
+        [managerId, departmentId, companyId],
+      );
+      if (updated.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Department not found" });
+        return;
+      }
+
+      await client.query("COMMIT");
+      res.json(toPublicDepartment(updated.rows[0]));
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+);
 
 companiesRouter.post("/signup", async (req, res) => {
   const companyName = asNonEmptyString(req.body?.companyName);
@@ -402,6 +675,164 @@ companiesRouter.patch(
 );
 
 companiesRouter.get(
+  "/current/calendar",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const calendar = await readCompanyCalendar(companyId);
+    if (!calendar) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    res.json(calendar);
+  },
+);
+
+companiesRouter.patch(
+  "/current/calendar",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+    if (!isWorkingDaySettings(req.body)) {
+      res.status(400).json({
+        error: "All seven working-day settings must be booleans",
+      });
+      return;
+    }
+
+    const result = await pool.query<CalendarSettingsRow>(
+      `UPDATE companies
+       SET
+         monday_is_working = $1,
+         tuesday_is_working = $2,
+         wednesday_is_working = $3,
+         thursday_is_working = $4,
+         friday_is_working = $5,
+         saturday_is_working = $6,
+         sunday_is_working = $7
+       WHERE id = $8
+       RETURNING
+         monday_is_working AS "mondayIsWorking",
+         tuesday_is_working AS "tuesdayIsWorking",
+         wednesday_is_working AS "wednesdayIsWorking",
+         thursday_is_working AS "thursdayIsWorking",
+         friday_is_working AS "fridayIsWorking",
+         saturday_is_working AS "saturdayIsWorking",
+         sunday_is_working AS "sundayIsWorking"`,
+      [
+        req.body.mondayIsWorking,
+        req.body.tuesdayIsWorking,
+        req.body.wednesdayIsWorking,
+        req.body.thursdayIsWorking,
+        req.body.fridayIsWorking,
+        req.body.saturdayIsWorking,
+        req.body.sundayIsWorking,
+        companyId,
+      ],
+    );
+    if (!result.rows[0]) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    const calendar = await readCompanyCalendar(companyId);
+    if (!calendar) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    res.json(calendar);
+  },
+);
+
+companiesRouter.post(
+  "/current/holidays",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const date = req.body?.date;
+    const name = asNonEmptyString(req.body?.name);
+    if (!isCalendarDate(date)) {
+      res.status(400).json({ error: "Date must be a valid YYYY-MM-DD date" });
+      return;
+    }
+    if (!name) {
+      res.status(400).json({ error: "Holiday name required" });
+      return;
+    }
+    if (name.length > MAX_HOLIDAY_NAME_LEN) {
+      res
+        .status(400)
+        .json({ error: "Holiday name must be 120 characters or fewer" });
+      return;
+    }
+
+    try {
+      const result = await pool.query<HolidayRow>(
+        `INSERT INTO public_holidays (company_id, holiday_date, name)
+         VALUES ($1, $2, $3)
+         RETURNING id, holiday_date::TEXT AS date, name`,
+        [companyId, date, name],
+      );
+      res.status(201).json({ holiday: result.rows[0] });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        res.status(409).json({
+          error: "A holiday already exists for that date",
+        });
+        return;
+      }
+      throw err;
+    }
+  },
+);
+
+companiesRouter.delete(
+  "/current/holidays/:id",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid holiday id" });
+      return;
+    }
+
+    const result = await pool.query(
+      `DELETE FROM public_holidays
+       WHERE id = $1 AND company_id = $2`,
+      [id, companyId],
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Holiday not found" });
+      return;
+    }
+
+    res.json({ ok: true });
+  },
+);
+
+companiesRouter.get(
   "/current/users",
   requireAuth,
   requireRole("company_admin"),
@@ -411,22 +842,16 @@ companiesRouter.get(
       return;
     }
 
-    const result = await pool.query<
-      Pick<
-        UserRow,
-        | "id"
-        | "email"
-        | "role"
-        | "display_name"
-        | "status"
-        | "company_name"
-        | "company_id"
-      >
-    >(
-      `SELECT id, email, role, display_name, status, company_name, company_id
+    const result = await pool.query<CompanyUserRow>(
+      `SELECT users.id, users.email, users.role, users.display_name,
+              users.status, users.company_name, users.company_id,
+              users.department_id, departments.name AS department_name
        FROM users
-       WHERE company_id = $1
-       ORDER BY id`,
+       LEFT JOIN departments
+         ON departments.id = users.department_id
+        AND departments.company_id = users.company_id
+       WHERE users.company_id = $1
+       ORDER BY users.id`,
       [companyId],
     );
 
