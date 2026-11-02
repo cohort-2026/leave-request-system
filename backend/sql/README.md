@@ -16,6 +16,7 @@ psql "$DATABASE_URL" -f sql/010_company_id_tenancy.sql
 psql "$DATABASE_URL" -f sql/011_working_calendar.sql
 psql "$DATABASE_URL" -f sql/012_departments.sql
 psql "$DATABASE_URL" -f sql/013_leave_types.sql
+psql "$DATABASE_URL" -f sql/014_leave_balances.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -37,6 +38,8 @@ psql "$DATABASE_URL" -f sql/013_leave_types.sql
 `011_working_calendar.sql` (issue 143) adds Monday–Friday working-day defaults and Saturday–Sunday non-working defaults to each company, backfills existing companies, and creates `public_holidays` with a unique date per company.
 
 `012_departments.sql` (issue 157) adds company-scoped departments and user assignments, with composite foreign keys preventing a manager or user from being assigned across companies.
+
+`014_leave_balances.sql` creates company-, user-, and leave-type-linked balances, then initializes one row for each non-platform user's company leave types using `default_days`. Platform users receive no balances, and company scoping prevents users from receiving another company's leave types. Re-running the seed leaves existing balances unchanged.
 
 ## Migrations
 
