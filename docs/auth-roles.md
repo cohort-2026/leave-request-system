@@ -42,6 +42,8 @@
 | `POST /api/auth/totp/enroll` | Any signed-in role with a valid `lrs_mfa` enroll challenge |
 | `GET /api/ping/signed-in` | Any signed-in role (`requireAuth`) |
 | `GET /api/ping/admin` | `company_admin` or `platform` (`requireAuth` + `requireRole`) |
+| `GET /api/leave/balances` | Signed-in `staff`, `manager`, or `company_admin` with a `company_id`. Own remaining and used days for active types. Platform **403**. |
+| `GET /api/users/:id/balances` | Owner of that row, or `manager` / `company_admin` in the same company. Staff may not read another id. Other-company ids are **403**. Missing users are **404**. Platform **403**. |
 | `GET /api/users/:id` | Owner of that row, or `manager` / `company_admin` in the same company, or `platform`. Staff may not read another id. Failed checks are **403**. Missing rows are **404**. `password_hash` is never returned. |
 | `PATCH /api/users/:id/role` | `company_admin` of a company. Same-company target only. Cannot change own role, assign `platform`, change a `platform` user, or demote the last `company_admin`. |
 
@@ -52,5 +54,7 @@ Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `
 Calendar responses contain the seven `mondayIsWorking` through `sundayIsWorking` booleans and `holidays: [{ id, date, name }]`. PATCH returns the full calendar; POST returns `{ holiday: { id, date, name } }`; DELETE returns `{ ok: true }`.
 
 Leave type list responses are `{ leaveTypes: [{ id, name, defaultDays, allowancePeriod, isActive, allowBackdate, requiresDocumentAfterDays }] }`. POST returns **201** `{ leaveType }` and PATCH returns `{ leaveType }`. New companies created at mock-pay receive the five defaults (Annual, Sick, Family responsibility, Unpaid, Study).
+
+Leave balance list responses are `{ balances: [{ leaveType, totalAllowance, usedDays, daysRemaining }] }`. Paid signup and invite onboard insert one row per active type using that type’s `default_days`. Existing rows are left unchanged (`ON CONFLICT DO NOTHING`). Remaining is never taken from the client.
 
 Working calendar settings and holidays are also scoped by `users.company_id`. `countWorkingDays` in `backend/leave/workingDays.ts` counts an inclusive date range using those weekday flags and skips matching holiday dates.

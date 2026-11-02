@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { quotePlan, VAT_RATE_BP, type PlanQuote } from "../billing/catalog.js";
 import { pool } from "../db.js";
+import { grantDefaultBalances } from "../leave/balances.js";
 import { seedDefaultLeaveTypes } from "../leave/seedTypes.js";
 import type { UserRow } from "../session.js";
 
@@ -304,6 +305,7 @@ export async function completePaidSignup(
         company.id,
       ],
     );
+    await grantDefaultBalances(insertedUser.rows[0].id, company.id, client);
 
     const period = await client.query<{
       period_start: Date;
