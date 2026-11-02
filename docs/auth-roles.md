@@ -18,6 +18,10 @@
 | `GET /api/companies/current/rules` | `company_admin` of a company. Returns that company’s reviewer and minimum-notice rules. |
 | `PATCH /api/companies/current/rules` | `company_admin` of a company. Updates valid reviewer settings and a non-negative integer minimum notice. |
 | `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
+| `GET /api/leave-types` | Signed-in `staff`, `manager`, or `company_admin` with a `company_id`. Active types for that company only. Platform **403**. |
+| `GET /api/admin/leave-types` | `company_admin` of a company. Includes inactive types. Staff and managers are **403**. |
+| `POST /api/admin/leave-types` | `company_admin` of a company. Creates a type for that company. Duplicate names are **409**. Extra body fields such as `companyId` are ignored. |
+| `PATCH /api/admin/leave-types/:id` | `company_admin` of a company. Same-company type only; missing or other-company ids are **404**. Deactivate with `{ isActive: false }`. Extra body fields such as `companyId` are ignored. |
 | `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
 | `POST /api/companies/current/onboarding-link` | `company_admin` of a company. Creates or rotates the hashed invite URL. |
 | `POST /api/companies/current/onboarding-link/disable` | `company_admin` of a company. |
@@ -46,5 +50,7 @@ Roles are `staff`, `manager`, `company_admin`, `platform`. There is no generic `
 `companies` and `users.company_id` exist. Same-company checks for manager / company_admin use `users.company_id`. Invite links, people list, and role change are keyed by `company_id`. `users.company_name` stays as a display copy of `companies.name` and is not used for authorization. Platform can read any row, is not in a company, and cannot list people or change roles. Staff join through an invite (or later SCIM / SSO), not `POST /api/auth/register`. A role change does not skip email verification or TOTP and does not set a session.
 
 Calendar responses contain the seven `mondayIsWorking` through `sundayIsWorking` booleans and `holidays: [{ id, date, name }]`. PATCH returns the full calendar; POST returns `{ holiday: { id, date, name } }`; DELETE returns `{ ok: true }`.
+
+Leave type list responses are `{ leaveTypes: [{ id, name, defaultDays, allowancePeriod, isActive, allowBackdate, requiresDocumentAfterDays }] }`. POST returns **201** `{ leaveType }` and PATCH returns `{ leaveType }`. New companies created at mock-pay receive the five defaults (Annual, Sick, Family responsibility, Unpaid, Study).
 
 Working calendar settings and holidays are also scoped by `users.company_id`. `countWorkingDays` in `backend/leave/workingDays.ts` counts an inclusive date range using those weekday flags and skips matching holiday dates.
