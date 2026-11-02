@@ -25,6 +25,7 @@
     "password-reset/**/*.ts",
     "totp-reset/**/*.ts",
     "onboarding/**/*.ts",
+    "leave/**/*.ts",
     "middleware/**/*.ts",
     "routes/**/*.ts"
   ],
