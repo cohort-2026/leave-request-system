@@ -1,4 +1,4 @@
--- Migration: 012_leave_types.sql
+-- Migration: 013_leave_types.sql
 -- Description: Create leave_types table and seed default leave types for existing companies.
 
 -- 1. Create table leave_types

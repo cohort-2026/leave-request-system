@@ -15,7 +15,7 @@ psql "$DATABASE_URL" -f sql/009_billing.sql
 psql "$DATABASE_URL" -f sql/010_company_id_tenancy.sql
 psql "$DATABASE_URL" -f sql/011_working_calendar.sql
 psql "$DATABASE_URL" -f sql/012_departments.sql
-psql "$DATABASE_URL" -f sql/012_leave_types.sql
+psql "$DATABASE_URL" -f sql/013_leave_types.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -40,7 +40,7 @@ psql "$DATABASE_URL" -f sql/012_leave_types.sql
 
 ## Migrations
 
-### `012_leave_types.sql`
+### `013_leave_types.sql`
 - **Purpose**: Creates the company-scoped `leave_types` table and seeds five starter types for every company that exists when the migration runs. The `(company_id, name)` unique constraint keeps each company's type in its own row.
 - **Seeded Defaults** (per company):
   - Annual: 15 days, no backdate, no document required
