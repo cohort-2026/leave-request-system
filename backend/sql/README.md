@@ -17,6 +17,7 @@ psql "$DATABASE_URL" -f sql/011_working_calendar.sql
 psql "$DATABASE_URL" -f sql/012_departments.sql
 psql "$DATABASE_URL" -f sql/013_leave_types.sql
 psql "$DATABASE_URL" -f sql/014_leave_balances.sql
+psql "$DATABASE_URL" -f sql/015_company_leave_rules.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -52,6 +53,8 @@ psql "$DATABASE_URL" -f sql/014_leave_balances.sql
   - Unpaid: 0 days, no backdate, no document required
   - Study: 5 days, no backdate, no document required
 - These values are **demo defaults, not legal advice**. An administrator can change them later.
+
+`015_company_leave_rules.sql` (issue 159) creates one reviewer/minimum-notice settings row per company, applies the manager / company-admin / zero-day defaults, and backfills existing companies.
 
 ## Demo password
 

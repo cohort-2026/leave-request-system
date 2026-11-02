@@ -15,6 +15,8 @@
 | `PATCH /api/companies/current/calendar` | `company_admin` of a company. Requires all seven weekday settings as booleans. Staff, managers, and platform are **403**. |
 | `POST /api/companies/current/holidays` | `company_admin` of a company. Adds a holiday using `{ date: "YYYY-MM-DD", name }`; duplicate dates in that company are **409**. |
 | `DELETE /api/companies/current/holidays/:id` | `company_admin` of a company. Deletes only a holiday belonging to that company; missing or other-company ids are **404**. |
+| `GET /api/companies/current/rules` | `company_admin` of a company. Returns that company’s reviewer and minimum-notice rules. |
+| `PATCH /api/companies/current/rules` | `company_admin` of a company. Updates valid reviewer settings and a non-negative integer minimum notice. |
 | `GET /api/companies/current/users` | `company_admin` of a company. Same-company people only. |
 | `GET /api/companies/current/onboarding-link` | `company_admin` of a company (`requireAuth` + `requireRole`). Does not return the raw token. |
 | `POST /api/companies/current/onboarding-link` | `company_admin` of a company. Creates or rotates the hashed invite URL. |
