@@ -799,6 +799,71 @@ select:disabled {
   text-align: start;
 }
 
+.calendar-settings {
+  display: grid;
+  gap: var(--spacing-section);
+  align-items: start;
+  max-width: 56rem;
+}
+
+.calendar-settings > * {
+  min-width: 0;
+}
+
+.calendar-settings h2 {
+  margin: 0;
+  font-size: var(--text-title-sm);
+  line-height: var(--text-title-sm--line-height);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+.calendar-settings .stack > p {
+  margin: 0;
+}
+
+.calendar-settings input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.calendar-settings .check-list {
+  display: grid;
+  gap: var(--spacing-field);
+}
+
+.calendar-settings .check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-stack);
+}
+
+.calendar-settings-table {
+  overflow-x: auto;
+}
+
+.calendar-settings .data-table td,
+.calendar-settings .data-table th {
+  vertical-align: middle;
+}
+
+.calendar-settings .data-table td.cell-action {
+  width: 1%;
+  text-align: end;
+  white-space: nowrap;
+}
+
+@media (min-width: 800px) {
+  .calendar-settings {
+    grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 1.15fr);
+  }
+}
+
 .empty-state {
   display: grid;
   gap: var(--spacing-field);
