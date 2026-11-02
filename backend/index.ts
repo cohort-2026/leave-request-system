@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
 import { billingRouter } from "./routes/billing.js";
 import { companiesRouter } from "./routes/companies.js";
-import { leaveRouter } from "./routes/leave.js";
+import { leaveRouter, userBalancesRouter } from "./routes/leave.js";
 import {
   adminLeaveTypesRouter,
   leaveTypesRouter,
@@ -34,6 +34,7 @@ app.use("/api/leave", leaveRouter);
 app.use("/api/leave-types", leaveTypesRouter);
 app.use("/api/admin/leave-types", adminLeaveTypesRouter);
 app.use("/api/ping", pingRouter);
+app.use("/api/users", userBalancesRouter);
 app.use("/api/users", usersRouter);
 
 app.use(
