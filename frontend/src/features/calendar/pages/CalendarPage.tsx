@@ -41,16 +41,23 @@ export function CalendarPage() {
       setIsLoading(true)
       setError(null)
       try {
+        // Calculate the first and last day of the visible month for the 'from' and 'to' params
+        const yearStr = currentYear.toString()
+        const monthStr = currentMonth.toString().padStart(2, '0')
+        
+        const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+        const lastDayStr = lastDay.toString().padStart(2, '0')
+
+        const fromParam = `${yearStr}-${monthStr}-01`
+        const toParam = `${yearStr}-${monthStr}-${lastDayStr}`
+
         const data = await fetchCalendarMarks({
-          scope: view,
-          year: currentYear,
-          month: currentMonth,
+          from: fromParam,
+          to: toParam,
         })
         
         if (isMounted) {
-          // Leave blocked-date samples out / ignore them entirely until Core features II
-          const filteredMarks = data.filter(mark => mark.kind !== 'blocked')
-          setMarks(filteredMarks)
+          setMarks(data)
         }
       } catch (err) {
         if (isMounted) {
@@ -68,7 +75,7 @@ export function CalendarPage() {
     return () => {
       isMounted = false
     }
-  }, [view, currentYear, currentMonth])
+  }, [currentYear, currentMonth])
 
   // Navigation handlers to shift months
   const handlePreviousMonth = () => {
@@ -110,7 +117,7 @@ export function CalendarPage() {
           year={currentYear}
           month={currentMonth}
           view={view}
-          marks={marks} // Real marks containing holidays and leave from API mapping
+          marks={marks} // Real mapped marks containing holidays and leave from API mapping
           action={
             view === 'own' ? undefined : (
               <Button variant="secondary" disabled>
