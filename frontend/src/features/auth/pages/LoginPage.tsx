@@ -17,6 +17,11 @@ import {
 
 type Step = 'password' | 'enroll' | 'totp' | 'recoveryCodes'
 
+// Mock company SSO (#118) is not wired yet. POST /api/auth/sso/start 404s
+// with HTML, which the login page surfaces as a generic error. Flip this
+// when the mock OIDC start route exists.
+const SHOW_SSO_LOGIN = false
+
 export function LoginPage() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
@@ -207,27 +212,31 @@ export function LoginPage() {
 
       {step === 'password' ? (
         <>
-          <form
-            className="auth-form"
-            onSubmit={handleSso}
-            aria-busy={ssoSubmitting}
-          >
-            {ssoError ? <Alert tone="error">{ssoError}</Alert> : null}
-            <TextField
-              label="Company slug or work email"
-              name="sso-identifier"
-              autoComplete="organization"
-              placeholder="acme or you@acme.com"
-              value={ssoIdentifier}
-              onChange={(event) => setSsoIdentifier(event.target.value)}
-              required
-              disabled={ssoSubmitting}
-            />
-            <Button variant="secondary" type="submit" disabled={ssoSubmitting}>
-              {ssoSubmitting ? 'Connecting…' : 'Sign in with company SSO'}
-            </Button>
-          </form>
-          <p className="auth-help">Or sign in with your password</p>
+          {SHOW_SSO_LOGIN ? (
+            <>
+              <form
+                className="auth-form"
+                onSubmit={handleSso}
+                aria-busy={ssoSubmitting}
+              >
+                {ssoError ? <Alert tone="error">{ssoError}</Alert> : null}
+                <TextField
+                  label="Company slug or work email"
+                  name="sso-identifier"
+                  autoComplete="organization"
+                  placeholder="acme or you@acme.com"
+                  value={ssoIdentifier}
+                  onChange={(event) => setSsoIdentifier(event.target.value)}
+                  required
+                  disabled={ssoSubmitting}
+                />
+                <Button variant="secondary" type="submit" disabled={ssoSubmitting}>
+                  {ssoSubmitting ? 'Connecting…' : 'Sign in with company SSO'}
+                </Button>
+              </form>
+              <p className="auth-help">Or sign in with your password</p>
+            </>
+          ) : null}
           <form
             className="auth-form"
             onSubmit={handlePassword}
