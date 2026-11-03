@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import {
@@ -6,28 +7,52 @@ import {
   type LeaveRequestSummary,
 } from '../../../shared/components'
 import { teamReviewPath } from '../../../shared/constants/paths'
-
-const sampleQueue: LeaveRequestSummary[] = [
-  {
-    id: 'demo',
-    requesterName: 'Thandi Nkosi',
-    leaveType: 'Sick',
-    startDate: '2026-09-07',
-    endDate: '2026-09-07',
-    status: 'pending',
-  },
-  {
-    id: 'tq-annual',
-    requesterName: 'Sipho Dlamini',
-    leaveType: 'Annual',
-    startDate: '2026-09-21',
-    endDate: '2026-09-25',
-    status: 'pending',
-  },
-]
+import { fetchTeamQueue } from '../leaveApi'
 
 export function TeamQueuePage() {
   const navigate = useNavigate()
+  const [queue, setQueue] = useState<LeaveRequestSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchTeamQueue()
+      .then((data) => {
+        setQueue(
+          data.map((item) => ({
+            id: item.id,
+            requesterName: item.employeeName,
+            leaveType: item.leaveType,
+            startDate: item.startDate,
+            endDate: item.endDate,
+            status: item.status,
+          })),
+        )
+        setLoading(false)
+      })
+      .catch((err) => {
+        setError(
+          err instanceof Error ? err.message : 'Failed to fetch team queue',
+        )
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) {
+    return (
+      <PageShell title="Team queue" eyebrow="Manager · company admin">
+        <p className="text-muted">Loading team queue...</p>
+      </PageShell>
+    )
+  }
+
+  if (error) {
+    return (
+      <PageShell title="Team queue" eyebrow="Manager · company admin">
+        <p className="text-red-500">Error: {error}</p>
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell title="Team queue" eyebrow="Manager · company admin">
@@ -36,13 +61,13 @@ export function TeamQueuePage() {
       </p>
       <div className="flex flex-wrap gap-stack">
         <p className="bg-surface p-section">
-          <span className="text-title">{sampleQueue.length}</span>
+          <span className="text-title">{queue.length}</span>
           <br />
           <span className="text-muted">Waiting for a decision</span>
         </p>
       </div>
       <DataTable
-        data={sampleQueue}
+        data={queue}
         keyExtractor={(row) => row.id}
         emptyTitle="No requests in the queue"
         emptyDescription="Team leave waiting for a decision will show here."
