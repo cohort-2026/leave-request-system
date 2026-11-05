@@ -11,7 +11,10 @@ import {
   leaveSubmitted,
   sendMail,
 } from "../mail/index.js";
-import { listBalances } from "../leave/balances.js";
+import {
+  applyApprovedLeaveToBalance,
+  listBalances,
+} from "../leave/balances.js";
 import { countWorkingDays, type WorkingDayFlags } from "../leave/workingDays.js";
 import { hasOverlappingLeaveRequest } from "../leave/overlap.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -31,6 +34,8 @@ const uploadsDirectory = resolve(
   "leave",
 );
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const AUTO_APPROVE_REASON =
+  "Automatically approved because no other eligible reviewer is available";
 type Queryable = Pool | PoolClient;
 
 const leaveUpload = multer({
@@ -432,7 +437,8 @@ leaveRouter.post(
       let request: LeaveRequestRow;
       let leaveTypeName: string;
       let workingDaysCount: number;
-      let reviewer: { id: number; email: string; name: string } | null;
+      let reviewer: { id: number; email: string; name: string } | null =
+        null;
 
       try {
         await client.query("BEGIN");
@@ -540,7 +546,9 @@ leaveRouter.post(
           req.user!.role,
           client,
         );
-        if (!reviewer) {
+        const autoApprove =
+          !reviewer && req.user!.role === "company_admin";
+        if (!reviewer && !autoApprove) {
           throw new LeaveRequestError(
             "No eligible reviewer is available for this request",
             409,
@@ -559,9 +567,13 @@ leaveRouter.post(
              supporting_file_name,
              supporting_file_key,
              status,
-             reviewer_user_id
+             reviewer_user_id,
+             reviewed_at,
+             decision_reason
            )
-           VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', $10)
+           VALUES (
+             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13
+           )
            RETURNING
              id,
              status,
@@ -579,10 +591,27 @@ leaveRouter.post(
             reason || null,
             uploadedFile?.originalname ?? null,
             uploadedFile ? basename(uploadedFile.filename) : null,
-            reviewer.id,
+            autoApprove ? "approved" : "pending",
+            reviewer?.id ?? null,
+            autoApprove ? new Date() : null,
+            autoApprove ? AUTO_APPROVE_REASON : null,
           ],
         );
         request = insertResult.rows[0];
+        if (autoApprove) {
+          const applied = await applyApprovedLeaveToBalance(
+            req.user!.id,
+            companyId,
+            leaveTypeId,
+            workingDaysCount,
+            client,
+          );
+          if (!applied) {
+            throw new LeaveRequestError(
+              `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+            );
+          }
+        }
         await client.query("COMMIT");
         keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
@@ -592,30 +621,36 @@ leaveRouter.post(
         client.release();
       }
 
-      try {
-        await sendMail({
-          to: reviewer.email,
-          ...leaveSubmitted({
+      if (reviewer) {
+        try {
+          await sendMail({
+            to: reviewer.email,
+            ...leaveSubmitted({
+              requestId: request.id,
+              reviewerName: reviewer.name,
+              requesterName: req.user!.display_name ?? req.user!.email,
+              leaveTypeName,
+              startDate: request.start_date,
+              endDate: request.end_date,
+              workingDaysCount,
+              actionUrl: new URL(
+                `/team/queue/${request.id}`,
+                appOrigin(),
+              ).toString(),
+            }),
+          });
+        } catch (error) {
+          console.error("Reviewer notification failed for leave request", {
             requestId: request.id,
-            reviewerName: reviewer.name,
-            requesterName: req.user!.display_name ?? req.user!.email,
-            leaveTypeName,
-            startDate: request.start_date,
-            endDate: request.end_date,
-            workingDaysCount,
-            actionUrl: new URL(`/team/queue/${request.id}`, appOrigin()).toString(),
-          }),
-        });
-      } catch (error) {
-        console.error("Reviewer notification failed for leave request", {
-          requestId: request.id,
-          message: error instanceof Error ? error.message : "Unknown error",
-        });
-        res.status(502).json({
-          error: "Leave request was saved, but the reviewer could not be notified",
-          leaveRequestId: request.id,
-        });
-        return;
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
+          res.status(502).json({
+            error:
+              "Leave request was saved, but the reviewer could not be notified",
+            leaveRequestId: request.id,
+          });
+          return;
+        }
       }
 
       res.status(201).json({

@@ -88,8 +88,9 @@ export function RulesPage() {
         Set who reviews leave requests and the minimum notice required.
       </p>
       <Alert tone="info">
-        The system does not auto-approve requests. A human must approve or
-        reject each request.
+        A human must approve or reject each request, except when a company
+        admin has no other eligible reviewer. That request is approved
+        automatically.
       </Alert>
       {loadError ? <Alert tone="error">{loadError}</Alert> : null}
       {saveError ? <Alert tone="error">{saveError}</Alert> : null}
