@@ -30,7 +30,7 @@ export async function fetchCalendarMarks({ from, to }: FetchMarksParams): Promis
   const queryParams = new URLSearchParams({ from, to })
 
   // Use apiRequest to ensure lrs_session cookie is sent automatically (credentials: 'include')
-  const response = await apiRequest<BackendCalendarResponse>(`/calendar?${queryParams.toString()}`, {
+  const response = await apiRequest<BackendCalendarResponse>(`/api/calendar?${queryParams.toString()}`, {
     method: 'GET',
   })
 
