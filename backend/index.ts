@@ -10,6 +10,7 @@ import {
   adminLeaveTypesRouter,
   leaveTypesRouter,
 } from "./routes/leave-types.js";
+import { calendarRouter } from "./routes/calendar.js";
 import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
 
@@ -32,6 +33,7 @@ app.use("/api/billing", billingRouter);
 app.use("/api/companies", companiesRouter);
 app.use("/api/leave", leaveRouter);
 app.use("/api/leave-types", leaveTypesRouter);
+app.use("/api/calendar", calendarRouter);
 app.use("/api/admin/leave-types", adminLeaveTypesRouter);
 app.use("/api/ping", pingRouter);
 app.use("/api/users", userBalancesRouter);
