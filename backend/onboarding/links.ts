@@ -1,4 +1,5 @@
 import { pool } from "../db.js";
+import { grantDefaultBalances } from "../leave/balances.js";
 import { appOrigin } from "../mail/index.js";
 import type { UserRow } from "../session.js";
 import { hashOnboardingToken, newOnboardingToken } from "./tokens.js";
@@ -127,8 +128,10 @@ export async function onboardWithInvite(input: {
         company.company_id,
       ],
     );
+    const user = inserted.rows[0];
+    await grantDefaultBalances(user.id, company.company_id, client);
     await client.query("COMMIT");
-    return inserted.rows[0];
+    return user;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

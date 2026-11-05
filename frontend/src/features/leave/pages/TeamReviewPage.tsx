@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
-import { Button, Modal, TextField } from '../../../shared/components'
+import { ApiError } from '../../../services/api'
+import { Alert, Button, Modal, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import {
   approveTeamRequest,
@@ -9,6 +10,10 @@ import {
   rejectTeamRequest,
   type TeamQueueItem,
 } from '../leaveApi'
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof ApiError ? error.message : fallback
+}
 
 export function TeamReviewPage() {
   const { id } = useParams()
@@ -33,12 +38,10 @@ export function TeamReviewPage() {
           setLoadedId(id)
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (active) {
           setError(
-            err instanceof Error
-              ? err.message
-              : 'Failed to fetch leave request details',
+            getErrorMessage(err, 'Could not load this leave request.'),
           )
           setLoadedId(id)
         }
@@ -58,9 +61,7 @@ export function TeamReviewPage() {
       await approveTeamRequest(id)
       navigate(paths.teamQueue)
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : 'Failed to approve request',
-      )
+      setActionError(getErrorMessage(err, 'Could not approve this request.'))
     } finally {
       setSubmitting(false)
     }
@@ -77,9 +78,7 @@ export function TeamReviewPage() {
       await rejectTeamRequest(id, trimmedReason)
       navigate(paths.teamQueue)
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : 'Failed to reject request',
-      )
+      setActionError(getErrorMessage(err, 'Could not reject this request.'))
     } finally {
       setSubmitting(false)
     }
@@ -88,9 +87,7 @@ export function TeamReviewPage() {
   if (!id) {
     return (
       <PageShell title="Review leave" eyebrow="A decision">
-        <p className="text-red-500" role="alert">
-          A leave request ID is required.
-        </p>
+        <Alert tone="error">A leave request ID is required.</Alert>
         <Link to={paths.teamQueue}>Back to queue</Link>
       </PageShell>
     )
@@ -107,9 +104,7 @@ export function TeamReviewPage() {
   if (error || !request) {
     return (
       <PageShell title="Review leave" eyebrow="A decision">
-        <p className="text-red-500" role="alert">
-          Error: {error ?? 'Leave request not found'}
-        </p>
+        <Alert tone="error">{error ?? 'Leave request not found'}</Alert>
         <Link to={paths.teamQueue}>Back to queue</Link>
       </PageShell>
     )
@@ -135,9 +130,7 @@ export function TeamReviewPage() {
         </p>
       </div>
       {actionError && !rejectOpen ? (
-        <p className="text-red-500" role="alert">
-          {actionError}
-        </p>
+        <Alert tone="error">{actionError}</Alert>
       ) : null}
       <p className="actions">
         <Button
@@ -176,11 +169,7 @@ export function TeamReviewPage() {
             onChange={(event) => setReason(event.target.value)}
             required
           />
-          {actionError ? (
-            <p className="text-red-500" role="alert">
-              {actionError}
-            </p>
-          ) : null}
+          {actionError ? <Alert tone="error">{actionError}</Alert> : null}
           <div className="actions">
             <Button
               variant="danger"

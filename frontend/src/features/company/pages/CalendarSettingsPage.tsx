@@ -4,9 +4,10 @@ import { ApiError } from '../../../services/api'
 import {
   Alert,
   Button,
+  DataTable,
   DateField,
-  EmptyState,
   TextField,
+  type DataTableColumn,
 } from '../../../shared/components'
 import {
   createPublicHoliday,
@@ -33,6 +34,40 @@ const WEEKDAYS: {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
+}
+
+function holidayColumns(
+  removingHolidayId: number | null,
+  onRemove: (holiday: PublicHoliday) => void,
+): DataTableColumn<PublicHoliday>[] {
+  return [
+    {
+      key: 'date',
+      header: 'Date',
+      render: (holiday) => holiday.date,
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (holiday) => holiday.name,
+    },
+    {
+      key: 'remove',
+      header: '',
+      className: 'cell-action',
+      render: (holiday) => (
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => onRemove(holiday)}
+          disabled={removingHolidayId !== null}
+          aria-label={`Remove ${holiday.name} on ${holiday.date}`}
+        >
+          {removingHolidayId === holiday.id ? 'Removing…' : 'Remove'}
+        </Button>
+      ),
+    },
+  ]
 }
 
 export function CalendarSettingsPage() {
@@ -196,13 +231,14 @@ export function CalendarSettingsPage() {
       {loading ? (
         <p className="muted">Loading calendar settings…</p>
       ) : calendar ? (
-        <>
-          <section aria-labelledby="working-days-heading">
+        <div className="calendar-settings">
+          <section className="stack" aria-labelledby="working-days-heading">
             <h2 id="working-days-heading">Working days</h2>
-            <div className="flex flex-col gap-stack">
+            <div className="check-list">
               {WEEKDAYS.map(({ field, label }) => (
-                <label key={field} className="flex items-center gap-stack">
+                <label key={field} className="check-row" htmlFor={field}>
                   <input
+                    id={field}
                     type="checkbox"
                     name={field}
                     checked={calendar[field]}
@@ -224,45 +260,25 @@ export function CalendarSettingsPage() {
             </Button>
           </section>
 
-          <section aria-labelledby="public-holidays-heading">
+          <section className="stack" aria-labelledby="public-holidays-heading">
             <h2 id="public-holidays-heading">Public holidays</h2>
             <p className="muted">
               Holidays are excluded from the day count; they are not blocked
               dates.
             </p>
-            {calendar.holidays.length > 0 ? (
-              <ul className="flex flex-col gap-stack">
-                {calendar.holidays.map((holiday) => (
-                  <li
-                    key={holiday.id}
-                    className="flex items-center justify-between gap-stack"
-                  >
-                    <span>
-                      <strong>{holiday.name}</strong> — {holiday.date}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void handleRemoveHoliday(holiday)}
-                      disabled={removingHolidayId !== null}
-                      aria-label={`Remove ${holiday.name} on ${holiday.date}`}
-                    >
-                      {removingHolidayId === holiday.id
-                        ? 'Removing…'
-                        : 'Remove'}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState
-                title="No public holidays"
-                description="Add a holiday date for your company."
+            <div className="calendar-settings-table">
+              <DataTable
+                data={calendar.holidays}
+                keyExtractor={(holiday) => String(holiday.id)}
+                emptyTitle="No public holidays"
+                emptyDescription="Add a holiday date for your company."
+                columns={holidayColumns(removingHolidayId, (holiday) => {
+                  void handleRemoveHoliday(holiday)
+                })}
               />
-            )}
-
+            </div>
             <form
-              className="flex flex-col gap-stack"
+              className="stack"
               onSubmit={(event) => void handleAddHoliday(event)}
             >
               <DateField
@@ -290,7 +306,7 @@ export function CalendarSettingsPage() {
               </Button>
             </form>
           </section>
-        </>
+        </div>
       ) : null}
     </PageShell>
   )

@@ -5,6 +5,11 @@ import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.js";
 import { billingRouter } from "./routes/billing.js";
 import { companiesRouter } from "./routes/companies.js";
+import { leaveRouter, userBalancesRouter } from "./routes/leave.js";
+import {
+  adminLeaveTypesRouter,
+  leaveTypesRouter,
+} from "./routes/leave-types.js";
 import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
 
@@ -25,7 +30,11 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/companies", companiesRouter);
+app.use("/api/leave", leaveRouter);
+app.use("/api/leave-types", leaveTypesRouter);
+app.use("/api/admin/leave-types", adminLeaveTypesRouter);
 app.use("/api/ping", pingRouter);
+app.use("/api/users", userBalancesRouter);
 app.use("/api/users", usersRouter);
 
 app.use(

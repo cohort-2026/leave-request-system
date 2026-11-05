@@ -15,6 +15,10 @@ psql "$DATABASE_URL" -f sql/009_billing.sql
 psql "$DATABASE_URL" -f sql/010_company_id_tenancy.sql
 psql "$DATABASE_URL" -f sql/011_working_calendar.sql
 psql "$DATABASE_URL" -f sql/012_departments.sql
+psql "$DATABASE_URL" -f sql/013_leave_types.sql
+psql "$DATABASE_URL" -f sql/014_leave_balances.sql
+psql "$DATABASE_URL" -f sql/015_company_leave_rules.sql
+psql "$DATABASE_URL" -f sql/016_leave_requests.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -36,6 +40,24 @@ psql "$DATABASE_URL" -f sql/012_departments.sql
 `011_working_calendar.sql` (issue 143) adds Monday–Friday working-day defaults and Saturday–Sunday non-working defaults to each company, backfills existing companies, and creates `public_holidays` with a unique date per company.
 
 `012_departments.sql` (issue 157) adds company-scoped departments and user assignments, with composite foreign keys preventing a manager or user from being assigned across companies.
+
+`014_leave_balances.sql` creates company-, user-, and leave-type-linked balances, then initializes one row for each non-platform user's company leave types using `default_days`. Platform users receive no balances, and company scoping prevents users from receiving another company's leave types. Re-running the seed leaves existing balances unchanged.
+
+## Migrations
+
+### `013_leave_types.sql`
+- **Purpose**: Creates the company-scoped `leave_types` table and seeds five starter types for every company that exists when the migration runs. The `(company_id, name)` unique constraint keeps each company's type in its own row.
+- **Seeded Defaults** (per company):
+  - Annual: 15 days, no backdate, no document required
+  - Sick: 10 days, backdate allowed, document required after 2 days
+  - Family responsibility: 3 days, backdate allowed, no document required
+  - Unpaid: 0 days, no backdate, no document required
+  - Study: 5 days, no backdate, no document required
+- These values are **demo defaults, not legal advice**. An administrator can change them later.
+
+`015_company_leave_rules.sql` (issue 159) creates one reviewer/minimum-notice settings row per company, applies the manager / company-admin / zero-day defaults, and backfills existing companies.
+
+`016_leave_requests.sql` (issue 163) creates the official leave request records, including working-day count, supporting-file metadata, submission/cancellation timestamps, and reviewer decision fields.
 
 ## Demo password
 

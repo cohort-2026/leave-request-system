@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { quotePlan, VAT_RATE_BP, type PlanQuote } from "../billing/catalog.js";
 import { pool } from "../db.js";
+import { grantDefaultBalances } from "../leave/balances.js";
+import { seedDefaultLeaveTypes } from "../leave/seedTypes.js";
 import type { UserRow } from "../session.js";
 
 export type SignupCompany = {
@@ -287,6 +289,8 @@ export async function completePaidSignup(
       throw new Error("Could not allocate a company slug");
     }
 
+    await seedDefaultLeaveTypes(company.id, client);
+
     const insertedUser = await client.query<UserRow>(
       `INSERT INTO users (
          email, password_hash, role, status, display_name, company_name, company_id
@@ -301,6 +305,7 @@ export async function completePaidSignup(
         company.id,
       ],
     );
+    await grantDefaultBalances(insertedUser.rows[0].id, company.id, client);
 
     const period = await client.query<{
       period_start: Date;
