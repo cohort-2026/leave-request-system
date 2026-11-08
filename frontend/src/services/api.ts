@@ -1,3 +1,5 @@
+import { undevelopedFeatureMessage } from './unimplementedApiFeatures'
+
 export class ApiError extends Error {
   status: number
   fieldErrors: Record<string, string>
@@ -53,7 +55,11 @@ function getFieldErrors(errors: unknown): Record<string, string> {
   )
 }
 
-async function parseError(response: Response) {
+async function parseError(
+  response: Response,
+  path: string,
+  method: string,
+) {
   let body: ApiErrorBody = {}
 
   try {
@@ -62,12 +68,31 @@ async function parseError(response: Response) {
     // Keep the status-based fallback below.
   }
 
-  const message =
+  const jsonMessage =
     typeof body.message === 'string'
       ? body.message
       : typeof body.error === 'string'
         ? body.error
-        : 'Something went wrong. Please try again.'
+        : null
+
+  if (jsonMessage) {
+    return new ApiError(
+      jsonMessage,
+      response.status,
+      getFieldErrors(body.errors),
+    )
+  }
+
+  const undeveloped =
+    response.status === 404
+      ? undevelopedFeatureMessage(path, method)
+      : null
+
+  const message =
+    undeveloped ??
+    (response.status === 404
+      ? 'This feature is still being developed.'
+      : 'Something went wrong. Please try again.')
 
   return new ApiError(message, response.status, getFieldErrors(body.errors))
 }
@@ -78,7 +103,11 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers)
 
-  if (options.body && !headers.has('Content-Type')) {
+  if (
+    options.body &&
+    !headers.has('Content-Type') &&
+    !(typeof FormData !== 'undefined' && options.body instanceof FormData)
+  ) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -92,7 +121,7 @@ export async function apiRequest<T>(
   })
 
   if (!response.ok) {
-    throw await parseError(response)
+    throw await parseError(response, path, options.method ?? 'GET')
   }
 
   if (response.status === 204) {

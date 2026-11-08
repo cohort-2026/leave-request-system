@@ -53,6 +53,26 @@ export async function listBalances(
   return result.rows.map(toPublicBalance);
 }
 
+export async function applyApprovedLeaveToBalance(
+  userId: number,
+  companyId: number,
+  leaveTypeId: number,
+  workingDaysCount: number,
+  executor: Queryable,
+): Promise<boolean> {
+  const result = await executor.query(
+    `UPDATE leave_balances
+     SET days_used = days_used + $4,
+         days_remaining = days_remaining - $4
+     WHERE company_id = $1
+       AND user_id = $2
+       AND leave_type_id = $3
+       AND days_remaining >= $4`,
+    [companyId, userId, leaveTypeId, workingDaysCount],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function grantDefaultBalances(
   userId: number,
   companyId: number,
