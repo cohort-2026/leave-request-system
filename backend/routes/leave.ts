@@ -37,6 +37,8 @@ const uploadsDirectory = resolve(
   "leave",
 );
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const AUTO_APPROVE_REASON =
+  "Automatically approved because no other eligible reviewer is available";
 type Queryable = Pool | PoolClient;
 
 const leaveUpload = multer({
@@ -547,7 +549,9 @@ leaveRouter.post(
           req.user!.role,
           client,
         );
-        if (!reviewer) {
+        const autoApprove =
+          !reviewer && req.user!.role === "company_admin";
+        if (!reviewer && !autoApprove) {
           throw new LeaveRequestError(
             "No eligible reviewer is available for this request",
             409,
@@ -566,10 +570,12 @@ leaveRouter.post(
              supporting_file_name,
              supporting_file_key,
              status,
-             reviewer_user_id
+             reviewer_user_id,
+             reviewed_at,
+             decision_reason
            )
            VALUES (
-             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', $10
+             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13
            )
            RETURNING
              id,
@@ -588,10 +594,27 @@ leaveRouter.post(
             reason || null,
             uploadedFile?.originalname ?? null,
             uploadedFile ? basename(uploadedFile.filename) : null,
-            reviewer.id,
+            autoApprove ? "approved" : "pending",
+            reviewer?.id ?? null,
+            autoApprove ? new Date() : null,
+            autoApprove ? AUTO_APPROVE_REASON : null,
           ],
         );
         request = insertResult.rows[0];
+        if (autoApprove) {
+          const applied = await applyApprovedLeaveToBalance(
+            req.user!.id,
+            companyId,
+            leaveTypeId,
+            workingDaysCount,
+            client,
+          );
+          if (!applied) {
+            throw new LeaveRequestError(
+              `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+            );
+          }
+        }
         await client.query("COMMIT");
         keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
