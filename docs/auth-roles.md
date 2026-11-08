@@ -11,6 +11,11 @@
 | `POST /api/companies/signup/mock-pay` | Anyone (no login), local only. Completes checkout and creates the company admin. No session cookie. |
 | `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
 | `GET /api/companies/current` | Any signed-in company user (`requireAuth` plus a `company_id`). Platform **403**. |
+| `GET /api/companies/current/sso` | `company_admin` of a company. Returns `{ issuer, clientId, emailDomain, enabled, clientSecretConfigured }`. Never returns the raw secret. |
+| `PUT /api/companies/current/sso` | `company_admin` of a company. Body `{ issuer, clientId, clientSecret?, emailDomain, enabled }`. Omitting `clientSecret` keeps the stored cipher. Never returns the raw secret. |
+| `POST /api/auth/sso/start` | Anyone (no login). Body `{ identifier }` (company slug or work email). Local mock only: **200** `{ authorizationUrl }`. Unknown company or SSO off: **404**. `NODE_ENV === "production"`: **503**. |
+| `GET /api/auth/sso/start?company=` | Anyone (no login). Same lookup as POST; local mock **302** to the mock authorize page. Production **503**. |
+| `GET /api/auth/sso/callback` | Anyone (no login). Mock OIDC callback. Matches an existing user in that company, sets `lrs_session`, skips password and TOTP. Unprovisioned email: **403**. Cross-company email: **403**. Production **503**. |
 | `GET /api/companies/current/calendar` | `company_admin` of a company. Returns its seven working-day flags and holidays. |
 | `PATCH /api/companies/current/calendar` | `company_admin` of a company. Requires all seven weekday settings as booleans. Staff, managers, and platform are **403**. |
 | `POST /api/companies/current/holidays` | `company_admin` of a company. Adds a holiday using `{ date: "YYYY-MM-DD", name }`; duplicate dates in that company are **409**. |

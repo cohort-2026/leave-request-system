@@ -17,10 +17,7 @@ import {
 
 type Step = 'password' | 'enroll' | 'totp' | 'recoveryCodes'
 
-// Mock company SSO (#118) is not wired yet. POST /api/auth/sso/start 404s
-// with HTML, which the login page surfaces as a generic error. Flip this
-// when the mock OIDC start route exists.
-const SHOW_SSO_LOGIN = false
+const SHOW_SSO_LOGIN = true
 
 export function LoginPage() {
   const { signIn } = useAuth()

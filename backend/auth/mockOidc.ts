@@ -1,26 +1,25 @@
-export interface MockOidcUser {
+export type MockOidcUser = {
   email: string;
   sub: string;
-}
+};
 
-export function getMockOidcAuthorizeUrl(issuer: string, clientId: string, redirectUri: string, state: string): string {
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    state,
-    response_type: "code",
-    scope: "openid email profile",
-  });
-  return `${issuer}/authorize?${params.toString()}`;
+const CODE_PREFIX = "mock_code_";
+
+export function mockOidcCodeForEmail(email: string): string {
+  return `${CODE_PREFIX}${Buffer.from(email.trim().toLowerCase()).toString("base64url")}`;
 }
 
 export function exchangeMockOidcCodeForUser(code: string): MockOidcUser {
-  if (code.startsWith("mock_code_")) {
-    const encodedEmail = code.replace("mock_code_", "");
-    return {
-      email: encodedEmail,
-      sub: `mock_sub_${Buffer.from(encodedEmail).toString("hex")}`,
-    };
+  if (!code.startsWith(CODE_PREFIX)) {
+    throw new Error("Invalid OIDC mock code specification");
   }
-  throw new Error("Invalid OIDC mock code specification");
+  const encoded = code.slice(CODE_PREFIX.length);
+  const email = Buffer.from(encoded, "base64url").toString("utf8").trim().toLowerCase();
+  if (!email.includes("@")) {
+    throw new Error("Invalid OIDC mock code specification");
+  }
+  return {
+    email,
+    sub: `mock_sub_${Buffer.from(email).toString("hex")}`,
+  };
 }
