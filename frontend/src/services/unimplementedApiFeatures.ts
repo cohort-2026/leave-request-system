@@ -13,30 +13,7 @@ type UnimplementedApiFeature = {
 const UNIMPLEMENTED_API_FEATURES: readonly UnimplementedApiFeature[] = [
   {
     methods: ['GET'],
-    match: (pathname) => pathname === '/api/team/queue',
-    issue: 170,
-  },
-  {
-    methods: ['POST'],
-    match: (pathname) => /^\/api\/leave\/[^/]+\/approve$/.test(pathname),
-    issue: 170,
-  },
-  {
-    methods: ['POST'],
-    match: (pathname) => /^\/api\/leave\/[^/]+\/reject$/.test(pathname),
-    issue: 170,
-  },
-  {
-    methods: ['GET'],
     match: (pathname) => pathname === '/api/leave',
-    issue: 167,
-  },
-  {
-    methods: ['GET'],
-    match: (pathname) =>
-      /^\/api\/leave\/[^/]+$/.test(pathname) &&
-      pathname !== '/api/leave/preview' &&
-      pathname !== '/api/leave/balances',
     issue: 167,
   },
   {

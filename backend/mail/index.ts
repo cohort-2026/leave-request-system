@@ -5,4 +5,5 @@ export { verifyEmail } from "./templates/verify-email.js";
 export { resetPasswordEmail } from "./templates/reset-password.js";
 export { resetAuthenticatorEmail } from "./templates/reset-authenticator.js";
 export { leaveSubmitted } from "./templates/leave-submitted.js";
+export { leaveDecision } from "./templates/leave-decision.js";
 export { appOrigin } from "./config.js";
