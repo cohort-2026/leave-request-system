@@ -273,6 +273,42 @@ DELETE FROM login_challenges
 WHERE user_id = (SELECT id FROM users WHERE email = 'staff@leave.local');
 ```
 
+### `GET /api/companies/current/sso` — `company_admin`
+
+Never returns the raw client secret. Empty settings when none are saved.
+
+- 200 `{ "issuer", "clientId", "emailDomain", "enabled", "clientSecretConfigured" }`
+- 401 `{ "error": "Not signed in" }`
+- 403 staff, manager, platform, or a company admin with no company
+
+### `PUT /api/companies/current/sso` — `company_admin`
+
+Body: `{ "issuer", "clientId", "clientSecret?", "emailDomain", "enabled" }`. The secret is encrypted at rest (`client_secret_cipher`). Leave `clientSecret` blank to keep the stored value. A first save needs a secret.
+
+- 200 same shape as GET
+- 400 missing issuer / client id / email domain, or missing secret on first save
+- 401 / 403 as for GET
+
+### `POST /api/auth/sso/start` — anyone
+
+Body: `{ "identifier" }` (company slug such as `acme`, or a work email such as `staff@leave.local`). Local/dev mock only (`NODE_ENV !== "production"`, same gate as mock-pay). SSO users skip password and TOTP; the session cookie is still `lrs_session`.
+
+- 200 `{ "authorizationUrl" }` pointing at this app’s mock authorize page
+- 400 missing identifier
+- 404 company unknown or SSO disabled
+- 503 in production (no live IdP redirect)
+
+`GET /api/auth/sso/start?company=` does the same lookup and **302**s to that URL.
+
+### `GET /api/auth/sso/callback` — anyone
+
+Mock OIDC callback. Validates `code` + `state`, matches the email to an existing user in **that** company, sets `lrs_session`, redirects to `APP_ORIGIN`. Does **not** JIT-create users. Does **not** run app password or TOTP.
+
+- 302 to `/` with `lrs_session`
+- 403 `{ "error": "Ask your admin to provision your account." }` when the email is not provisioned in that company
+- 403 cross-company email (Khumalo cannot finish Acme’s callback)
+- 503 in production
+
 See `docs/auth-roles.md` for who may call which address.
 
 ## Transactional email

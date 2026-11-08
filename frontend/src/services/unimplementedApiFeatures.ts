@@ -16,16 +16,6 @@ const UNIMPLEMENTED_API_FEATURES: readonly UnimplementedApiFeature[] = [
     match: (pathname) => pathname === '/api/home',
     issue: 173,
   },
-  {
-    methods: ['POST'],
-    match: (pathname) => pathname === '/api/auth/sso/start',
-    issue: 194,
-  },
-  {
-    methods: ['GET', 'PATCH'],
-    match: (pathname) => pathname === '/api/companies/current/sso',
-    issue: 118,
-  },
 ]
 
 function pathnameOf(path: string): string {

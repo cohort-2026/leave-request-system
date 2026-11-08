@@ -19,6 +19,7 @@ psql "$DATABASE_URL" -f sql/013_leave_types.sql
 psql "$DATABASE_URL" -f sql/014_leave_balances.sql
 psql "$DATABASE_URL" -f sql/015_company_leave_rules.sql
 psql "$DATABASE_URL" -f sql/016_leave_requests.sql
+psql "$DATABASE_URL" -f sql/017_company_sso.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -58,6 +59,8 @@ psql "$DATABASE_URL" -f sql/016_leave_requests.sql
 `015_company_leave_rules.sql` (issue 159) creates one reviewer/minimum-notice settings row per company, applies the manager / company-admin / zero-day defaults, and backfills existing companies.
 
 `016_leave_requests.sql` (issue 163) creates the official leave request records, including working-day count, supporting-file metadata, submission/cancellation timestamps, and reviewer decision fields.
+
+`017_company_sso.sql` (issues 117 and 118) stores per-company OIDC settings. The client secret is a cipher column, not plaintext. An enabled flag and optional email domain are included.
 
 ## Demo password
 
