@@ -17,6 +17,7 @@ import {
 import { calendarRouter } from "./routes/calendar.js";
 import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
+import { ssoRouter } from "./routes/sso.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -43,6 +44,7 @@ app.use("/api/admin/leave-types", adminLeaveTypesRouter);
 app.use("/api/ping", pingRouter);
 app.use("/api/users", userBalancesRouter);
 app.use("/api/users", usersRouter);
+app.use("/api", ssoRouter);
 
 app.use(
   (
