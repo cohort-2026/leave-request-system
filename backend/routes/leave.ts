@@ -749,7 +749,7 @@ function toMyLeaveItem(row: MyLeaveRow) {
 }
 
 leaveRouter.get(
-  "/mine",
+  "/",
   requireAuth,
   requireRole("staff", "manager", "company_admin"),
   async (req, res) => {
@@ -767,7 +767,7 @@ leaveRouter.get(
   },
 );
 
-leaveRouter.put(
+leaveRouter.patch(
   "/:id",
   requireAuth,
   requireRole("staff", "manager", "company_admin"),
@@ -1247,14 +1247,15 @@ leaveRouter.get(
     }
 
     const request = await loadQueueRequest(id);
-    if (!request) {
+    if (!request || request.company_id !== companyId) {
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
     const isOwner = request.employee_user_id === req.user!.id;
     if (
-      request.company_id !== companyId ||
-      (!isOwner && !canSeeInQueue(req.user!, request))
+      !isOwner &&
+      !canSeeInQueue(req.user!, request) &&
+      !canDecide(req.user!, request)
     ) {
       res.status(403).json({ error: "You are not allowed to do that" });
       return;
@@ -1311,12 +1312,6 @@ leaveRouter.post(
       if (request.status !== "pending") {
         throw new LeaveRequestError("Only pending requests can be cancelled");
       }
-      if (!request.reviewer_email || !request.reviewer_name) {
-        throw new LeaveRequestError(
-          "The assigned reviewer cannot be notified, so this request cannot be cancelled",
-          409,
-        );
-      }
 
       const update = await client.query(
         `UPDATE leave_requests
@@ -1354,40 +1349,34 @@ leaveRouter.post(
       client.release();
     }
 
-    if (!cancelled.reviewer_email || !cancelled.reviewer_name) {
-      res.status(502).json({
-        error: "Request was cancelled, but the reviewer could not be notified",
-        leaveRequestId: cancelled.id,
-      });
-      return;
-    }
-
-    try {
-      await sendMail({
-        to: cancelled.reviewer_email,
-        ...leaveCancelled({
+    if (cancelled.reviewer_email && cancelled.reviewer_name) {
+      try {
+        await sendMail({
+          to: cancelled.reviewer_email,
+          ...leaveCancelled({
+            requestId: cancelled.id,
+            reviewerName: cancelled.reviewer_name,
+            requesterName: cancelled.employee_name,
+            leaveTypeName: cancelled.leave_type,
+            startDate: cancelled.start_date,
+            endDate: cancelled.end_date,
+            actionUrl: new URL(
+              `/team/queue/${cancelled.id}`,
+              appOrigin(),
+            ).toString(),
+          }),
+        });
+      } catch (error) {
+        console.error("Reviewer cancellation notification failed", {
           requestId: cancelled.id,
-          reviewerName: cancelled.reviewer_name,
-          requesterName: cancelled.employee_name,
-          leaveTypeName: cancelled.leave_type,
-          startDate: cancelled.start_date,
-          endDate: cancelled.end_date,
-          actionUrl: new URL(
-            `/team/queue/${cancelled.id}`,
-            appOrigin(),
-          ).toString(),
-        }),
-      });
-    } catch (error) {
-      console.error("Reviewer cancellation notification failed", {
-        requestId: cancelled.id,
-        message: error instanceof Error ? error.message : "Unknown error",
-      });
-      res.status(502).json({
-        error: "Request was cancelled, but the reviewer could not be notified",
-        leaveRequestId: cancelled.id,
-      });
-      return;
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+        res.status(502).json({
+          error: "Request was cancelled, but the reviewer could not be notified",
+          leaveRequestId: cancelled.id,
+        });
+        return;
+      }
     }
 
     res.json(toMyLeaveItem(cancelled));

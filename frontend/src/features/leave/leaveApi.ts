@@ -102,13 +102,13 @@ export function updateLeaveRequest(
   },
 ): Promise<MyLeaveRequest> {
   return apiRequest<MyLeaveRequest>(`/api/leave/${id}`, {
-    method: 'PUT',
+    method: 'PATCH',
     body: leaveRequestForm(input),
   })
 }
 
 export function fetchMyLeaveRequests(): Promise<MyLeaveRequest[]> {
-  return apiRequest<MyLeaveRequest[]>('/api/leave/mine')
+  return apiRequest<MyLeaveRequest[]>('/api/leave')
 }
 
 export function fetchMyLeaveRequest(id: string): Promise<MyLeaveRequest> {
