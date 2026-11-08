@@ -20,6 +20,8 @@ psql "$DATABASE_URL" -f sql/014_leave_balances.sql
 psql "$DATABASE_URL" -f sql/015_company_leave_rules.sql
 psql "$DATABASE_URL" -f sql/016_leave_requests.sql
 psql "$DATABASE_URL" -f sql/017_company_sso.sql
+psql "$DATABASE_URL" -f sql/018_company_billing.sql
+psql "$DATABASE_URL" -f sql/019_scim.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -61,6 +63,10 @@ psql "$DATABASE_URL" -f sql/017_company_sso.sql
 `016_leave_requests.sql` (issue 163) creates the official leave request records, including working-day count, supporting-file metadata, submission/cancellation timestamps, and reviewer decision fields.
 
 `017_company_sso.sql` (issues 117 and 118) stores per-company OIDC settings. The client secret is a cipher column, not plaintext. An enabled flag and optional email domain are included.
+
+`018_company_billing.sql` adds billing email and VAT number fields to `companies`; the VAT number is free text. `009_billing.sql` already creates `invoices` with integer-cent amounts, a ZAR currency check, status, and billing-period timestamps.
+
+`019_scim.sql` adds one SCIM token-hash row per company; the raw bearer token is not stored. It also adds `users.first_name`, `users.last_name`, and optional `users.phone` while keeping `display_name`.
 
 ## Demo password
 
