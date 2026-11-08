@@ -3,12 +3,18 @@
  */
 import type { HTMLAttributes } from 'react'
 
-export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'waiting'
+export type RequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled'
+  | 'waiting'
 
 const labels: Record<RequestStatus, string> = {
   pending: 'Pending',
   approved: 'Approved',
   rejected: 'Rejected',
+  cancelled: 'Cancelled',
   waiting: 'Waiting',
 }
 

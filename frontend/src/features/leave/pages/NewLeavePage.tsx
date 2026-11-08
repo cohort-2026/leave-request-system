@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import {
   Alert,
@@ -9,12 +9,18 @@ import {
   Select,
   TextField,
 } from '../../../shared/components'
-import { paths } from '../../../shared/constants/paths'
+import {
+  leaveDetailPath,
+  paths,
+} from '../../../shared/constants/paths'
 import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
 import {
   getLeaveTypes,
+  fetchMyLeaveRequest,
   previewLeave,
   submitLeaveRequest,
+  updateLeaveRequest,
+  type MyLeaveRequest,
   type LeaveType,
 } from '../leaveApi'
 import { ApiError } from '../../../services/api'
@@ -29,13 +35,18 @@ type PreviewState = {
   error?: string
 }
 
-export function NewLeavePage() {
+export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
   const navigate = useNavigate()
+  const { id } = useParams()
   const [selectedTypeId, setSelectedTypeId] = useState('')
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [reason, setReason] = useState('')
   const [file, setFile] = useState<File | undefined>()
+  const [removeFile, setRemoveFile] = useState(false)
+  const [editRequest, setEditRequest] = useState<MyLeaveRequest | null>(null)
+  const [editLoading, setEditLoading] = useState(Boolean(editMode && id))
+  const [editLoadError, setEditLoadError] = useState<string | null>(null)
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
   const [loadingTypes, setLoadingTypes] = useState(true)
   const [typesError, setTypesError] = useState<string | null>(null)
@@ -48,6 +59,35 @@ export function NewLeavePage() {
     Record<string, string>
   >({})
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!editMode || !id) return
+
+    let active = true
+    fetchMyLeaveRequest(id)
+      .then((request) => {
+        if (active) {
+          setEditRequest(request)
+          setSelectedTypeId(String(request.leaveTypeId))
+          setStart(request.startDate)
+          setEnd(request.endDate)
+          setReason(request.reason ?? '')
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setEditLoadError(
+            getErrorMessage(err, 'Could not load this leave request.'),
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setEditLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [editMode, id])
 
   useEffect(() => {
     let cancelled = false
@@ -144,31 +184,91 @@ export function NewLeavePage() {
     setSubmitting(true)
 
     try {
-      await submitLeaveRequest({
+      const input = {
         leaveTypeId: selectedType.id,
         start,
         end,
         reason,
         file,
-      })
-      navigate(paths.leave)
+        removeFile,
+      }
+      if (editMode && id) {
+        await updateLeaveRequest(id, input)
+        navigate(leaveDetailPath(id))
+      } else {
+        await submitLeaveRequest(input)
+        navigate(paths.leave)
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         setSubmitError(error.message)
         setSubmitFieldErrors(error.fieldErrors)
       } else {
-        setSubmitError('Could not submit leave request.')
+        setSubmitError(
+          editMode
+            ? 'Could not update leave request.'
+            : 'Could not submit leave request.',
+        )
       }
     } finally {
       setSubmitting(false)
     }
   }
 
+  if (editMode && !id) {
+    return (
+      <PageShell title="Edit leave request" eyebrow="Mine">
+        <Alert tone="error">A leave request ID is required.</Alert>
+        <p>
+          <Link to={paths.leave}>Back to my leave</Link>
+        </p>
+      </PageShell>
+    )
+  }
+
+  if (editMode && (editLoading || editRequest?.id !== id)) {
+    return (
+      <PageShell title="Edit leave request" eyebrow="Mine">
+        <p className="text-muted">Loading leave request…</p>
+      </PageShell>
+    )
+  }
+
+  if (editMode && (editLoadError || !editRequest)) {
+    return (
+      <PageShell title="Edit leave request" eyebrow="Mine">
+        <Alert tone="error">
+          {editLoadError ?? 'Leave request not found.'}
+        </Alert>
+        <p>
+          <Link to={paths.leave}>Back to my leave</Link>
+        </p>
+      </PageShell>
+    )
+  }
+
+  if (editMode && editRequest?.status !== 'pending') {
+    return (
+      <PageShell title="Edit leave request" eyebrow="Mine">
+        <Alert tone="error">
+          Only pending requests can be changed.
+        </Alert>
+        <p>
+          <Link to={leaveDetailPath(id ?? '')}>Back to request</Link>
+        </p>
+      </PageShell>
+    )
+  }
+
   return (
-    <PageShell title="Book leave" eyebrow="Staff · manager · company admin">
+    <PageShell
+      title={editMode ? 'Edit leave request' : 'Book leave'}
+      eyebrow="Staff · manager · company admin"
+    >
       <p className="text-muted">
-        Choose your leave type and dates. Your working-day total is shown before
-        you submit.
+        {editMode
+          ? 'Update your leave type, dates, reason, or supporting file.'
+          : 'Choose your leave type and dates. Your working-day total is shown before you submit.'}
       </p>
 
       {typesError ? <Alert tone="error">{typesError}</Alert> : null}
@@ -249,8 +349,26 @@ export function NewLeavePage() {
           label="Supporting file (optional)"
           name="file"
           error={submitFieldErrors.file ?? submitFieldErrors.attachment}
-          onChange={(event) => setFile(event.target.files?.[0])}
+          onChange={(event) => {
+            const selectedFile = event.target.files?.[0]
+            setFile(selectedFile)
+            if (selectedFile) setRemoveFile(false)
+          }}
         />
+        {editMode && editRequest?.supportingFileName ? (
+          <div className="stack text-sm">
+            <p>Current file: {editRequest.supportingFileName}</p>
+            <label>
+              <input
+                type="checkbox"
+                checked={removeFile}
+                disabled={Boolean(file)}
+                onChange={(event) => setRemoveFile(event.target.checked)}
+              />{' '}
+              Remove current file
+            </label>
+          </div>
+        ) : null}
         {currentPreview?.error ? (
           <Alert tone="error">{currentPreview.error}</Alert>
         ) : null}
@@ -267,14 +385,27 @@ export function NewLeavePage() {
           <Button
             variant="primary"
             type="submit"
-            disabled={loadingTypes || Boolean(typesError) || submitting}
+            disabled={
+              loadingTypes ||
+              Boolean(typesError) ||
+              editLoading ||
+              submitting
+            }
           >
-            {submitting ? 'Submitting…' : 'Submit request'}
+            {submitting
+              ? editMode
+                ? 'Saving…'
+                : 'Submitting…'
+              : editMode
+                ? 'Save changes'
+                : 'Submit request'}
           </Button>
           <Button
             variant="secondary"
             type="button"
-            onClick={() => navigate(paths.leave)}
+            onClick={() =>
+              navigate(editMode && id ? leaveDetailPath(id) : paths.leave)
+            }
           >
             Cancel
           </Button>

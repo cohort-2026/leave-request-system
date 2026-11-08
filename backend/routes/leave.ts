@@ -8,6 +8,7 @@ import type { Pool, PoolClient } from "pg";
 import { pool } from "../db.js";
 import {
   appOrigin,
+  leaveCancelled,
   leaveDecision,
   leaveSubmitted,
   sendMail,
@@ -60,7 +61,7 @@ const leaveUpload = multer({
   limits: {
     fileSize: MAX_FILE_SIZE,
     files: 1,
-    fields: 4,
+    fields: 5,
     fieldNameSize: 100,
     fieldSize: 10_000,
   },
@@ -680,6 +681,345 @@ leaveRouter.post(
   },
 );
 
+type MyLeaveRow = {
+  id: number;
+  company_id: number;
+  employee_user_id: number;
+  leave_type_id: number;
+  start_date: string;
+  end_date: string;
+  working_days_count: number;
+  reason: string | null;
+  supporting_file_name: string | null;
+  supporting_file_key: string | null;
+  status: string;
+  submitted_at: Date;
+  reviewer_user_id: number | null;
+  decision_reason: string | null;
+  employee_email: string;
+  employee_name: string;
+  leave_type: string;
+  reviewer_email?: string | null;
+  reviewer_name?: string | null;
+};
+
+const MY_LEAVE_SQL = `SELECT
+       lr.id,
+       lr.company_id,
+       lr.employee_user_id,
+       lr.leave_type_id,
+       lr.start_date::TEXT AS start_date,
+       lr.end_date::TEXT AS end_date,
+       lr.working_days_count,
+       lr.reason,
+       lr.supporting_file_name,
+       lr.supporting_file_key,
+       lr.status,
+       lr.submitted_at,
+       lr.reviewer_user_id,
+       lr.decision_reason,
+       employee.email AS employee_email,
+       COALESCE(employee.display_name, employee.email) AS employee_name,
+       leave_types.name AS leave_type,
+       reviewer.email AS reviewer_email,
+       COALESCE(reviewer.display_name, reviewer.email) AS reviewer_name
+     FROM leave_requests AS lr
+     JOIN users AS employee
+       ON employee.id = lr.employee_user_id
+     JOIN leave_types
+       ON leave_types.id = lr.leave_type_id
+     LEFT JOIN users AS reviewer
+       ON reviewer.id = lr.reviewer_user_id`;
+
+function toMyLeaveItem(row: MyLeaveRow) {
+  return {
+    id: String(row.id),
+    employeeName: row.employee_name,
+    leaveTypeId: row.leave_type_id,
+    leaveType: row.leave_type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    workingDays: Number(row.working_days_count),
+    reason: row.reason,
+    supportingFileName: row.supporting_file_name,
+    status: row.status,
+    submittedAt: row.submitted_at,
+    decisionReason: row.decision_reason,
+  };
+}
+
+leaveRouter.get(
+  "/",
+  requireAuth,
+  requireRole("staff", "manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const result = await pool.query<MyLeaveRow>(
+      `${MY_LEAVE_SQL}
+       WHERE lr.company_id = $1
+         AND lr.employee_user_id = $2
+       ORDER BY lr.submitted_at DESC, lr.id DESC`,
+      [companyId, req.user!.id],
+    );
+    res.json(result.rows.map(toMyLeaveItem));
+  },
+);
+
+leaveRouter.patch(
+  "/:id",
+  requireAuth,
+  requireRole("staff", "manager", "company_admin"),
+  parseLeaveUpload,
+  async (req, res) => {
+    const uploadedFile = req.file;
+    let keepUploadedFile = false;
+    let oldFileKey: string | null = null;
+    try {
+      const companyId = requireCompanyId(req.user, res);
+      if (companyId === null) return;
+
+      const id = parsePositiveInteger(req.params.id);
+      const leaveTypeId = getLeaveTypeId(req.body);
+      const startDate = parseDate(req.body?.start);
+      const endDate = parseDate(req.body?.end);
+      const reasonValue = req.body?.reason;
+      const reason =
+        typeof reasonValue === "string" ? reasonValue.trim() : null;
+      const removeFileValue = req.body?.removeFile;
+      if (!id) {
+        throw new LeaveRequestError("Invalid leave request id");
+      }
+      if (!leaveTypeId || !startDate || !endDate) {
+        throw new LeaveRequestError(
+          "Leave type, start date, and end date are required",
+        );
+      }
+      if (endDate < startDate) {
+        throw new LeaveRequestError(
+          "End date must be on or after the start date",
+        );
+      }
+      if (
+        reasonValue !== undefined &&
+        reasonValue !== null &&
+        typeof reasonValue !== "string"
+      ) {
+        throw new LeaveRequestError("Reason must be text");
+      }
+      if (reason && reason.length > 5000) {
+        throw new LeaveRequestError("Reason must be 5000 characters or fewer");
+      }
+      if (
+        removeFileValue !== undefined &&
+        removeFileValue !== "true" &&
+        removeFileValue !== "false"
+      ) {
+        throw new LeaveRequestError("Invalid supporting file removal value");
+      }
+
+      const client = await pool.connect();
+      let updated: MyLeaveRow;
+      try {
+        await client.query("BEGIN");
+        const requestResult = await client.query<MyLeaveRow>(
+          `${MY_LEAVE_SQL}
+           WHERE lr.id = $1
+           LIMIT 1
+           FOR UPDATE OF lr`,
+          [id],
+        );
+        const request = requestResult.rows[0];
+        if (
+          !request ||
+          request.company_id !== companyId ||
+          request.employee_user_id !== req.user!.id
+        ) {
+          throw new LeaveRequestError("Leave request not found", 404);
+        }
+        if (request.status !== "pending") {
+          throw new LeaveRequestError("Only pending requests can be changed");
+        }
+
+        await client.query("SELECT pg_advisory_xact_lock($1, $2)", [
+          companyId,
+          req.user!.id,
+        ]);
+
+        const leaveType = await getLeaveType(companyId, leaveTypeId, client);
+        if (!leaveType) {
+          throw new LeaveRequestError("Leave type not found", 404);
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        if (!leaveType.allow_backdate && startDate < today) {
+          throw new LeaveRequestError(
+            "This leave type does not allow backdated requests",
+          );
+        }
+
+        const calendar = await getCalendarForRange(
+          companyId,
+          startDate,
+          endDate,
+          client,
+        );
+        const workingDaysCount = workingDaysBetween(
+          startDate,
+          endDate,
+          calendar.settings,
+          calendar.holidays,
+        );
+        const removeFile = removeFileValue === "true" && !uploadedFile;
+        const hasSupportingFile = Boolean(
+          uploadedFile ||
+            (request.supporting_file_key && !removeFile),
+        );
+        if (
+          leaveType.requires_document_after_days !== null &&
+          workingDaysCount >= leaveType.requires_document_after_days &&
+          !hasSupportingFile
+        ) {
+          throw new LeaveRequestError(
+            `A supporting file is required for requests of ${leaveType.requires_document_after_days} or more working days`,
+          );
+        }
+
+        const rulesResult = await client.query<{ min_notice_days: number }>(
+          `SELECT COALESCE(min_notice_days, 0) AS min_notice_days
+           FROM company_leave_rules
+           WHERE company_id = $1
+           LIMIT 1`,
+          [companyId],
+        );
+        const minNoticeDays = Number(rulesResult.rows[0]?.min_notice_days ?? 0);
+        if (
+          !leaveType.allow_backdate &&
+          minNoticeDays > 0 &&
+          wholeDaysBetween(today, startDate) < minNoticeDays
+        ) {
+          throw new LeaveRequestError(
+            `This request must be submitted at least ${minNoticeDays} days in advance`,
+          );
+        }
+
+        const balanceResult = await client.query<{ days_remaining: number }>(
+          `SELECT days_remaining
+           FROM leave_balances
+           WHERE company_id = $1
+             AND user_id = $2
+             AND leave_type_id = $3
+           LIMIT 1`,
+          [companyId, req.user!.id, leaveTypeId],
+        );
+        const balance = balanceResult.rows[0];
+        if (!balance) {
+          throw new LeaveRequestError("No balance exists for this leave type");
+        }
+        if (workingDaysCount > Number(balance.days_remaining)) {
+          throw new LeaveRequestError(
+            `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+          );
+        }
+        if (
+          await hasOverlappingLeaveRequest(
+            client,
+            companyId,
+            req.user!.id,
+            startDate,
+            endDate,
+            id,
+          )
+        ) {
+          throw new LeaveRequestError(
+            "These dates overlap an existing pending or approved leave request",
+          );
+        }
+
+        oldFileKey = request.supporting_file_key;
+        const updateResult = await client.query<MyLeaveRow>(
+          `UPDATE leave_requests
+           SET leave_type_id = $3,
+               start_date = $4::date,
+               end_date = $5::date,
+               working_days_count = $6,
+               reason = $7,
+               supporting_file_name = $8,
+               supporting_file_key = $9
+           WHERE id = $1
+             AND employee_user_id = $2
+             AND status = 'pending'
+           RETURNING id`,
+          [
+            id,
+            req.user!.id,
+            leaveTypeId,
+            startDate,
+            endDate,
+            workingDaysCount,
+            reason || null,
+            uploadedFile?.originalname ??
+              (removeFile ? null : request.supporting_file_name),
+            uploadedFile
+              ? basename(uploadedFile.filename)
+              : removeFile
+                ? null
+                : request.supporting_file_key,
+          ],
+        );
+        if (updateResult.rowCount !== 1) {
+          throw new LeaveRequestError("Only pending requests can be changed");
+        }
+        const updatedResult = await client.query<MyLeaveRow>(
+          `${MY_LEAVE_SQL}
+           WHERE lr.id = $1
+           LIMIT 1`,
+          [id],
+        );
+        const result = updatedResult.rows[0];
+        if (!result) {
+          throw new LeaveRequestError("Leave request not found", 404);
+        }
+        updated = result;
+        await client.query("COMMIT");
+        keepUploadedFile = Boolean(uploadedFile);
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      if (
+        oldFileKey &&
+        (uploadedFile || req.body?.removeFile === "true")
+      ) {
+        try {
+          await rm(resolve(uploadsDirectory, basename(oldFileKey)), {
+            force: true,
+          });
+        } catch (error) {
+          console.error("Could not remove replaced leave attachment", {
+            requestId: id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }
+      res.json(toMyLeaveItem(updated));
+    } catch (error) {
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    } finally {
+      if (uploadedFile && !keepUploadedFile) {
+        await rm(uploadedFile.path, { force: true });
+      }
+    }
+  },
+);
+
 leaveRouter.get(
   "/balances",
   requireAuth,
@@ -895,7 +1235,7 @@ teamRouter.get(
 leaveRouter.get(
   "/:id",
   requireAuth,
-  requireRole("manager", "company_admin"),
+  requireRole("staff", "manager", "company_admin"),
   async (req, res) => {
     const companyId = requireCompanyId(req.user, res);
     if (companyId === null) return;
@@ -907,16 +1247,139 @@ leaveRouter.get(
     }
 
     const request = await loadQueueRequest(id);
-    if (!request) {
+    if (!request || request.company_id !== companyId) {
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
-    if (request.company_id !== companyId || !canSeeInQueue(req.user!, request)) {
+    const isOwner = request.employee_user_id === req.user!.id;
+    if (
+      !isOwner &&
+      !canSeeInQueue(req.user!, request) &&
+      !canDecide(req.user!, request)
+    ) {
       res.status(403).json({ error: "You are not allowed to do that" });
       return;
     }
 
-    res.json(toQueueItem(request));
+    const detailResult = await pool.query<MyLeaveRow>(
+      `${MY_LEAVE_SQL}
+       WHERE lr.id = $1
+       LIMIT 1`,
+      [id],
+    );
+    const detail = detailResult.rows[0];
+    if (!detail) {
+      res.status(404).json({ error: "Leave request not found" });
+      return;
+    }
+    res.json({ ...toQueueItem(request), ...toMyLeaveItem(detail) });
+  },
+);
+
+leaveRouter.post(
+  "/:id/cancel",
+  requireAuth,
+  requireRole("staff", "manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const client = await pool.connect();
+    let cancelled: MyLeaveRow;
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<MyLeaveRow>(
+        `${MY_LEAVE_SQL}
+         WHERE lr.id = $1
+         LIMIT 1
+         FOR UPDATE OF lr`,
+        [id],
+      );
+      const request = result.rows[0];
+      if (
+        !request ||
+        request.company_id !== companyId ||
+        request.employee_user_id !== req.user!.id
+      ) {
+        throw new LeaveRequestError("Leave request not found", 404);
+      }
+      if (request.status !== "pending") {
+        throw new LeaveRequestError("Only pending requests can be cancelled");
+      }
+
+      const update = await client.query(
+        `UPDATE leave_requests
+         SET status = 'cancelled',
+             cancelled_at = NOW()
+         WHERE id = $1
+           AND employee_user_id = $2
+           AND status = 'pending'`,
+        [id, req.user!.id],
+      );
+      if (update.rowCount !== 1) {
+        throw new LeaveRequestError("Only pending requests can be cancelled");
+      }
+
+      const cancelledResult = await client.query<MyLeaveRow>(
+        `${MY_LEAVE_SQL}
+         WHERE lr.id = $1
+         LIMIT 1`,
+        [id],
+      );
+      const cancelledRow = cancelledResult.rows[0];
+      if (!cancelledRow) {
+        throw new LeaveRequestError("Leave request not found", 404);
+      }
+      cancelled = cancelledRow;
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    if (cancelled.reviewer_email && cancelled.reviewer_name) {
+      try {
+        await sendMail({
+          to: cancelled.reviewer_email,
+          ...leaveCancelled({
+            requestId: cancelled.id,
+            reviewerName: cancelled.reviewer_name,
+            requesterName: cancelled.employee_name,
+            leaveTypeName: cancelled.leave_type,
+            startDate: cancelled.start_date,
+            endDate: cancelled.end_date,
+            actionUrl: new URL(
+              `/team/queue/${cancelled.id}`,
+              appOrigin(),
+            ).toString(),
+          }),
+        });
+      } catch (error) {
+        console.error("Reviewer cancellation notification failed", {
+          requestId: cancelled.id,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+        res.status(502).json({
+          error: "Request was cancelled, but the reviewer could not be notified",
+          leaveRequestId: cancelled.id,
+        });
+        return;
+      }
+    }
+
+    res.json(toMyLeaveItem(cancelled));
   },
 );
 

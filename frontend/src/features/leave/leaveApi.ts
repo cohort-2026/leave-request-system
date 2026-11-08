@@ -11,6 +11,21 @@ export type LeaveType = {
   requiresDocumentAfterDays: number | null
 }
 
+export type MyLeaveRequest = {
+  id: string
+  employeeName: string
+  leaveTypeId: number
+  leaveType: string
+  startDate: string
+  endDate: string
+  workingDays: number
+  reason: string | null
+  supportingFileName: string | null
+  status: RequestStatus
+  submittedAt: string
+  decisionReason: string | null
+}
+
 type LeaveTypesResponse = {
   leaveTypes: LeaveType[]
 }
@@ -49,17 +64,60 @@ export function submitLeaveRequest(input: {
   end: string
   reason: string
   file?: File
+  removeFile?: boolean
 }): Promise<unknown> {
+  return apiRequest<unknown>('/api/leave', {
+    method: 'POST',
+    body: leaveRequestForm(input),
+  })
+}
+
+function leaveRequestForm(input: {
+  leaveTypeId: number
+  start: string
+  end: string
+  reason: string
+  file?: File
+  removeFile?: boolean
+}): FormData {
   const body = new FormData()
   body.set('leaveTypeId', String(input.leaveTypeId))
   body.set('start', input.start)
   body.set('end', input.end)
   body.set('reason', input.reason)
   if (input.file) body.set('file', input.file)
+  if (input.removeFile) body.set('removeFile', 'true')
+  return body
+}
 
-  return apiRequest<unknown>('/api/leave', {
+export function updateLeaveRequest(
+  id: string,
+  input: {
+    leaveTypeId: number
+    start: string
+    end: string
+    reason: string
+    file?: File
+    removeFile?: boolean
+  },
+): Promise<MyLeaveRequest> {
+  return apiRequest<MyLeaveRequest>(`/api/leave/${id}`, {
+    method: 'PATCH',
+    body: leaveRequestForm(input),
+  })
+}
+
+export function fetchMyLeaveRequests(): Promise<MyLeaveRequest[]> {
+  return apiRequest<MyLeaveRequest[]>('/api/leave')
+}
+
+export function fetchMyLeaveRequest(id: string): Promise<MyLeaveRequest> {
+  return apiRequest<MyLeaveRequest>(`/api/leave/${id}`)
+}
+
+export function cancelMyLeaveRequest(id: string): Promise<MyLeaveRequest> {
+  return apiRequest<MyLeaveRequest>(`/api/leave/${id}/cancel`, {
     method: 'POST',
-    body,
   })
 }
 

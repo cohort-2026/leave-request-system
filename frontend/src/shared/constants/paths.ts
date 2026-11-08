@@ -19,6 +19,7 @@ export const paths = {
   leave: '/leave',
   leaveNew: '/leave/new',
   leaveDetail: '/leave/:id',
+  leaveEdit: '/leave/:id/edit',
   calendar: '/calendar',
   teamQueue: '/team/queue',
   teamReview: '/team/queue/:id',
@@ -43,6 +44,10 @@ export function onboardPath(token: string) {
 
 export function leaveDetailPath(id: string) {
   return `/leave/${id}`
+}
+
+export function leaveEditPath(id: string) {
+  return `/leave/${id}/edit`
 }
 
 export function teamReviewPath(id: string) {
