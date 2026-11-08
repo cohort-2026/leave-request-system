@@ -772,6 +772,11 @@ select:disabled {
   color: var(--color-danger);
 }
 
+.status-badge-cancelled {
+  background: var(--color-badge-waiting);
+  color: var(--color-muted);
+}
+
 .status-badge-waiting {
   background: var(--color-badge-waiting);
   color: var(--color-muted);

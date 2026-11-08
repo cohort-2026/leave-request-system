@@ -91,6 +91,10 @@ export const router = createBrowserRouter([
                 children: [
                   { path: paths.leave, element: <LeaveListPage /> },
                   { path: paths.leaveNew, element: <NewLeavePage /> },
+                  {
+                    path: paths.leaveEdit,
+                    element: <NewLeavePage editMode />,
+                  },
                   { path: paths.leaveDetail, element: <LeaveDetailPage /> },
                   { path: paths.calendar, element: <CalendarPage /> },
                 ],
