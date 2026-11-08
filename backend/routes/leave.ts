@@ -8,9 +8,11 @@ import type { Pool, PoolClient } from "pg";
 import { pool } from "../db.js";
 import {
   appOrigin,
+  leaveDecision,
   leaveSubmitted,
   sendMail,
 } from "../mail/index.js";
+import type { AuthedUser } from "../middleware/auth.js";
 import {
   applyApprovedLeaveToBalance,
   listBalances,
@@ -21,6 +23,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId, sameCompanyId } from "../tenancy.js";
 
 export const leaveRouter = Router();
+export const teamRouter = Router();
 export const userBalancesRouter = Router();
 
 const routesDirectory = dirname(fileURLToPath(import.meta.url));
@@ -736,5 +739,355 @@ userBalancesRouter.get(
 
     const balances = await listBalances(target.id, companyId);
     res.json({ balances });
+  },
+);
+
+type QueueRequestRow = {
+  id: number;
+  company_id: number;
+  employee_user_id: number;
+  leave_type_id: number;
+  start_date: string;
+  end_date: string;
+  working_days_count: number;
+  status: string;
+  reviewer_user_id: number | null;
+  employee_email: string;
+  employee_name: string;
+  leave_type: string;
+  department_manager_id: number | null;
+};
+
+const QUEUE_REQUEST_SQL = `SELECT
+       lr.id,
+       lr.company_id,
+       lr.employee_user_id,
+       lr.leave_type_id,
+       lr.start_date::TEXT AS start_date,
+       lr.end_date::TEXT AS end_date,
+       lr.working_days_count,
+       lr.status,
+       lr.reviewer_user_id,
+       employee.email AS employee_email,
+       COALESCE(employee.display_name, employee.email) AS employee_name,
+       leave_types.name AS leave_type,
+       department.manager_id AS department_manager_id
+     FROM leave_requests AS lr
+     JOIN users AS employee
+       ON employee.id = lr.employee_user_id
+     JOIN leave_types
+       ON leave_types.id = lr.leave_type_id
+     LEFT JOIN departments AS department
+       ON department.id = employee.department_id
+      AND department.company_id = lr.company_id`;
+
+function toQueueItem(row: QueueRequestRow) {
+  return {
+    id: String(row.id),
+    employeeName: row.employee_name,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    workingDays: Number(row.working_days_count),
+    leaveType: row.leave_type,
+    status: row.status,
+  };
+}
+
+function canSeeInQueue(actor: AuthedUser, row: QueueRequestRow): boolean {
+  if (row.employee_user_id === actor.id) return false;
+  if (actor.role === "company_admin") return true;
+  if (actor.role === "manager") {
+    return row.department_manager_id === actor.id;
+  }
+  return false;
+}
+
+function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
+  if (row.employee_user_id === actor.id) return false;
+  if (actor.role === "company_admin") return true;
+  if (actor.role === "manager") {
+    return (
+      row.reviewer_user_id === actor.id ||
+      row.department_manager_id === actor.id
+    );
+  }
+  return false;
+}
+
+async function loadQueueRequest(
+  id: number,
+  executor: Queryable = pool,
+): Promise<QueueRequestRow | null> {
+  const result = await executor.query<QueueRequestRow>(
+    `${QUEUE_REQUEST_SQL}
+     WHERE lr.id = $1
+     LIMIT 1`,
+    [id],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function notifyRequester(row: QueueRequestRow, status: "approved" | "rejected", decisionReason: string | null) {
+  try {
+    await sendMail({
+      to: row.employee_email,
+      ...leaveDecision({
+        requestId: row.id,
+        requesterName: row.employee_name,
+        status,
+        leaveTypeName: row.leave_type,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        workingDaysCount: Number(row.working_days_count),
+        decisionReason,
+        actionUrl: new URL(`/leave/${row.id}`, appOrigin()).toString(),
+      }),
+    });
+  } catch (error) {
+    console.error("Requester notification failed for leave request", {
+      requestId: row.id,
+      status,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    throw new LeaveRequestError(
+      "Decision was saved, but the requester could not be notified",
+      502,
+    );
+  }
+}
+
+teamRouter.get(
+  "/queue",
+  requireAuth,
+  requireRole("manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const actor = req.user!;
+    const result = await pool.query<QueueRequestRow>(
+      `${QUEUE_REQUEST_SQL}
+       WHERE lr.company_id = $1
+         AND lr.status = 'pending'
+         AND lr.employee_user_id <> $2
+         AND (
+           $3 = 'company_admin'
+           OR (
+             $3 = 'manager'
+             AND department.manager_id = $2
+           )
+         )
+       ORDER BY lr.submitted_at, lr.id`,
+      [companyId, actor.id, actor.role],
+    );
+    res.json(result.rows.map(toQueueItem));
+  },
+);
+
+leaveRouter.get(
+  "/:id",
+  requireAuth,
+  requireRole("manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const request = await loadQueueRequest(id);
+    if (!request) {
+      res.status(404).json({ error: "Leave request not found" });
+      return;
+    }
+    if (request.company_id !== companyId || !canSeeInQueue(req.user!, request)) {
+      res.status(403).json({ error: "You are not allowed to do that" });
+      return;
+    }
+
+    res.json(toQueueItem(request));
+  },
+);
+
+leaveRouter.post(
+  "/:id/approve",
+  requireAuth,
+  requireRole("manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const client = await pool.connect();
+    let decided: QueueRequestRow;
+    try {
+      await client.query("BEGIN");
+      const request = await loadQueueRequest(id, client);
+      if (!request) {
+        throw new LeaveRequestError("Leave request not found", 404);
+      }
+      if (request.company_id !== companyId || request.employee_user_id === req.user!.id) {
+        throw new LeaveRequestError("You are not allowed to do that", 403);
+      }
+      if (!canDecide(req.user!, request)) {
+        throw new LeaveRequestError("You are not allowed to do that", 403);
+      }
+      if (request.status !== "pending") {
+        throw new LeaveRequestError("Only pending requests can be approved");
+      }
+
+      await client.query("SELECT pg_advisory_xact_lock($1, $2)", [
+        companyId,
+        request.employee_user_id,
+      ]);
+
+      const applied = await applyApprovedLeaveToBalance(
+        request.employee_user_id,
+        companyId,
+        request.leave_type_id,
+        Number(request.working_days_count),
+        client,
+      );
+      if (!applied) {
+        throw new LeaveRequestError(
+          "Remaining balance is no longer enough for this request",
+        );
+      }
+
+      await client.query(
+        `UPDATE leave_requests
+         SET status = 'approved',
+             reviewer_user_id = $2,
+             reviewed_at = NOW(),
+             decision_reason = NULL
+         WHERE id = $1
+           AND status = 'pending'`,
+        [request.id, req.user!.id],
+      );
+
+      const updated = await loadQueueRequest(request.id, client);
+      if (!updated) {
+        throw new LeaveRequestError("Leave request not found", 404);
+      }
+      decided = updated;
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    try {
+      await notifyRequester(decided, "approved", null);
+    } catch (error) {
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({
+          error: error.message,
+          leaveRequestId: decided.id,
+        });
+        return;
+      }
+      throw error;
+    }
+
+    res.json(toQueueItem(decided));
+  },
+);
+
+leaveRouter.post(
+  "/:id/reject",
+  requireAuth,
+  requireRole("manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const reasonValue = isRecord(req.body) ? req.body.decisionReason : undefined;
+    const decisionReason =
+      typeof reasonValue === "string" ? reasonValue.trim() : "";
+    if (!decisionReason) {
+      res.status(400).json({ error: "A rejection reason is required" });
+      return;
+    }
+
+    const client = await pool.connect();
+    let decided: QueueRequestRow;
+    try {
+      await client.query("BEGIN");
+      const request = await loadQueueRequest(id, client);
+      if (!request) {
+        throw new LeaveRequestError("Leave request not found", 404);
+      }
+      if (request.company_id !== companyId || request.employee_user_id === req.user!.id) {
+        throw new LeaveRequestError("You are not allowed to do that", 403);
+      }
+      if (!canDecide(req.user!, request)) {
+        throw new LeaveRequestError("You are not allowed to do that", 403);
+      }
+      if (request.status !== "pending") {
+        throw new LeaveRequestError("Only pending requests can be rejected");
+      }
+
+      await client.query(
+        `UPDATE leave_requests
+         SET status = 'rejected',
+             reviewer_user_id = $2,
+             reviewed_at = NOW(),
+             decision_reason = $3
+         WHERE id = $1
+           AND status = 'pending'`,
+        [request.id, req.user!.id, decisionReason],
+      );
+
+      const updated = await loadQueueRequest(request.id, client);
+      if (!updated) {
+        throw new LeaveRequestError("Leave request not found", 404);
+      }
+      decided = updated;
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    try {
+      await notifyRequester(decided, "rejected", decisionReason);
+    } catch (error) {
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({
+          error: error.message,
+          leaveRequestId: decided.id,
+        });
+        return;
+      }
+      throw error;
+    }
+
+    res.json(toQueueItem(decided));
   },
 );
