@@ -37,8 +37,6 @@ const uploadsDirectory = resolve(
   "leave",
 );
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const AUTO_APPROVE_REASON =
-  "Automatically approved because no other eligible reviewer is available";
 type Queryable = Pool | PoolClient;
 
 const leaveUpload = multer({
@@ -549,9 +547,7 @@ leaveRouter.post(
           req.user!.role,
           client,
         );
-        const autoApprove =
-          !reviewer && req.user!.role === "company_admin";
-        if (!reviewer && !autoApprove) {
+        if (!reviewer) {
           throw new LeaveRequestError(
             "No eligible reviewer is available for this request",
             409,
@@ -570,12 +566,10 @@ leaveRouter.post(
              supporting_file_name,
              supporting_file_key,
              status,
-             reviewer_user_id,
-             reviewed_at,
-             decision_reason
+             reviewer_user_id
            )
            VALUES (
-             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13
+             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', $10
            )
            RETURNING
              id,
@@ -594,27 +588,10 @@ leaveRouter.post(
             reason || null,
             uploadedFile?.originalname ?? null,
             uploadedFile ? basename(uploadedFile.filename) : null,
-            autoApprove ? "approved" : "pending",
-            reviewer?.id ?? null,
-            autoApprove ? new Date() : null,
-            autoApprove ? AUTO_APPROVE_REASON : null,
+            reviewer.id,
           ],
         );
         request = insertResult.rows[0];
-        if (autoApprove) {
-          const applied = await applyApprovedLeaveToBalance(
-            req.user!.id,
-            companyId,
-            leaveTypeId,
-            workingDaysCount,
-            client,
-          );
-          if (!applied) {
-            throw new LeaveRequestError(
-              `This request exceeds your remaining balance of ${balance.days_remaining} days`,
-            );
-          }
-        }
         await client.query("COMMIT");
         keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
@@ -754,6 +731,7 @@ type QueueRequestRow = {
   reviewer_user_id: number | null;
   employee_email: string;
   employee_name: string;
+  employee_role: string;
   leave_type: string;
   department_manager_id: number | null;
 };
@@ -770,6 +748,7 @@ const QUEUE_REQUEST_SQL = `SELECT
        lr.reviewer_user_id,
        employee.email AS employee_email,
        COALESCE(employee.display_name, employee.email) AS employee_name,
+       employee.role AS employee_role,
        leave_types.name AS leave_type,
        department.manager_id AS department_manager_id
      FROM leave_requests AS lr
@@ -797,7 +776,10 @@ function canSeeInQueue(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (row.employee_user_id === actor.id) return false;
   if (actor.role === "company_admin") return true;
   if (actor.role === "manager") {
-    return row.department_manager_id === actor.id;
+    return (
+      row.employee_role === "staff" &&
+      row.department_manager_id === actor.id
+    );
   }
   return false;
 }
@@ -807,8 +789,9 @@ function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (actor.role === "company_admin") return true;
   if (actor.role === "manager") {
     return (
-      row.reviewer_user_id === actor.id ||
-      row.department_manager_id === actor.id
+      row.employee_role === "staff" &&
+      (row.reviewer_user_id === actor.id ||
+        row.department_manager_id === actor.id)
     );
   }
   return false;
@@ -817,11 +800,12 @@ function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
 async function loadQueueRequest(
   id: number,
   executor: Queryable = pool,
+  lock = false,
 ): Promise<QueueRequestRow | null> {
   const result = await executor.query<QueueRequestRow>(
     `${QUEUE_REQUEST_SQL}
      WHERE lr.id = $1
-     LIMIT 1`,
+     LIMIT 1${lock ? " FOR UPDATE OF lr" : ""}`,
     [id],
   );
   return result.rows[0] ?? null;
@@ -874,6 +858,7 @@ teamRouter.get(
            $3 = 'company_admin'
            OR (
              $3 = 'manager'
+             AND employee.role = 'staff'
              AND department.manager_id = $2
            )
          )
@@ -930,7 +915,7 @@ leaveRouter.post(
     let decided: QueueRequestRow;
     try {
       await client.query("BEGIN");
-      const request = await loadQueueRequest(id, client);
+      const request = await loadQueueRequest(id, client, true);
       if (!request) {
         throw new LeaveRequestError("Leave request not found", 404);
       }
@@ -962,7 +947,7 @@ leaveRouter.post(
         );
       }
 
-      await client.query(
+      const update = await client.query(
         `UPDATE leave_requests
          SET status = 'approved',
              reviewer_user_id = $2,
@@ -972,6 +957,9 @@ leaveRouter.post(
            AND status = 'pending'`,
         [request.id, req.user!.id],
       );
+      if (update.rowCount !== 1) {
+        throw new LeaveRequestError("Only pending requests can be approved");
+      }
 
       const updated = await loadQueueRequest(request.id, client);
       if (!updated) {
@@ -1033,7 +1021,7 @@ leaveRouter.post(
     let decided: QueueRequestRow;
     try {
       await client.query("BEGIN");
-      const request = await loadQueueRequest(id, client);
+      const request = await loadQueueRequest(id, client, true);
       if (!request) {
         throw new LeaveRequestError("Leave request not found", 404);
       }
@@ -1047,7 +1035,7 @@ leaveRouter.post(
         throw new LeaveRequestError("Only pending requests can be rejected");
       }
 
-      await client.query(
+      const update = await client.query(
         `UPDATE leave_requests
          SET status = 'rejected',
              reviewer_user_id = $2,
@@ -1057,6 +1045,9 @@ leaveRouter.post(
            AND status = 'pending'`,
         [request.id, req.user!.id, decisionReason],
       );
+      if (update.rowCount !== 1) {
+        throw new LeaveRequestError("Only pending requests can be rejected");
+      }
 
       const updated = await loadQueueRequest(request.id, client);
       if (!updated) {
