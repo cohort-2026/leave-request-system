@@ -20,11 +20,11 @@ type BalancePayload = Partial<LeaveBalance> & {
 
 function mapBalance(row: BalancePayload): LeaveBalance {
   return {
-    leaveType: row.leaveType ?? '',
-    totalAllowance: row.totalAllowance ?? row.total ?? 0,
-    usedDays: row.usedDays ?? row.used ?? 0,
+    leaveType: String(row.leaveType ?? '').trim(),
+    totalAllowance: Number(row.totalAllowance ?? row.total ?? 0),
+    usedDays: Number(row.usedDays ?? row.used ?? 0),
     daysRemaining:
-      row.daysRemaining ?? row.remainingDays ?? row.remaining ?? 0,
+      Number(row.daysRemaining ?? row.remainingDays ?? row.remaining ?? 0),
   }
 }
 
@@ -33,5 +33,5 @@ export async function getLeaveBalances(): Promise<LeaveBalance[]> {
     '/api/leave/balances',
   )
   const list = Array.isArray(body) ? body : body.balances ?? []
-  return list.map(mapBalance)
+  return list.map(mapBalance).filter((row) => row.leaveType.length > 0)
 }
