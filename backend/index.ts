@@ -31,7 +31,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/companies", companiesRouter);
-app.use("/api/leave", leaveRouter);
+app.use("/api", leaveRouter);
 app.use("/api/leave-types", leaveTypesRouter);
 app.use("/api/calendar", calendarRouter);
 app.use("/api/admin/leave-types", adminLeaveTypesRouter);
