@@ -110,6 +110,8 @@ export function TeamReviewPage() {
     )
   }
 
+  const canDecide = request.status === 'pending'
+
   return (
     <PageShell title="Review leave" eyebrow="A decision">
       <div className="stack">
@@ -132,11 +134,14 @@ export function TeamReviewPage() {
       {actionError && !rejectOpen ? (
         <Alert tone="error">{actionError}</Alert>
       ) : null}
+      {!canDecide ? (
+        <p className="text-muted">This request has already been decided.</p>
+      ) : null}
       <p className="actions">
         <Button
           variant="primary"
           type="button"
-          disabled={submitting}
+          disabled={submitting || !canDecide}
           onClick={handleApprove}
         >
           Approve
@@ -144,7 +149,7 @@ export function TeamReviewPage() {
         <Button
           variant="danger"
           type="button"
-          disabled={submitting}
+          disabled={submitting || !canDecide}
           onClick={() => {
             setActionError(null)
             setRejectOpen(true)

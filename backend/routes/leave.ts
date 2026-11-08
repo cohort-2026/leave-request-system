@@ -1094,6 +1094,7 @@ type QueueRequestRow = {
   reviewer_user_id: number | null;
   employee_email: string;
   employee_name: string;
+  employee_role: string;
   leave_type: string;
   department_manager_id: number | null;
 };
@@ -1110,6 +1111,7 @@ const QUEUE_REQUEST_SQL = `SELECT
        lr.reviewer_user_id,
        employee.email AS employee_email,
        COALESCE(employee.display_name, employee.email) AS employee_name,
+       employee.role AS employee_role,
        leave_types.name AS leave_type,
        department.manager_id AS department_manager_id
      FROM leave_requests AS lr
@@ -1137,7 +1139,10 @@ function canSeeInQueue(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (row.employee_user_id === actor.id) return false;
   if (actor.role === "company_admin") return true;
   if (actor.role === "manager") {
-    return row.department_manager_id === actor.id;
+    return (
+      row.employee_role === "staff" &&
+      row.department_manager_id === actor.id
+    );
   }
   return false;
 }
@@ -1147,8 +1152,9 @@ function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (actor.role === "company_admin") return true;
   if (actor.role === "manager") {
     return (
-      row.reviewer_user_id === actor.id ||
-      row.department_manager_id === actor.id
+      row.employee_role === "staff" &&
+      (row.reviewer_user_id === actor.id ||
+        row.department_manager_id === actor.id)
     );
   }
   return false;
@@ -1215,6 +1221,7 @@ teamRouter.get(
            $3 = 'company_admin'
            OR (
              $3 = 'manager'
+             AND employee.role = 'staff'
              AND department.manager_id = $2
            )
          )
@@ -1437,7 +1444,7 @@ leaveRouter.post(
         );
       }
 
-      await client.query(
+      const update = await client.query(
         `UPDATE leave_requests
          SET status = 'approved',
              reviewer_user_id = $2,
@@ -1447,6 +1454,9 @@ leaveRouter.post(
            AND status = 'pending'`,
         [request.id, req.user!.id],
       );
+      if (update.rowCount !== 1) {
+        throw new LeaveRequestError("Only pending requests can be approved");
+      }
 
       const updated = await loadQueueRequest(request.id, client);
       if (!updated) {
@@ -1522,7 +1532,7 @@ leaveRouter.post(
         throw new LeaveRequestError("Only pending requests can be rejected");
       }
 
-      await client.query(
+      const update = await client.query(
         `UPDATE leave_requests
          SET status = 'rejected',
              reviewer_user_id = $2,
@@ -1532,6 +1542,9 @@ leaveRouter.post(
            AND status = 'pending'`,
         [request.id, req.user!.id, decisionReason],
       );
+      if (update.rowCount !== 1) {
+        throw new LeaveRequestError("Only pending requests can be rejected");
+      }
 
       const updated = await loadQueueRequest(request.id, client);
       if (!updated) {
