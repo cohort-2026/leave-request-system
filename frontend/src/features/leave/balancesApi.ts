@@ -7,31 +7,31 @@ export type LeaveBalance = {
   daysRemaining: number
 }
 
-type LeaveBalancesResponse = {
-  balances: LeaveBalance[]
-}
-
-type BalancePayload = Partial<LeaveBalance> & {
-  total?: number
-  used?: number
-  remainingDays?: number
-  remaining?: number
-}
-
-function mapBalance(row: BalancePayload): LeaveBalance {
-  return {
-    leaveType: row.leaveType ?? '',
-    totalAllowance: row.totalAllowance ?? row.total ?? 0,
-    usedDays: row.usedDays ?? row.used ?? 0,
-    daysRemaining:
-      row.daysRemaining ?? row.remainingDays ?? row.remaining ?? 0,
-  }
+function isLeaveBalance(value: unknown): value is LeaveBalance {
+  if (typeof value !== 'object' || value === null) return false
+  const balance = value as Record<string, unknown>
+  return (
+    typeof balance.leaveType === 'string' &&
+    balance.leaveType.trim().length > 0 &&
+    Number.isInteger(balance.totalAllowance) &&
+    Number(balance.totalAllowance) >= 0 &&
+    Number.isInteger(balance.usedDays) &&
+    Number(balance.usedDays) >= 0 &&
+    Number.isInteger(balance.daysRemaining) &&
+    Number(balance.daysRemaining) >= 0
+  )
 }
 
 export async function getLeaveBalances(): Promise<LeaveBalance[]> {
-  const body = await apiRequest<LeaveBalance[] | LeaveBalancesResponse>(
-    '/api/leave/balances',
-  )
-  const list = Array.isArray(body) ? body : body.balances ?? []
-  return list.map(mapBalance)
+  const body: unknown = await apiRequest<unknown>('/api/leave/balances')
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('balances' in body) ||
+    !Array.isArray(body.balances) ||
+    !body.balances.every(isLeaveBalance)
+  ) {
+    throw new Error('The leave balances response is invalid.')
+  }
+  return body.balances
 }

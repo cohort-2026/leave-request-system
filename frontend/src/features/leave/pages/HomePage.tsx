@@ -18,7 +18,7 @@ import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError
     ? error.message
-    : 'Could not load your home data.'
+    : 'Could not load your leave balances.'
 }
 
 export function HomePage() {
@@ -31,9 +31,10 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!session || session.role !== 'staff') {
+    if (!session || session.role === 'platform') {
       return
     }
+    const role = session.role
 
     let cancelled = false
     async function load() {
@@ -42,8 +43,10 @@ export function HomePage() {
         setError(null)
         // Fetch both - per issue #153 we MUST call /leave/balances
         const [homeData, balancesData] = await Promise.all([
-          getHomeSummary().catch(() => null),
-          getLeaveBalances().catch(() => { throw new Error('Could not load balances') }),
+          role === 'staff'
+            ? getHomeSummary().catch(() => null)
+            : Promise.resolve(null),
+          getLeaveBalances(),
         ])
         
         if (cancelled) return
@@ -84,41 +87,39 @@ export function HomePage() {
         </Button>
       }
     >
+      {loading ? <p className="text-muted">Loading your leave balances…</p> : null}
+      {error ? <Alert tone="error">{error}</Alert> : null}
+      {!loading && !error ? (
+        <div className="flex flex-wrap gap-stack">
+          {balances.length === 0 ? (
+            <p className="text-muted text-sm">No balances yet</p>
+          ) : (
+            balances.map((balance) => (
+              <p key={balance.leaveType} className="bg-surface p-section">
+                <span className="text-title">{balance.daysRemaining}</span>
+                <br />
+                <span className="text-muted">
+                  {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
+                </span>
+              </p>
+            ))
+          )}
+        </div>
+      ) : null}
+
       {session.role === 'staff' ? (
         <>
           <p className="text-muted">
             My leave, remaining days, and a way to book leave.
           </p>
 
-          {loading ? (
-            <p className="text-muted">Loading your leave…</p>
+          {!loading && !error && summary ? (
+            <p className="bg-surface p-section">
+              <span className="text-title">{summary.pendingCount}</span>
+              <br />
+              <span className="text-muted">Pending requests</span>
+            </p>
           ) : null}
-          {error ? <Alert tone="error">{error}</Alert> : null}
-
-          {!loading && !error && (
-            <div className="flex flex-wrap gap-stack">
-              {balances.length === 0 ? (
-                <p className="text-muted text-sm">No balances yet</p>
-              ) : (
-                balances.map((balance) => (
-                  <p key={balance.leaveType} className="bg-surface p-section">
-                    <span className="text-title">{balance.daysRemaining}</span>
-                    <br />
-                    <span className="text-muted">
-                      {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
-                    </span>
-                  </p>
-                ))
-              )}
-              {summary && (
-                <p className="bg-surface p-section">
-                  <span className="text-title">{summary.pendingCount}</span>
-                  <br />
-                  <span className="text-muted">Pending requests</span>
-                </p>
-              )}
-            </div>
-          )}
 
           <div className="flex flex-wrap gap-stack">
             <Button

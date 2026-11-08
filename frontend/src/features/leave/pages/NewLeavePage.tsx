@@ -77,8 +77,11 @@ export function NewLeavePage() {
           <option value="" disabled>
             Choose a type
           </option>
-          <option value="Annual">Annual</option>
-          <option value="Sick">Sick</option>
+          {balances.map((balance) => (
+            <option key={balance.leaveType} value={balance.leaveType}>
+              {balance.leaveType}
+            </option>
+          ))}
         </Select>
 
         {selectedType && !loadingBalances && !balancesError && (
