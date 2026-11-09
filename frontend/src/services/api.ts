@@ -111,9 +111,8 @@ export async function apiRequest<T>(
     headers.set('Content-Type', 'application/json')
   }
 
-  // credentials: 'include' is required so the httpOnly lrs_session cookie
-  // is sent to :4000 (and stored from Set-Cookie). Forgetting it looks like
-  // the person is logged out.
+  // Include the httpOnly session cookie for API requests in local and deployed
+  // environments.
   const response = await fetch(path, {
     ...options,
     headers,

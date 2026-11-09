@@ -64,7 +64,20 @@ docker run --rm -p 8025:8025 -p 1025:1025 axllent/mailpit
 Prove the mailer (Mailpit must already be running):
 
 ```powershell
-npm run mail:test --prefix backend
+npm run mail:test --prefix backend -- tester@example.com
 ```
 
 The test message is sent through `backend/mail`. Auth routes do not contain SMTP details.
+
+For the controlled Vercel demo using Mailgun's sandbox, see
+[docs/vercel-demo-email.md](docs/vercel-demo-email.md). Sandbox recipients must
+be authorized in Mailgun before they can receive mail.
+
+# Deploy the demo to Vercel
+
+Import the repository as a single Vercel project and set **Root Directory** to
+the repository root (`.`). The checked-in `vercel.json` configures a Vite
+frontend service and an Express backend service, routing `/api/*` to the
+backend and all other paths to the frontend. Add the environment variables from
+[docs/vercel-demo-email.md](docs/vercel-demo-email.md) in Vercel before
+deploying.

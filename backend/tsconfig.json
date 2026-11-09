@@ -14,6 +14,7 @@
     "types": ["node"]
   },
   "include": [
+    "app.ts",
     "index.ts",
     "load-env.ts",
     "db.ts",

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Router, type NextFunction, type Request, type Response } from "express";
@@ -32,11 +33,10 @@ const backendDirectory =
   basename(dirname(routesDirectory)) === "dist"
     ? dirname(dirname(routesDirectory))
     : dirname(routesDirectory);
-const uploadsDirectory = resolve(
-  backendDirectory,
-  "uploads",
-  "leave",
-);
+const uploadsDirectory =
+  process.env.VERCEL === "1"
+    ? resolve(tmpdir(), "leave-request-system", "uploads", "leave")
+    : resolve(backendDirectory, "uploads", "leave");
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AUTO_APPROVE_REASON =
   "Automatically approved because no other eligible reviewer is available";
