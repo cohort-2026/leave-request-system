@@ -1,4 +1,5 @@
 import { pool } from "../db.js";
+import { grantDefaultBalances } from "../leave/balances.js";
 import { appOrigin } from "../mail/index.js";
 import type { UserRow } from "../session.js";
 import { hashOnboardingToken, newOnboardingToken } from "./tokens.js";
@@ -13,25 +14,26 @@ export type CreatedOnboardingLink = {
   createdAt: string;
 };
 
-function isUndefinedTable(err: unknown): boolean {
-  return Boolean(
-    err && typeof err === "object" && "code" in err && err.code === "42P01",
-  );
+function pgCode(err: unknown): string {
+  return err && typeof err === "object" && "code" in err
+    ? String(err.code)
+    : "";
 }
 
 export function isOnboardingTableMissing(err: unknown): boolean {
-  return isUndefinedTable(err);
+  const code = pgCode(err);
+  return code === "42P01" || code === "42703";
 }
 
 export async function getActiveOnboardingLink(
-  companyName: string,
+  companyId: number,
 ): Promise<OnboardingLinkStatus> {
   const result = await pool.query<{ created_at: Date }>(
     `SELECT created_at
      FROM onboarding_links
-     WHERE company_name = $1 AND disabled_at IS NULL
+     WHERE company_id = $1 AND disabled_at IS NULL
      LIMIT 1`,
-    [companyName],
+    [companyId],
   );
   const row = result.rows[0];
   if (!row) {
@@ -41,7 +43,7 @@ export async function getActiveOnboardingLink(
 }
 
 export async function rotateOnboardingLink(
-  companyName: string,
+  companyId: number,
   createdByUserId: number,
 ): Promise<CreatedOnboardingLink> {
   const { token, hash } = newOnboardingToken();
@@ -52,14 +54,14 @@ export async function rotateOnboardingLink(
     await client.query(
       `UPDATE onboarding_links
        SET disabled_at = NOW()
-       WHERE company_name = $1 AND disabled_at IS NULL`,
-      [companyName],
+       WHERE company_id = $1 AND disabled_at IS NULL`,
+      [companyId],
     );
     const inserted = await client.query<{ created_at: Date }>(
-      `INSERT INTO onboarding_links (company_name, token_hash, created_by_user_id)
+      `INSERT INTO onboarding_links (company_id, token_hash, created_by_user_id)
        VALUES ($1, $2, $3)
        RETURNING created_at`,
-      [companyName, hash, createdByUserId],
+      [companyId, hash, createdByUserId],
     );
     await client.query("COMMIT");
     return {
@@ -74,14 +76,12 @@ export async function rotateOnboardingLink(
   }
 }
 
-export async function disableOnboardingLink(
-  companyName: string,
-): Promise<void> {
+export async function disableOnboardingLink(companyId: number): Promise<void> {
   await pool.query(
     `UPDATE onboarding_links
      SET disabled_at = NOW()
-     WHERE company_name = $1 AND disabled_at IS NULL`,
-    [companyName],
+     WHERE company_id = $1 AND disabled_at IS NULL`,
+    [companyId],
   );
 }
 
@@ -96,27 +96,42 @@ export async function onboardWithInvite(input: {
 
   try {
     await client.query("BEGIN");
-    const found = await client.query<{ company_name: string }>(
-      `SELECT company_name
-       FROM onboarding_links
-       WHERE token_hash = $1 AND disabled_at IS NULL
-       FOR UPDATE`,
+    const found = await client.query<{
+      company_id: number;
+      company_name: string;
+    }>(
+      `SELECT links.company_id, companies.name AS company_name
+       FROM onboarding_links AS links
+       INNER JOIN companies ON companies.id = links.company_id
+       WHERE links.token_hash = $1 AND links.disabled_at IS NULL
+       FOR UPDATE OF links`,
       [hash],
     );
-    const companyName = found.rows[0]?.company_name;
-    if (!companyName) {
+    const company = found.rows[0];
+    if (!company) {
       await client.query("ROLLBACK");
       return "invalid";
     }
 
     const inserted = await client.query<UserRow>(
-      `INSERT INTO users (email, password_hash, role, status, display_name, company_name)
-       VALUES ($1, $2, $3, 'pending_verification', $4, $5)
-       RETURNING id, email, role, display_name, status, company_name`,
-      [input.email, input.passwordHash, "staff", input.displayName, companyName],
+      `INSERT INTO users (
+         email, password_hash, role, status, display_name, company_name, company_id
+       )
+       VALUES ($1, $2, $3, 'pending_verification', $4, $5, $6)
+       RETURNING id, email, role, display_name, status, company_name, company_id`,
+      [
+        input.email,
+        input.passwordHash,
+        "staff",
+        input.displayName,
+        company.company_name,
+        company.company_id,
+      ],
     );
+    const user = inserted.rows[0];
+    await grantDefaultBalances(user.id, company.company_id, client);
     await client.query("COMMIT");
-    return inserted.rows[0];
+    return user;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

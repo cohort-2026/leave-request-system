@@ -22,9 +22,12 @@ Public user JSON (login, register, `/me`, `GET /api/users/:id`, people list, rol
   "role": "staff",
   "displayName": "Staff",
   "status": "active",
+  "companyId": 1,
   "companyName": "Acme"
 }
 ```
+
+`companyId` is the `companies.id` for that user, or `null` for platform. `companyName` is the display copy of `companies.name`. Same-company authorization uses `companyId`, not the name string.
 
 `password_hash` is never returned.
 
@@ -32,15 +35,34 @@ Public user JSON (login, register, `/me`, `GET /api/users/:id`, people list, rol
 
 ### `POST /api/auth/register` — anyone
 
-Open staff signup is closed. This address always returns **400** and does **not** insert a user. Start a company at `/start-company` (`POST /api/companies/signup` when that API exists), use company SSO, or open an invite link (`POST /api/auth/onboard`).
+Open staff signup is closed. This address always returns **400** and does **not** insert a user. Start a company at `/start-company` (`POST /api/companies/signup`), use company SSO, or open an invite link (`POST /api/auth/onboard`).
 
 - 400 `{ "error": "Open registration is closed. Start a company at /start-company, use company SSO, or open an invite link from your admin." }`
+
+### `POST /api/companies/signup` — anyone
+
+Body: `{ "companyName", "email", "password", "displayName", "planCode" }`. Extra fields such as `role` are ignored. `planCode` is `starter` (default), `growth`, or `business`. This stores a **checkout** for one hour. It does **not** create a company or user and does **not** set a cookie. Complete it with `POST /api/companies/signup/mock-pay` (local) until a live payment sandbox is wired.
+
+- 201 `{ checkoutToken, email, companyName, plan, amountCents, vatCents, totalCents, currency, amountLabel, vatLabel, totalLabel, expiresAt }`
+- 400 missing / invalid email, empty display name, company name outside 2–80 characters, password shorter than 8 or longer than 1024, unknown plan
+- 409 email already used
+- 503 `{ "error": "Company signup is not available yet." }` if companies or billing SQL has not been applied
+
+### `POST /api/companies/signup/mock-pay` — anyone, local only
+
+Body: `{ "token" }` from the checkout. Creates the `companies` row (`status: "active"`), a `company_admin` with `status: "pending_verification"`, an `active` subscription for the chosen plan, and a paid ZAR invoice (ex-VAT + 15% VAT). Slug is derived from the company name. Does **not** set a cookie. Sends the verification email. Refused when `NODE_ENV === "production"`. Card numbers are not accepted.
+
+- 201 public user plus `{ company, subscription, invoice }`
+- 400 invalid, expired, or already completed checkout
+- 409 email already used
+- 500 if the verification email could not be sent (the company and user rows still exist; they can resend)
+- 503 production, or tables missing
 
 ### `POST /api/auth/onboard` — anyone
 
 Body: `{ "token", "email", "password", "displayName" }`. Extra fields such as `role` and `companyName` are ignored. The token must match one **active** company invite. New users are always `staff` in **that** company, `status: "pending_verification"`. Password rules match the old register (8–1024). Does **not** set a cookie. Sends the existing verification email (Mailpit in local dev). Then they sign in and enroll TOTP as today.
 
-- 201 public user (`pending_verification`, `companyName` from the invite)
+- 201 public user (`pending_verification`, `companyId` and `companyName` from the invite)
 - 400 missing / invalid email, empty display name, password shorter than 8 or longer than 1024
 - 400 `{ "error": "This invite link is invalid or has been disabled." }` (unknown or disabled token)
 - 409 email already used
@@ -70,9 +92,17 @@ Disables the active invite for this company. Idempotent if none is active. Exist
 - 200 `{ "ok": true, "active": false }`
 - 401 / 403 / 503 as for GET
 
+### `GET /api/companies/current` — signed-in company user
+
+The caller's company. Staff, manager, and `company_admin` with a `company_id`. Platform and anyone without a company get **403**.
+
+- 200 `{ "id", "name", "slug", "status", "trialEndsAt" }` (`trialEndsAt` may be `null`)
+- 401 `{ "error": "Not signed in" }`
+- 403 `{ "error": "You are not in a company" }` (platform, or no `company_id`)
+
 ### `GET /api/companies/current/users` — `company_admin`
 
-Public user JSON for every person in **this** company (`users.company_name` until `company_id` ships). Ordered by id. Includes the caller. Does **not** include other companies or `platform` users.
+Public user JSON for every person in **this** company (`users.company_id`). Ordered by id. Includes the caller. Does **not** include other companies or `platform` users.
 
 - 200 `{ "users": [ public user, ... ] }`
 - 401 `{ "error": "Not signed in" }`
@@ -242,6 +272,42 @@ WHERE user_id = (SELECT id FROM users WHERE email = 'staff@leave.local');
 DELETE FROM login_challenges
 WHERE user_id = (SELECT id FROM users WHERE email = 'staff@leave.local');
 ```
+
+### `GET /api/companies/current/sso` — `company_admin`
+
+Never returns the raw client secret. Empty settings when none are saved.
+
+- 200 `{ "issuer", "clientId", "emailDomain", "enabled", "clientSecretConfigured" }`
+- 401 `{ "error": "Not signed in" }`
+- 403 staff, manager, platform, or a company admin with no company
+
+### `PUT /api/companies/current/sso` — `company_admin`
+
+Body: `{ "issuer", "clientId", "clientSecret?", "emailDomain", "enabled" }`. The secret is encrypted at rest (`client_secret_cipher`). Leave `clientSecret` blank to keep the stored value. A first save needs a secret.
+
+- 200 same shape as GET
+- 400 missing issuer / client id / email domain, or missing secret on first save
+- 401 / 403 as for GET
+
+### `POST /api/auth/sso/start` — anyone
+
+Body: `{ "identifier" }` (company slug such as `acme`, or a work email such as `staff@leave.local`). Local/dev mock only (`NODE_ENV !== "production"`, same gate as mock-pay). SSO users skip password and TOTP; the session cookie is still `lrs_session`.
+
+- 200 `{ "authorizationUrl" }` pointing at this app’s mock authorize page
+- 400 missing identifier
+- 404 company unknown or SSO disabled
+- 503 in production (no live IdP redirect)
+
+`GET /api/auth/sso/start?company=` does the same lookup and **302**s to that URL.
+
+### `GET /api/auth/sso/callback` — anyone
+
+Mock OIDC callback. Validates `code` + `state`, matches the email to an existing user in **that** company, sets `lrs_session`, redirects to `APP_ORIGIN`. Does **not** JIT-create users. Does **not** run app password or TOTP.
+
+- 302 to `/` with `lrs_session`
+- 403 `{ "error": "Ask your admin to provision your account." }` when the email is not provisioned in that company
+- 403 cross-company email (Khumalo cannot finish Acme’s callback)
+- 503 in production
 
 See `docs/auth-roles.md` for who may call which address.
 

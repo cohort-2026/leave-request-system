@@ -11,10 +11,13 @@ import {
   login,
   verifyTotpLogin,
   verifyTotpRecovery,
+  startCompanySso,
   type TotpEnrollmentChallenge,
 } from '../api'
 
 type Step = 'password' | 'enroll' | 'totp' | 'recoveryCodes'
+
+const SHOW_SSO_LOGIN = true
 
 export function LoginPage() {
   const { signIn } = useAuth()
@@ -27,6 +30,7 @@ export function LoginPage() {
     ),
   )
   const [email, setEmail] = useState('')
+  const [ssoIdentifier, setSsoIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [recoveryCode, setRecoveryCode] = useState('')
@@ -40,6 +44,8 @@ export function LoginPage() {
   const [formError, setFormError] = useState('')
   const [needsVerify, setNeedsVerify] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [ssoSubmitting, setSsoSubmitting] = useState(false)
+  const [ssoError, setSsoError] = useState('')
 
   function goHome(session: Session) {
     signIn(session)
@@ -97,6 +103,31 @@ export function LoginPage() {
     }
   }
 
+  async function handleSso(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSsoError('')
+    setSsoSubmitting(true)
+
+    try {
+      const result = await startCompanySso(ssoIdentifier.trim())
+      if (!result.authorizationUrl) {
+        setSsoError('Company SSO is unavailable. Use password sign-in instead.')
+        return
+      }
+      window.location.assign(result.authorizationUrl)
+    } catch (error) {
+      setSsoError(
+        error instanceof ApiError && (error.status === 404 || error.status === 503)
+          ? 'Company SSO is not available yet. Use password sign-in instead.'
+          : error instanceof ApiError
+            ? error.message
+          : 'Company SSO is unavailable. Use password sign-in instead.',
+      )
+    } finally {
+      setSsoSubmitting(false)
+    }
+  }
+
   async function handleEnroll(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErrors({})
@@ -104,17 +135,10 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      const result = await confirmTotpEnroll(email, code)
-      setRecoveryCodes(result.recoveryCodes)
-      setPendingSession({
-        id: result.id,
-        email: result.email,
-        displayName: result.displayName,
-        role: result.role,
-        status: result.status,
-        companyId: result.companyId,
-        companyName: result.companyName,
-      })
+      const { recoveryCodes: codes, ...nextSession } =
+        await confirmTotpEnroll(email, code)
+      setRecoveryCodes(codes)
+      setPendingSession(nextSession)
       setStep('recoveryCodes')
     } catch (error) {
       if (error instanceof ApiError) {
@@ -184,40 +208,67 @@ export function LoginPage() {
       {formError ? <Alert tone="error">{formError}</Alert> : null}
 
       {step === 'password' ? (
-        <form
-          className="auth-form"
-          onSubmit={handlePassword}
-          aria-busy={submitting}
-        >
-          <TextField
-            label="Email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            error={errors.email}
-            required
-            disabled={submitting}
-          />
-          <TextField
-            label="Password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            error={errors.password}
-            required
-            disabled={submitting}
-          />
-          <div className="auth-inline-action">
-            <Link to={paths.forgotPassword}>Forgot password?</Link>
-          </div>
-          <Button variant="primary" type="submit" disabled={submitting}>
-            {submitting ? 'Signing in…' : 'Log in'}
-          </Button>
-        </form>
+        <>
+          {SHOW_SSO_LOGIN ? (
+            <>
+              <form
+                className="auth-form"
+                onSubmit={handleSso}
+                aria-busy={ssoSubmitting}
+              >
+                {ssoError ? <Alert tone="error">{ssoError}</Alert> : null}
+                <TextField
+                  label="Company slug or work email"
+                  name="sso-identifier"
+                  autoComplete="organization"
+                  placeholder="acme or you@acme.com"
+                  value={ssoIdentifier}
+                  onChange={(event) => setSsoIdentifier(event.target.value)}
+                  required
+                  disabled={ssoSubmitting}
+                />
+                <Button variant="secondary" type="submit" disabled={ssoSubmitting}>
+                  {ssoSubmitting ? 'Connecting…' : 'Sign in with company SSO'}
+                </Button>
+              </form>
+              <p className="auth-help">Or sign in with your password</p>
+            </>
+          ) : null}
+          <form
+            className="auth-form"
+            onSubmit={handlePassword}
+            aria-busy={submitting}
+          >
+            <TextField
+              label="Email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              error={errors.email}
+              required
+              disabled={submitting}
+            />
+            <TextField
+              label="Password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              error={errors.password}
+              required
+              disabled={submitting}
+            />
+            <div className="auth-inline-action">
+              <Link to={paths.forgotPassword}>Forgot password?</Link>
+            </div>
+            <Button variant="primary" type="submit" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Log in'}
+            </Button>
+          </form>
+        </>
       ) : null}
 
       {step === 'enroll' && enrollment ? (

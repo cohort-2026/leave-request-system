@@ -1,18 +1,30 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
-import { signupCompany } from '../api'
+import { PLANS, VAT_NOTE, type Plan } from '../../marketing/plans'
+import { startCompanyCheckout, storeSignupCheckout } from '../api'
+
+function planFromQuery(value: string | null): Plan['id'] {
+  if (value === 'growth' || value === 'business' || value === 'starter') {
+    return value
+  }
+  return 'starter'
+}
 
 export function StartCompanyPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [companyName, setCompanyName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [planCode, setPlanCode] = useState<Plan['id']>(() =>
+    planFromQuery(searchParams.get('plan')),
+  )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -30,14 +42,20 @@ export function StartCompanyPage() {
     setSubmitting(true)
 
     try {
-      await signupCompany(companyName, displayName, email, password)
-      navigate(paths.verify, { replace: true, state: { email } })
+      const checkout = await startCompanyCheckout(
+        companyName,
+        displayName,
+        email,
+        password,
+        planCode,
+      )
+      storeSignupCheckout(checkout)
+      navigate(paths.startCompanyPay, { replace: true, state: checkout })
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors)
         setFormError(
-          error.status === 404 &&
-            error.message === 'Something went wrong. Please try again.'
+          error.status === 404
             ? 'Company signup is not available yet. Please try again later.'
             : error.message,
         )
@@ -53,7 +71,12 @@ export function StartCompanyPage() {
     <div className="company-signup-layout">
       <PageShell title="Start your company" eyebrow="Workspace setup">
         <p className="company-signup-intro">
-          Create your company workspace and set up your administrator account.
+          Create your company workspace, choose a plan, and complete a
+          development payment to finish signup.
+        </p>
+        <p className="muted">
+          Employees are provisioned by their company (SCIM / SSO), or they use
+          an invite link if they were sent one.
         </p>
         {formError ? <Alert tone="error">{formError}</Alert> : null}
         <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
@@ -110,8 +133,30 @@ export function StartCompanyPage() {
             required
             disabled={submitting}
           />
+          <fieldset className="company-signup-plans">
+            <legend>Plan</legend>
+            {PLANS.map((plan) => (
+              <label key={plan.id} className="company-signup-plan">
+                <input
+                  type="radio"
+                  name="planCode"
+                  value={plan.id}
+                  checked={planCode === plan.id}
+                  onChange={() => setPlanCode(plan.id)}
+                  disabled={submitting}
+                />
+                <span>
+                  <strong>
+                    {plan.name} · {plan.priceLabel}
+                  </strong>
+                  <small>Up to {plan.seatLimit} people, billed monthly</small>
+                </span>
+              </label>
+            ))}
+            <p className="field-hint">{VAT_NOTE} First month is due at signup.</p>
+          </fieldset>
           <Button variant="primary" type="submit" disabled={submitting}>
-            {submitting ? 'Starting…' : 'Create company workspace'}
+            {submitting ? 'Continuing…' : 'Continue to payment'}
           </Button>
         </form>
         <p>
@@ -130,21 +175,21 @@ export function StartCompanyPage() {
             <span>01</span>
             <div>
               <strong>Create your workspace</strong>
-              <small>Tell us who you are and where you work.</small>
+              <small>Tell us who you are and choose a plan.</small>
             </div>
           </li>
           <li>
             <span>02</span>
             <div>
-              <strong>Verify your email</strong>
-              <small>We’ll send a link to confirm your address.</small>
+              <strong>Pay (development)</strong>
+              <small>Complete the mock checkout. No real card is charged.</small>
             </div>
           </li>
           <li>
             <span>03</span>
             <div>
-              <strong>Secure your account</strong>
-              <small>Finish setup with two-factor authentication.</small>
+              <strong>Verify your email</strong>
+              <small>Then finish setup with two-factor authentication.</small>
             </div>
           </li>
         </ol>

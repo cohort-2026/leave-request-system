@@ -6,6 +6,7 @@ export const paths = {
   resetPassword: '/reset-password',
   register: '/register',
   startCompany: '/start-company',
+  startCompanyPay: '/start-company/pay',
   pricing: '/pricing',
   onboardDisabled: '/onboard/disabled',
   onboard: '/onboard/:token',
@@ -18,6 +19,7 @@ export const paths = {
   leave: '/leave',
   leaveNew: '/leave/new',
   leaveDetail: '/leave/:id',
+  leaveEdit: '/leave/:id/edit',
   calendar: '/calendar',
   teamQueue: '/team/queue',
   teamReview: '/team/queue/:id',
@@ -31,6 +33,7 @@ export const paths = {
   adminCalendarSettings: '/admin/calendar-settings',
   adminBlocks: '/admin/blocks',
   adminOnboarding: '/admin/onboarding',
+  adminSso: '/admin/sso',
   platform: '/platform',
   platformNewCompany: '/platform/companies/new',
 } as const
@@ -41,6 +44,10 @@ export function onboardPath(token: string) {
 
 export function leaveDetailPath(id: string) {
   return `/leave/${id}`
+}
+
+export function leaveEditPath(id: string) {
+  return `/leave/${id}/edit`
 }
 
 export function teamReviewPath(id: string) {

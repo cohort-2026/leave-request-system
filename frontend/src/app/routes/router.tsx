@@ -12,6 +12,7 @@ import { ForgotPasswordPage } from '../../features/auth/pages/ForgotPasswordPage
 import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage'
 import { RegisterPage } from '../../features/auth/pages/RegisterPage'
 import { StartCompanyPage } from '../../features/auth/pages/StartCompanyPage'
+import { StartCompanyPayPage } from '../../features/auth/pages/StartCompanyPayPage'
 import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPage'
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
 import { PendingApprovalPage } from '../../features/auth/pages/PendingApprovalPage'
@@ -23,6 +24,7 @@ import { BlocksPage } from '../../features/company/pages/BlocksPage'
 import { CalendarSettingsPage } from '../../features/company/pages/CalendarSettingsPage'
 import { LeaveTypesPage } from '../../features/company/pages/LeaveTypesPage'
 import { OnboardingLinkPage } from '../../features/company/pages/OnboardingLinkPage'
+import { SsoSettingsPage } from '../../features/company/pages/SsoSettingsPage'
 import { RulesPage } from '../../features/company/pages/RulesPage'
 import { LeaveDetailPage } from '../../features/leave/pages/LeaveDetailPage'
 import { LeaveListPage } from '../../features/leave/pages/LeaveListPage'
@@ -54,6 +56,7 @@ export const router = createBrowserRouter([
           { path: paths.login, element: <LoginPage /> },
           { path: paths.register, element: <RegisterPage /> },
           { path: paths.startCompany, element: <StartCompanyPage /> },
+          { path: paths.startCompanyPay, element: <StartCompanyPayPage /> },
         ],
       },
       { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
@@ -88,6 +91,10 @@ export const router = createBrowserRouter([
                 children: [
                   { path: paths.leave, element: <LeaveListPage /> },
                   { path: paths.leaveNew, element: <NewLeavePage /> },
+                  {
+                    path: paths.leaveEdit,
+                    element: <NewLeavePage editMode />,
+                  },
                   { path: paths.leaveDetail, element: <LeaveDetailPage /> },
                   { path: paths.calendar, element: <CalendarPage /> },
                 ],
@@ -115,6 +122,7 @@ export const router = createBrowserRouter([
                   },
                   { path: paths.adminBlocks, element: <BlocksPage /> },
                   { path: paths.adminOnboarding, element: <OnboardingLinkPage /> },
+                  { path: paths.adminSso, element: <SsoSettingsPage /> },
                 ],
               },
               {

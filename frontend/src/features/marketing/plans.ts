@@ -8,7 +8,6 @@ export type Plan = {
   priceZar: number
   priceLabel: string
   seatLimit: number
-  trialDays?: number
 }
 
 export const PLANS: Plan[] = [
@@ -18,7 +17,6 @@ export const PLANS: Plan[] = [
     priceZar: 199,
     priceLabel: 'R199',
     seatLimit: 15,
-    trialDays: 14,
   },
   {
     id: 'growth',

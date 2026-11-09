@@ -191,6 +191,82 @@ a {
   line-height: 1.6;
 }
 
+.company-signup-plans {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.company-signup-plans legend {
+  margin-bottom: 0.35rem;
+  color: #303b4d;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.company-signup-plan {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem 1rem;
+  border: 1px solid #cbd3df;
+  border-radius: 6px;
+  font-weight: 400;
+}
+
+.company-signup-plan:has(input:checked) {
+  border-color: #2c3e6b;
+  background: #f4f7fb;
+}
+
+.company-signup-plan strong,
+.company-signup-plan small {
+  display: block;
+}
+
+.company-signup-plan small {
+  margin-top: 0.2rem;
+  color: #596579;
+  font-size: 0.85rem;
+}
+
+.company-signup-summary {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #e1e6ee;
+  border-radius: 8px;
+}
+
+.company-signup-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.company-signup-summary dt {
+  color: #596579;
+}
+
+.company-signup-summary dd {
+  margin: 0;
+  font-weight: 650;
+}
+
+.company-signup-summary div:last-child dd {
+  font-size: 1.05rem;
+}
+
+.company-signup-card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
 .company-signup-layout .field {
   gap: 0.45rem;
   color: #303b4d;
@@ -696,6 +772,11 @@ select:disabled {
   color: var(--color-danger);
 }
 
+.status-badge-cancelled {
+  background: var(--color-badge-waiting);
+  color: var(--color-muted);
+}
+
 .status-badge-waiting {
   background: var(--color-badge-waiting);
   color: var(--color-muted);
@@ -721,6 +802,71 @@ select:disabled {
   border: 1px solid color-mix(in srgb, var(--color-muted) 40%, var(--color-surface));
   padding: var(--spacing-field) var(--spacing-field);
   text-align: start;
+}
+
+.calendar-settings {
+  display: grid;
+  gap: var(--spacing-section);
+  align-items: start;
+  max-width: 56rem;
+}
+
+.calendar-settings > * {
+  min-width: 0;
+}
+
+.calendar-settings h2 {
+  margin: 0;
+  font-size: var(--text-title-sm);
+  line-height: var(--text-title-sm--line-height);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+.calendar-settings .stack > p {
+  margin: 0;
+}
+
+.calendar-settings input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.calendar-settings .check-list {
+  display: grid;
+  gap: var(--spacing-field);
+}
+
+.calendar-settings .check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-stack);
+}
+
+.calendar-settings-table {
+  overflow-x: auto;
+}
+
+.calendar-settings .data-table td,
+.calendar-settings .data-table th {
+  vertical-align: middle;
+}
+
+.calendar-settings .data-table td.cell-action {
+  width: 1%;
+  text-align: end;
+  white-space: nowrap;
+}
+
+@media (min-width: 800px) {
+  .calendar-settings {
+    grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 1.15fr);
+  }
 }
 
 .empty-state {

@@ -12,6 +12,12 @@ type ServerUser = {
   companyName?: string | null
 }
 
+function companyIdFrom(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null
+}
+
 export type TotpEnrollmentChallenge = {
   totpEnrollmentRequired: true
   otpauthUrl: string
@@ -35,7 +41,7 @@ function mapSession(user: ServerUser): Session {
     displayName: user.displayName ?? user.name ?? user.email ?? '',
     role: user.role,
     status: user.status ?? 'active',
-    companyId: user.companyId ?? null,
+    companyId: companyIdFrom(user.companyId),
     companyName: user.companyName ?? null,
   }
 }
@@ -48,6 +54,13 @@ export function login(email: string, password: string) {
   return apiRequest<LoginResult>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  })
+}
+
+export function startCompanySso(identifier: string) {
+  return apiRequest<{ authorizationUrl: string }>('/api/auth/sso/start', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
   })
 }
 
@@ -85,12 +98,83 @@ export function register(email: string, password: string) {
   })
 }
 
-export function signupCompany(
+export function onboard(
+  token: string,
+  email: string,
+  password: string,
+  displayName: string,
+) {
+  return apiRequest<ServerUser>('/api/auth/onboard', {
+    method: 'POST',
+    body: JSON.stringify({ token, email, password, displayName }),
+  })
+}
+
+export type SignupCheckout = {
+  checkoutToken: string
+  email: string
+  companyName: string
+  plan: {
+    code: string
+    name: string
+    seatLimit: number
+  }
+  amountCents: number
+  vatCents: number
+  totalCents: number
+  currency: string
+  amountLabel: string
+  vatLabel: string
+  totalLabel: string
+  expiresAt: string
+}
+
+const SIGNUP_CHECKOUT_KEY = 'lrs_signup_checkout'
+
+export function storeSignupCheckout(checkout: SignupCheckout) {
+  sessionStorage.setItem(SIGNUP_CHECKOUT_KEY, JSON.stringify(checkout))
+}
+
+export function readSignupCheckout(): SignupCheckout | null {
+  const raw = sessionStorage.getItem(SIGNUP_CHECKOUT_KEY)
+  if (!raw) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(raw) as SignupCheckout
+    if (!parsed.checkoutToken || !parsed.email) {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+export function clearSignupCheckout() {
+  sessionStorage.removeItem(SIGNUP_CHECKOUT_KEY)
+}
+
+export function startCompanyCheckout(
   companyName: string,
   displayName: string,
   email: string,
   password: string,
+  planCode: string,
 ) {
+  return apiRequest<SignupCheckout>('/api/companies/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      companyName,
+      displayName,
+      email,
+      password,
+      planCode,
+    }),
+  })
+}
+
+export function mockPayCompanySignup(token: string) {
   return apiRequest<{
     id: number
     email: string
@@ -98,10 +182,15 @@ export function signupCompany(
     role: Session['role']
     status: Session['status']
     companyName: string
-    company: { id: number; name: string; slug: string; trialEndsAt: string }
-  }>('/api/companies/signup', {
+    company: {
+      id: number
+      name: string
+      slug: string
+      trialEndsAt: string | null
+    }
+  }>('/api/companies/signup/mock-pay', {
     method: 'POST',
-    body: JSON.stringify({ companyName, displayName, email, password }),
+    body: JSON.stringify({ token }),
   })
 }
 

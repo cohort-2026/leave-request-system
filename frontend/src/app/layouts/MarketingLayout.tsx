@@ -14,7 +14,7 @@ export function MarketingLayout({ children }: { children?: ReactNode }) {
           <NavLink to={paths.pricing}>Pricing</NavLink>
           <NavLink to={paths.login}>Sign in</NavLink>
           <Link to={paths.startCompany} className="marketing-cta">
-            Start free trial
+            Start your company
           </Link>
         </nav>
       </header>

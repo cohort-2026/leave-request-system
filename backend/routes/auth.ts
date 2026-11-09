@@ -182,7 +182,7 @@ authRouter.post("/login", async (req, res) => {
   }
 
   const result = await pool.query<UserRow>(
-    `SELECT id, email, password_hash, role, display_name, status, company_name
+    `SELECT id, email, password_hash, role, display_name, status, company_name, company_id
      FROM users
      WHERE lower(email) = lower($1)
      LIMIT 1`,
@@ -363,7 +363,7 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
     `UPDATE users
      SET display_name = $1
      WHERE id = $2
-     RETURNING id, email, password_hash, role, display_name, status, company_name`,
+     RETURNING id, email, password_hash, role, display_name, status, company_name, company_id`,
     [storedName, req.user!.id],
   );
   const user = result.rows[0];
@@ -379,6 +379,7 @@ authRouter.patch("/me", requireAuth, async (req, res) => {
     display_name: user.display_name,
     status: user.status,
     company_name: user.company_name,
+    company_id: user.company_id,
   };
   res.json(toPublicUser(user));
 });
@@ -407,7 +408,7 @@ authRouter.post("/change-password", requireAuth, async (req, res) => {
   }
 
   const result = await pool.query<UserRow>(
-    `SELECT id, email, password_hash, role, display_name, status, company_name
+    `SELECT id, email, password_hash, role, display_name, status, company_name, company_id
      FROM users
      WHERE id = $1
      LIMIT 1`,
@@ -495,7 +496,7 @@ authRouter.post("/totp/enroll", requireAuth, async (req, res) => {
   }
 
   const result = await pool.query<UserRow>(
-    `SELECT id, email, password_hash, role, display_name, status, company_name
+    `SELECT id, email, password_hash, role, display_name, status, company_name, company_id
      FROM users
      WHERE id = $1
      LIMIT 1`,

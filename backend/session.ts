@@ -19,7 +19,10 @@ export type PublicUser = {
   role: Role;
   displayName: string;
   status: AccountStatus;
+  companyId: number | null;
   companyName: string | null;
+  departmentId: number | null;
+  departmentName: string | null;
 };
 
 export type UserRow = {
@@ -30,6 +33,9 @@ export type UserRow = {
   display_name: string | null;
   status: string;
   company_name: string | null;
+  company_id: number | null;
+  department_id?: number | null;
+  department_name?: string | null;
 };
 
 function jwtSecret(): string {
@@ -62,7 +68,17 @@ export function signSessionToken(userId: number): string {
 
 export function toPublicUser(
   row: Pick<UserRow, "id" | "email" | "role"> &
-    Partial<Pick<UserRow, "display_name" | "status" | "company_name">>,
+    Partial<
+      Pick<
+        UserRow,
+        | "display_name"
+        | "status"
+        | "company_name"
+        | "company_id"
+        | "department_id"
+        | "department_name"
+      >
+    >,
 ): PublicUser {
   const status =
     row.status === "pending_verification" || row.status === "pending_approval"
@@ -75,7 +91,10 @@ export function toPublicUser(
     role: row.role,
     displayName: row.display_name?.trim() || row.email,
     status,
+    companyId: row.company_id ?? null,
     companyName: row.company_name ?? null,
+    departmentId: row.department_id ?? null,
+    departmentName: row.department_name ?? null,
   };
 }
 
