@@ -43,7 +43,9 @@ the backend unchanged; all other paths route to the frontend, whose rewrite
 supports React Router deep links. Both services share the same public origin,
 so session cookies work without cross-origin cookie configuration. The
 frontend makes browser requests through the public `/api/` route, so no
-service-to-service binding is needed.
+service-to-service binding is needed. Each service installs from its own
+lockfile and runs its own build command, so the backend's runtime dependencies
+are included with the Express service.
 
 Vercel Functions have ephemeral local storage. Leave request supporting files
 are written to `/tmp` on Vercel and won't persist across invocations, so file

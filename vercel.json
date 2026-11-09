@@ -4,11 +4,16 @@
     "backend": {
       "root": "backend",
       "framework": "express",
-      "entrypoint": "app.mts"
+      "entrypoint": "app.mts",
+      "installCommand": "npm ci",
+      "buildCommand": "npm run build"
     },
     "frontend": {
       "root": "frontend",
       "framework": "vite",
+      "installCommand": "npm ci",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
       "rewrites": [
         {
           "source": "/(.*)",
