@@ -36,6 +36,13 @@ Also set `DATABASE_URL` and `JWT_SECRET`. Production mode refuses to use local
 Mailpit defaults if SMTP credentials or `APP_ORIGIN` are missing. Redeploy
 after changing Vercel environment variables.
 
+Company signup uses a mock checkout, which is disabled in production by
+default. To enable it for this controlled demo, set the backend environment
+variable `ALLOW_MOCK_PAY` to `true` and redeploy. The mock checkout creates a
+company and records an invoice as paid without charging a card. Anyone who can
+reach the public signup flow can use it, so enable it only for the demo and
+remove the variable afterward.
+
 The repository root is configured as one Vercel project with two services:
 `frontend` (Vite) and `backend` (Node.js container running Express). In
 Vercel's project setup, use the

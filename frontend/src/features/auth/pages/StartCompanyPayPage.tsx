@@ -100,8 +100,8 @@ export function StartCompanyPayPage() {
     <div className="company-signup-layout">
       <PageShell title="Development payment" eyebrow="Workspace setup">
         <p className="company-signup-intro">
-          Complete signup for {order.companyName}. This is a local mock
-          checkout. A live payment sandbox will replace it later.
+          Complete signup for {order.companyName}. This development mock
+          checkout does not charge a real card.
         </p>
         <Alert>
           No real card is charged. Card numbers stay in the browser and are not

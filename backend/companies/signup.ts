@@ -107,7 +107,10 @@ export function isEmailTaken(err: unknown): boolean {
 }
 
 export function mockPayAllowed(): boolean {
-  return process.env.NODE_ENV !== "production";
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_MOCK_PAY === "true"
+  );
 }
 
 export function slugFromName(name: string): string {
