@@ -3,10 +3,8 @@
   "services": {
     "backend": {
       "root": "backend",
-      "framework": "express",
-      "entrypoint": "app.mts",
-      "installCommand": "npm ci",
-      "buildCommand": "npm run build"
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
     },
     "frontend": {
       "root": "frontend",

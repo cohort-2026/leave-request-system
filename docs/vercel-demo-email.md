@@ -37,15 +37,15 @@ Mailpit defaults if SMTP credentials or `APP_ORIGIN` are missing. Redeploy
 after changing Vercel environment variables.
 
 The repository root is configured as one Vercel project with two services:
-`frontend` (Vite) and `backend` (Express). In Vercel's project setup, use the
+`frontend` (Vite) and `backend` (Node.js container running Express). In
+Vercel's project setup, use the
 repository root (`.`) as the Root Directory. Requests under `/api/` route to
 the backend unchanged; all other paths route to the frontend, whose rewrite
 supports React Router deep links. Both services share the same public origin,
 so session cookies work without cross-origin cookie configuration. The
 frontend makes browser requests through the public `/api/` route, so no
-service-to-service binding is needed. Each service installs from its own
-lockfile and runs its own build command, so the backend's runtime dependencies
-are included with the Express service.
+service-to-service binding is needed. The backend image installs dependencies
+from its lockfile and includes production dependencies with the Express app.
 
 Vercel Functions have ephemeral local storage. Leave request supporting files
 are written to `/tmp` on Vercel and won't persist across invocations, so file
