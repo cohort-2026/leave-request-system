@@ -175,8 +175,15 @@ authRouter.post("/onboard", async (req, res) => {
 authRouter.post("/login", async (req, res) => {
   const email = asNonEmptyString(req.body?.email);
   const password = asNonEmptyString(req.body?.password);
+  const accountId =
+    req.body?.accountId === undefined ? null : Number(req.body.accountId);
 
-  if (!email || !password) {
+  if (
+    !email ||
+    !password ||
+    (accountId !== null &&
+      (!Number.isSafeInteger(accountId) || accountId <= 0))
+  ) {
     res.status(401).json({ error: INVALID_LOGIN });
     return;
   }
@@ -185,18 +192,40 @@ authRouter.post("/login", async (req, res) => {
     `SELECT id, email, password_hash, role, display_name, status, company_name, company_id
      FROM users
      WHERE lower(email) = lower($1)
-     LIMIT 1`,
+     ORDER BY company_name NULLS LAST, id`,
     [email],
   );
-  const user = result.rows[0];
 
-  if (!user) {
+  const matchingUsers: UserRow[] = [];
+  for (const candidate of result.rows) {
+    if (await bcrypt.compare(password, candidate.password_hash)) {
+      matchingUsers.push(candidate);
+    }
+  }
+  if (matchingUsers.length === 0) {
     res.status(401).json({ error: INVALID_LOGIN });
     return;
   }
 
-  const passwordMatches = await bcrypt.compare(password, user.password_hash);
-  if (!passwordMatches) {
+  if (accountId === null && result.rows.length > 1) {
+    clearSessionCookie(res);
+    clearChallengeCookie(res);
+    res.json({
+      accountSelectionRequired: true,
+      accounts: result.rows.map((user) => ({
+        id: user.id,
+        companyName: user.company_name,
+        role: user.role,
+      })),
+    });
+    return;
+  }
+
+  const user =
+    accountId === null
+      ? matchingUsers[0]
+      : matchingUsers.find((candidate) => candidate.id === accountId);
+  if (!user) {
     res.status(401).json({ error: INVALID_LOGIN });
     return;
   }
@@ -227,7 +256,10 @@ authRouter.post("/verify-email", async (req, res) => {
   await pool.query(
     `UPDATE users
      SET status = 'active'
-     WHERE id = $1 AND status = 'pending_verification'`,
+     WHERE status = 'pending_verification'
+       AND lower(email) = (
+         SELECT lower(email) FROM users WHERE id = $1
+       )`,
     [userId],
   );
 
@@ -479,6 +511,7 @@ authRouter.get("/totp/enrollment", requireAuth, async (req, res) => {
     req,
     req.user!.id,
     req.user!.email,
+    req.user!.company_name,
   );
   if (!enrollment) {
     res.status(404).json({ error: "No authenticator enrollment pending." });

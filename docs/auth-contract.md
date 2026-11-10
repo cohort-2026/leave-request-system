@@ -7,7 +7,7 @@ Monday Week 4 agreement. Errors are always `{ "error": "..." }`.
 | 400 | Bad input |
 | 401 | Not signed in, or login failed (wrong password / unknown email) |
 | 403 | Signed in, not allowed. Also returned on login when the password is right but the email is not verified (no cookie is set). |
-| 409 | Email already used |
+| 409 | Email already has an account in this company |
 
 Cookie name: `lrs_session`. httpOnly, Path `/`, SameSite `lax`, 7 days. Secure follows `NODE_ENV === "production"`. The token is never stored in `localStorage`.
 
@@ -45,7 +45,6 @@ Body: `{ "companyName", "email", "password", "displayName", "planCode" }`. Extra
 
 - 201 `{ checkoutToken, email, companyName, plan, amountCents, vatCents, totalCents, currency, amountLabel, vatLabel, totalLabel, expiresAt }`
 - 400 missing / invalid email, empty display name, company name outside 2–80 characters, password shorter than 8 or longer than 1024, unknown plan
-- 409 email already used
 - 503 `{ "error": "Company signup is not available yet." }` if companies or billing SQL has not been applied
 
 ### `POST /api/companies/signup/mock-pay` — anyone, local only
@@ -54,18 +53,17 @@ Body: `{ "token" }` from the checkout. Creates the `companies` row (`status: "ac
 
 - 201 public user plus `{ company, subscription, invoice }`
 - 400 invalid, expired, or already completed checkout
-- 409 email already used
 - 500 if the verification email could not be sent (the company and user rows still exist; they can resend)
 - 503 production, or tables missing
 
 ### `POST /api/auth/onboard` — anyone
 
-Body: `{ "token", "email", "password", "displayName" }`. Extra fields such as `role` and `companyName` are ignored. The token must match one **active** company invite. New users are always `staff` in **that** company, `status: "pending_verification"`. Password rules match the old register (8–1024). Does **not** set a cookie. Sends the existing verification email (Mailpit in local dev). Then they sign in and enroll TOTP as today.
+Body: `{ "token", "email", "password", "displayName" }`. Extra fields such as `role` and `companyName` are ignored. The token must match one **active** company invite. New users are always `staff` in **that** company, `status: "pending_verification"`. The same email can join multiple companies, but only once per company. Password rules match the old register (8–1024). Does **not** set a cookie. Sends the existing verification email (Mailpit in local dev). Then they sign in and enroll TOTP as today.
 
 - 201 public user (`pending_verification`, `companyId` and `companyName` from the invite)
 - 400 missing / invalid email, empty display name, password shorter than 8 or longer than 1024
 - 400 `{ "error": "This invite link is invalid or has been disabled." }` (unknown or disabled token)
-- 409 email already used
+- 409 this email already has a membership in the invited company
 - 500 if the verification email could not be sent (the user row still exists; they can resend)
 - 503 `{ "error": "Invite links are not available yet." }` if `onboarding_links` has not been applied
 
@@ -123,11 +121,13 @@ Body: `{ "role" }` where `role` is `staff` | `manager` | `company_admin`. Extra 
 
 ### `POST /api/auth/login` — anyone
 
-Body: `{ "email", "password" }`.
+Body: `{ "email", "password" }`, optionally with `accountId` after choosing a company account.
 
 Wrong password and unknown email both return **401** `{ "error": "Invalid email or password" }`.
 
 Correct password on an unverified account (`pending_verification`) returns **403** `{ "error": "Email not verified. Check your inbox (Mailpit in local dev) or request a new link." }` and does **not** set a cookie.
+
+If the email/password matches at least one membership and the email has multiple company accounts, the response is **200** `{ "accountSelectionRequired": true, "accounts": [{ "id", "companyName", "role" }] }`. Submit the chosen account's `id` as `accountId` with the same email/password. If that account has a different password, sign-in asks for that account's password. A single membership keeps the existing sign-in flow. The company-specific authenticator challenge and session are bound to the selected membership.
 
 Verified accounts (including seeded demo users) do **not** get a cookie yet. A short-lived httpOnly `lrs_mfa` challenge cookie is set instead.
 
@@ -138,7 +138,7 @@ The TOTP secret is returned only on that first enrollment payload. It is stored 
 
 ### `POST /api/auth/verify-email` — anyone
 
-Body: `{ "token" }` (the secret from the emailed link, not a hash). Consumes a single-use token, sets `status` to `active`. Does **not** set a cookie; go to login next (TOTP after password).
+Body: `{ "token" }` (the secret from the emailed link, not a hash). Consumes a single-use token and sets all pending memberships for that email to `active`. Does **not** set a cookie; go to login next (TOTP after password).
 
 - 200 `{ "ok": true }`
 - 400 `{ "error": "This verification link is invalid or has expired." }` (missing, used, or expired)
@@ -153,14 +153,14 @@ Body: `{ "email" }`. Always the same success payload when the email format is va
 
 Body: `{ "email" }`. Always the same success payload when the email format is valid, whether or not the account exists. Cooldown is one minute per address. Invalid format is 400. Does **not** say whether mail was sent. Does **not** set a cookie.
 
-If the account exists, a hashed one-time token is stored (1 hour TTL) and a Mailpit email is sent with `/reset-password?token=...`. Unverified accounts can still receive a reset; they still cannot sign in until they verify.
+If the email exists, a hashed one-time token is stored (1 hour TTL) and a Mailpit email is sent with `/reset-password?token=...`. Unverified accounts can still receive a reset; they still cannot sign in until they verify.
 
 - 200 `{ "ok": true, "message": "If that email is registered, we sent a reset link." }`
 - 400 `{ "error": "Invalid email format" }`
 
 ### `POST /api/auth/reset-password` — anyone
 
-Body: `{ "token", "password" }` (the secret from the emailed link, not a hash). Password length matches register (8–1024). Consumes the token, bcrypt-hashes the new password, and invalidates any other unused reset tokens for that user. Open login challenges for that user are dropped so MFA after the old password cannot finish. Does **not** set a session cookie; go to login next (TOTP after password). Authenticator enrollment is unchanged.
+Body: `{ "token", "password" }` (the secret from the emailed link, not a hash). Password length matches register (8–1024). Consumes the token, bcrypt-hashes the new password for all memberships sharing that email, and invalidates any other unused reset tokens and open login challenges for those memberships. Does **not** set a session cookie; go to login next (TOTP after password). Authenticator enrollment is unchanged.
 
 Reused or expired tokens return 400. A too-short password does not consume the token.
 

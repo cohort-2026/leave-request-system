@@ -55,8 +55,7 @@ export type SignupCheckout = {
 export type CompleteSignupFailure =
   | "invalid"
   | "expired"
-  | "used"
-  | "email_taken";
+  | "used";
 
 const SLUG_MAX = 72;
 const SLUG_ATTEMPTS = 6;
@@ -103,7 +102,10 @@ export function isCompaniesTableMissing(err: unknown): boolean {
 }
 
 export function isEmailTaken(err: unknown): boolean {
-  return pgCode(err) === "23505" && pgConstraint(err) !== "companies_slug_key";
+  return (
+    pgCode(err) === "23505" &&
+    pgConstraint(err) === "users_company_email_key"
+  );
 }
 
 export function mockPayAllowed(): boolean {
@@ -171,27 +173,16 @@ function toCheckoutPublic(
   };
 }
 
-export async function emailInUse(email: string): Promise<boolean> {
-  const result = await pool.query(
-    `SELECT 1 FROM users WHERE lower(email) = lower($1) LIMIT 1`,
-    [email],
-  );
-  return Boolean(result.rows[0]);
-}
-
 export async function createSignupCheckout(input: {
   companyName: string;
   email: string;
   passwordHash: string;
   displayName: string;
   planCode: string;
-}): Promise<SignupCheckout | "email_taken" | "bad_plan"> {
+}): Promise<SignupCheckout | "bad_plan"> {
   const quote = quotePlan(input.planCode);
   if (!quote) {
     return "bad_plan";
-  }
-  if (await emailInUse(input.email)) {
-    return "email_taken";
   }
 
   const { token, hash } = newCheckoutToken();

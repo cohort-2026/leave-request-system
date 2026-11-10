@@ -33,15 +33,17 @@ export async function resendVerification(email: string): Promise<void> {
 
   markSent(normalized);
 
-  const result = await pool.query<{ id: number; status: string }>(
-    `SELECT id, status
+  const result = await pool.query<{ id: number }>(
+    `SELECT id
      FROM users
      WHERE lower(email) = lower($1)
+       AND status = 'pending_verification'
+     ORDER BY id
      LIMIT 1`,
     [normalized],
   );
   const user = result.rows[0];
-  if (!user || user.status !== "pending_verification") {
+  if (!user) {
     return;
   }
 

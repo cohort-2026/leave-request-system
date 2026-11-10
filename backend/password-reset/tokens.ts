@@ -57,19 +57,38 @@ export async function completePasswordReset(
       return false;
     }
 
-    await client.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
-      passwordHash,
-      userId,
-    ]);
+    await client.query(
+      `UPDATE users
+       SET password_hash = $1
+       WHERE lower(email) = (
+         SELECT lower(email) FROM users WHERE id = $2
+       )`,
+      [passwordHash, userId],
+    );
     await client.query(
       `UPDATE password_reset_tokens
        SET used_at = NOW()
-       WHERE user_id = $1 AND used_at IS NULL`,
+       WHERE user_id IN (
+         SELECT id
+         FROM users
+         WHERE lower(email) = (
+           SELECT lower(email) FROM users WHERE id = $1
+         )
+       )
+         AND used_at IS NULL`,
       [userId],
     );
-    await client.query(`DELETE FROM login_challenges WHERE user_id = $1`, [
-      userId,
-    ]);
+    await client.query(
+      `DELETE FROM login_challenges
+       WHERE user_id IN (
+         SELECT id
+         FROM users
+         WHERE lower(email) = (
+           SELECT lower(email) FROM users WHERE id = $1
+         )
+       )`,
+      [userId],
+    );
 
     await client.query("COMMIT");
     return true;

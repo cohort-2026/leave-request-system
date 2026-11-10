@@ -424,11 +424,6 @@ companiesRouter.post("/signup", async (req, res) => {
       res.status(400).json({ error: "Unknown plan" });
       return;
     }
-    if (created === "email_taken") {
-      res.status(409).json({ error: "Email already used" });
-      return;
-    }
-
     res.status(201).json(created);
   } catch (err: unknown) {
     if (isCompaniesTableMissing(err)) {
@@ -465,11 +460,6 @@ companiesRouter.post("/signup/mock-pay", async (req, res) => {
       res.status(400).json({ error: CHECKOUT_USED });
       return;
     }
-    if (created === "email_taken") {
-      res.status(409).json({ error: "Email already used" });
-      return;
-    }
-
     const verifyToken = await issueVerificationToken(created.user.id);
     try {
       await sendVerificationEmail(created.user.email, verifyToken);

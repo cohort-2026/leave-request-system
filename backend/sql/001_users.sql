@@ -2,8 +2,8 @@
 --
 -- password_hash, not password: we only store a bcrypt hash. If the database
 -- leaks, the real password is not sitting in the row.
--- email UNIQUE: one login per email, so register can return 409 instead of
--- creating a second person with the same address.
+-- Email uniqueness is initially global here; sql/020_company_memberships.sql
+-- changes it to one email per company after company_id is available.
 --
 -- id is INTEGER to match the existing Neon table and the JWT `sub` (a number).
 -- Do not switch this to UUID without changing session.ts.

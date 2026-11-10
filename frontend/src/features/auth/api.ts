@@ -30,7 +30,16 @@ export type TotpLoginChallenge = {
   totpRequired: true
 }
 
-export type LoginResult = TotpEnrollmentChallenge | TotpLoginChallenge
+export type LoginAccountOption = {
+  id: number
+  companyName: string | null
+  role: Session['role']
+}
+
+export type LoginResult =
+  | TotpEnrollmentChallenge
+  | TotpLoginChallenge
+  | { accountSelectionRequired: true; accounts: LoginAccountOption[] }
 
 export type EnrollResult = Session & { recoveryCodes: string[] }
 
@@ -50,10 +59,10 @@ export function getMe() {
   return apiRequest<ServerUser>('/api/auth/me').then(mapSession)
 }
 
-export function login(email: string, password: string) {
+export function login(email: string, password: string, accountId?: number) {
   return apiRequest<LoginResult>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...(accountId ? { accountId } : {}) }),
   })
 }
 

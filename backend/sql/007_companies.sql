@@ -58,4 +58,9 @@ SELECT
     companies.id
 FROM companies
 WHERE companies.slug = 'khumalo-retail'
-ON CONFLICT (email) DO NOTHING;
+  AND NOT EXISTS (
+      SELECT 1
+      FROM users
+      WHERE lower(users.email) = lower('admin.khumalo@leave.local')
+        AND users.company_id = companies.id
+  );

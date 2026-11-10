@@ -34,6 +34,12 @@ export type TotpEnrollmentPayload = {
 
 export type TotpStart = TotpEnrollmentPayload | { totpRequired: true };
 
+function totpLabel(user: Pick<UserRow, "email" | "company_name">): string {
+  return user.company_name
+    ? `${user.email} (${user.company_name})`
+    : user.email;
+}
+
 type TotpRow = {
   user_id: number;
   secret_cipher: string;
@@ -58,7 +64,7 @@ async function beginEnrollment(
   const secret = newTotpSecret();
   const token = await issueChallenge(user.id, "enroll", encryptSecret(secret));
   setChallengeCookie(res, token);
-  const url = otpauthUrl(user.email, secret);
+  const url = otpauthUrl(totpLabel(user), secret);
   return {
     totpEnrollmentRequired: true,
     otpauthUrl: url,
@@ -86,6 +92,7 @@ export async function pendingEnrollmentFor(
   req: Request,
   userId: number,
   email: string,
+  companyName: string | null,
 ): Promise<TotpEnrollmentPayload | null> {
   const challenge = await readOpenChallenge(req);
   if (
@@ -108,7 +115,10 @@ export async function pendingEnrollmentFor(
     return null;
   }
 
-  const url = otpauthUrl(email, secret);
+  const url = otpauthUrl(
+    companyName ? `${email} (${companyName})` : email,
+    secret,
+  );
   return {
     totpEnrollmentRequired: true,
     otpauthUrl: url,

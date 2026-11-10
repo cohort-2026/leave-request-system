@@ -7,3 +7,5 @@ coverage/
 .DS_Store
 backend/uploads/*
 !backend/uploads/.gitkeep
+.vercel
+.env*

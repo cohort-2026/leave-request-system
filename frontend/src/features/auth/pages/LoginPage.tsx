@@ -12,10 +12,12 @@ import {
   verifyTotpLogin,
   verifyTotpRecovery,
   startCompanySso,
+  type LoginAccountOption,
+  type LoginResult,
   type TotpEnrollmentChallenge,
 } from '../api'
 
-type Step = 'password' | 'enroll' | 'totp' | 'recoveryCodes'
+type Step = 'password' | 'account' | 'enroll' | 'totp' | 'recoveryCodes'
 
 const SHOW_SSO_LOGIN = true
 
@@ -40,6 +42,9 @@ export function LoginPage() {
   )
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
   const [pendingSession, setPendingSession] = useState<Session | null>(null)
+  const [accounts, setAccounts] = useState<LoginAccountOption[]>([])
+  const [selectedAccount, setSelectedAccount] =
+    useState<LoginAccountOption | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [needsVerify, setNeedsVerify] = useState(false)
@@ -66,9 +71,29 @@ export function LoginPage() {
     setRecoveryCode('')
     setUseRecovery(false)
     setEnrollment(null)
+    setAccounts([])
+    setSelectedAccount(null)
     setFormError('')
     setNeedsVerify(false)
     setErrors({})
+  }
+
+  function advanceAfterPassword(result: LoginResult) {
+    if ('accountSelectionRequired' in result) {
+      setAccounts(result.accounts)
+      setStep('account')
+      return
+    }
+    if ('totpEnrollmentRequired' in result && result.totpEnrollmentRequired) {
+      setEnrollment(result)
+      setStep('enroll')
+      return
+    }
+    setEnrollment(null)
+    setUseRecovery(false)
+    setCode('')
+    setRecoveryCode('')
+    setStep('totp')
   }
 
   async function handlePassword(event: React.FormEvent<HTMLFormElement>) {
@@ -79,22 +104,44 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      const result = await login(email, password)
-      if ('totpEnrollmentRequired' in result && result.totpEnrollmentRequired) {
-        setEnrollment(result)
-        setStep('enroll')
-        return
-      }
-      setEnrollment(null)
-      setUseRecovery(false)
-      setCode('')
-      setRecoveryCode('')
-      setStep('totp')
+      const result = await login(email, password, selectedAccount?.id)
+      advanceAfterPassword(result)
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors)
         setFormError(error.message)
         setNeedsVerify(error.status === 403)
+      } else {
+        setFormError('Unable to sign in. Please try again.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleAccountSelection(account: LoginAccountOption) {
+    setErrors({})
+    setFormError('')
+    setNeedsVerify(false)
+    setSubmitting(true)
+    setSelectedAccount(account)
+
+    try {
+      const result = await login(email, password, account.id)
+      advanceAfterPassword(result)
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrors(error.fieldErrors)
+        setNeedsVerify(error.status === 403)
+        if (error.status === 401) {
+          setFormError(`Enter the password for ${account.companyName ?? 'this account'}.`)
+          setStep('password')
+        } else {
+          setFormError(error.message)
+          if (error.status === 403) {
+            setStep('password')
+          }
+        }
       } else {
         setFormError('Unable to sign in. Please try again.')
       }
@@ -188,7 +235,9 @@ export function LoginPage() {
   }
 
   const title =
-    step === 'enroll'
+    step === 'password' && selectedAccount
+      ? `Sign in to ${selectedAccount.companyName ?? 'your account'}`
+      : step === 'enroll'
       ? enrollment?.totpReset
         ? 'Replace authenticator'
         : 'Set up authenticator'
@@ -196,6 +245,8 @@ export function LoginPage() {
         ? useRecovery
           ? 'Recovery code'
           : 'Authenticator code'
+        : step === 'account'
+          ? 'Choose a company'
         : step === 'recoveryCodes'
           ? 'Save recovery codes'
           : 'Sign in'
@@ -240,7 +291,11 @@ export function LoginPage() {
             aria-busy={submitting}
           >
             <TextField
-              label="Email"
+              label={
+                selectedAccount
+                  ? `Email · ${selectedAccount.companyName ?? 'Platform account'}`
+                  : 'Email'
+              }
               name="email"
               type="email"
               autoComplete="username"
@@ -248,7 +303,7 @@ export function LoginPage() {
               onChange={(event) => setEmail(event.target.value)}
               error={errors.email}
               required
-              disabled={submitting}
+              disabled={submitting || selectedAccount !== null}
             />
             <TextField
               label="Password"
@@ -261,14 +316,50 @@ export function LoginPage() {
               required
               disabled={submitting}
             />
-            <div className="auth-inline-action">
-              <Link to={paths.forgotPassword}>Forgot password?</Link>
-            </div>
+            {selectedAccount ? (
+              <Button
+                variant="secondary"
+                type="button"
+                disabled={submitting}
+                onClick={backToPassword}
+              >
+                Choose another company
+              </Button>
+            ) : (
+              <div className="auth-inline-action">
+                <Link to={paths.forgotPassword}>Forgot password?</Link>
+              </div>
+            )}
             <Button variant="primary" type="submit" disabled={submitting}>
               {submitting ? 'Signing in…' : 'Log in'}
             </Button>
           </form>
         </>
+      ) : null}
+
+      {step === 'account' ? (
+        <div className="auth-form" aria-busy={submitting}>
+          <p>This email has more than one company account. Choose where to sign in.</p>
+          {accounts.map((account) => (
+            <Button
+              key={account.id}
+              variant="secondary"
+              type="button"
+              disabled={submitting}
+              onClick={() => void handleAccountSelection(account)}
+            >
+              {account.companyName ?? 'Platform account'} · {account.role.replace('_', ' ')}
+            </Button>
+          ))}
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={submitting}
+            onClick={backToPassword}
+          >
+            Back
+          </Button>
+        </div>
       ) : null}
 
       {step === 'enroll' && enrollment ? (
