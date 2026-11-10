@@ -18,7 +18,7 @@ import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError
     ? error.message
-    : 'Could not load your leave balances.'
+    : 'Could not load your home data.'
 }
 
 export function HomePage() {
@@ -41,17 +41,16 @@ export function HomePage() {
       try {
         setLoading(true)
         setError(null)
-        // Fetch both - per issue #153 we MUST call /leave/balances
-        const [homeData, balancesData] = await Promise.all([
-          role === 'staff'
-            ? getHomeSummary().catch(() => null)
-            : Promise.resolve(null),
-          getLeaveBalances(),
-        ])
-        
-        if (cancelled) return
-        if (homeData) setSummary(homeData)
-        setBalances(balancesData)
+        if (role === 'staff') {
+          const homeData = await getHomeSummary()
+          if (cancelled) return
+          setSummary(homeData)
+          setBalances(homeData.balances)
+        } else {
+          const balancesData = await getLeaveBalances()
+          if (cancelled) return
+          setBalances(balancesData)
+        }
       } catch (loadError: unknown) {
         if (!cancelled) setError(getErrorMessage(loadError))
       } finally {

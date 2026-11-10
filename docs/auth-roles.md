@@ -47,6 +47,7 @@
 | `POST /api/auth/totp/enroll` | Any signed-in role with a valid `lrs_mfa` enroll challenge |
 | `GET /api/ping/signed-in` | Any signed-in role (`requireAuth`) |
 | `GET /api/ping/admin` | `company_admin` or `platform` (`requireAuth` + `requireRole`) |
+| `GET /api/home` | Signed-in `staff`, `manager`, or `company_admin` with a `company_id`. Returns the user's balances, pending request count, and up to five most recent requests. Platform **403**. |
 | `GET /api/leave/balances` | Signed-in `staff`, `manager`, or `company_admin` with a `company_id`. Own remaining and used days for active types. Platform **403**. |
 | `GET /api/calendar?from=&to=` | Signed-in `staff`, `manager`, or `company_admin` with a `company_id`. Returns that company's public holidays in range, plus leave marks for the viewer's scope. Staff: own leave. Manager: own leave and people in departments they manage. `company_admin`: the whole company. Platform **403**. Scope comes from the session, not query params. |
 | `GET /api/leave/preview?leaveTypeId=&start=&end=` | Signed-in `staff`, `manager`, or `company_admin` with a `company_id`. Counts working days on the requester's company calendar. Platform **403**. |
@@ -79,4 +80,3 @@ Working calendar settings and holidays are also scoped by `users.company_id`. `c
 Leave preview returns `{ workingDaysCount }`. Leave submission accepts `leaveTypeId`, `start`, `end`, `reason`, and an optional multipart `file` (maximum 10 MB); it calculates and stores its own working-day count and returns `{ leaveRequest }` with **201**. Uploaded files are stored under `backend/uploads/leave/`, while only their generated key and original filename are stored in the database. A reviewer notification failure returns **502** and identifies the already-saved leave request. A sole `company_admin` request is returned with `status: "approved"`, `reviewed_at` set, and decision reason `Automatically approved because no other eligible reviewer is available`.
 
 Team queue returns a JSON array of `{ id, employeeName, startDate, endDate, workingDays, leaveType, status }` with `id` as a string. Approve and reject use the same item shape. `GET /api/leave` and owner `GET /api/leave/:id` return `{ id, employeeName, leaveTypeId, leaveType, startDate, endDate, workingDays, reason, supportingFileName, status, submittedAt, decisionReason }` (`id` is a string). Detail for a reviewer includes the queue fields plus those owner fields. Approving emails the requester; rejecting includes the decision reason. Cancel emails the reviewer when one is assigned.
-
