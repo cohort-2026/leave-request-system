@@ -6,5 +6,6 @@ export { resetPasswordEmail } from "./templates/reset-password.js";
 export { resetAuthenticatorEmail } from "./templates/reset-authenticator.js";
 export { leaveSubmitted } from "./templates/leave-submitted.js";
 export { leaveDecision } from "./templates/leave-decision.js";
+export { leaveEscalated } from "./templates/leave-escalated.js";
 export { leaveCancelled } from "./templates/leave-cancelled.js";
 export { appOrigin } from "./config.js";

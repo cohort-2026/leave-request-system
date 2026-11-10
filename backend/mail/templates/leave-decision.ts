@@ -19,10 +19,9 @@ export function leaveDecision(input: LeaveDecisionInput): MailContent {
     input.startDate === input.endDate
       ? input.startDate
       : `${input.startDate} to ${input.endDate}`;
-  const reasonLine =
-    !isApproved && input.decisionReason
-      ? ` Reason: ${input.decisionReason}`
-      : "";
+  const reasonLine = input.decisionReason
+    ? ` Reason: ${input.decisionReason}`
+    : "";
 
   return emailLayout({
     subject: `Leave request #${input.requestId} was ${input.status}`,

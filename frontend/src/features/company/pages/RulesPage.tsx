@@ -9,8 +9,13 @@ import {
   type StaffReviewer,
 } from '../rulesApi'
 
-type RulesForm = Omit<CompanyLeaveRules, 'minNoticeDays'> & {
+type RulesForm = Omit<
+  CompanyLeaveRules,
+  'minNoticeDays' | 'escalateAfterHours' | 'autoApproveAfterHours'
+> & {
   minNoticeDays: number | ''
+  escalateAfterHours: number | ''
+  autoApproveAfterHours: number | ''
 }
 
 function isStaffReviewer(value: string): value is StaffReviewer {
@@ -56,7 +61,16 @@ export function RulesPage() {
       !rules ||
       typeof rules.minNoticeDays !== 'number' ||
       !Number.isInteger(rules.minNoticeDays) ||
-      rules.minNoticeDays < 0
+      rules.minNoticeDays < 0 ||
+      typeof rules.escalateAfterHours !== 'number' ||
+      !Number.isInteger(rules.escalateAfterHours * 4) ||
+      rules.escalateAfterHours < 0 ||
+      typeof rules.autoApproveAfterHours !== 'number' ||
+      !Number.isInteger(rules.autoApproveAfterHours * 4) ||
+      rules.autoApproveAfterHours < 0 ||
+      (rules.escalateAfterHours > 0 &&
+        rules.autoApproveAfterHours > 0 &&
+        rules.autoApproveAfterHours < rules.escalateAfterHours)
     ) {
       return
     }
@@ -68,6 +82,8 @@ export function RulesPage() {
       const updated = await saveCompanyLeaveRules({
         ...rules,
         minNoticeDays: rules.minNoticeDays,
+        escalateAfterHours: rules.escalateAfterHours,
+        autoApproveAfterHours: rules.autoApproveAfterHours,
       })
       setRules(updated)
       setSaved(true)
@@ -85,12 +101,13 @@ export function RulesPage() {
   return (
     <PageShell title="Company rules" eyebrow="Company admin">
       <p className="text-muted">
-        Set who reviews leave requests and the minimum notice required.
+        Set who reviews leave requests, the minimum notice, and timeout rules.
       </p>
       <Alert tone="info">
-        A human must approve or reject each request, except when a company
-        admin has no other eligible reviewer. That request is approved
-        automatically.
+        Pending requests can be escalated to another same-company manager and
+        automatically approved after the configured timeouts. A company
+        admin’s request with no eligible reviewer is still approved
+        immediately.
       </Alert>
       {loadError ? <Alert tone="error">{loadError}</Alert> : null}
       {saveError ? <Alert tone="error">{saveError}</Alert> : null}
@@ -157,6 +174,55 @@ export function RulesPage() {
               setSaved(false)
             }}
           />
+          <TextField
+            label="Escalate after (hours)"
+            name="escalateAfterHours"
+            type="number"
+            min={0}
+            max={87600}
+            step={0.25}
+            value={rules.escalateAfterHours}
+            disabled={saving}
+            hint="0 turns escalation off. Use quarter-hour increments."
+            onChange={(event) => {
+              const value = event.target.value
+              setRules((current) =>
+                current
+                  ? {
+                      ...current,
+                      escalateAfterHours: value === '' ? '' : Number(value),
+                    }
+                  : current,
+              )
+              setSaveError(null)
+              setSaved(false)
+            }}
+          />
+          <TextField
+            label="Auto-approve after (hours)"
+            name="autoApproveAfterHours"
+            type="number"
+            min={0}
+            max={87600}
+            step={0.25}
+            value={rules.autoApproveAfterHours}
+            disabled={saving}
+            hint="0 turns automatic approval off. When both timeouts are on, this must be at least the escalation timeout."
+            onChange={(event) => {
+              const value = event.target.value
+              setRules((current) =>
+                current
+                  ? {
+                      ...current,
+                      autoApproveAfterHours:
+                        value === '' ? '' : Number(value),
+                    }
+                  : current,
+              )
+              setSaveError(null)
+              setSaved(false)
+            }}
+          />
           <Button
             variant="primary"
             type="submit"
@@ -166,7 +232,16 @@ export function RulesPage() {
               loadError !== null ||
               typeof rules.minNoticeDays !== 'number' ||
               !Number.isInteger(rules.minNoticeDays) ||
-              rules.minNoticeDays < 0
+              rules.minNoticeDays < 0 ||
+              typeof rules.escalateAfterHours !== 'number' ||
+              !Number.isInteger(rules.escalateAfterHours * 4) ||
+              rules.escalateAfterHours < 0 ||
+              typeof rules.autoApproveAfterHours !== 'number' ||
+              !Number.isInteger(rules.autoApproveAfterHours * 4) ||
+              rules.autoApproveAfterHours < 0 ||
+              (rules.escalateAfterHours > 0 &&
+                rules.autoApproveAfterHours > 0 &&
+                rules.autoApproveAfterHours < rules.escalateAfterHours)
             }
           >
             {saving ? 'Saving…' : 'Save rules'}
