@@ -6,8 +6,12 @@ import { requireCompanyId } from "../tenancy.js";
 
 export const homeRouter = Router();
 
+type PendingCountRow = {
+  pending_count: number;
+};
+
 type RecentRequestRow = {
-  id: number;
+  id: string;
   requester_name: string;
   leave_type: string;
   start_date: string;
@@ -26,8 +30,8 @@ homeRouter.get(
     const userId = req.user!.id;
     const [balances, pendingResult, recentResult] = await Promise.all([
       listBalances(userId, companyId),
-      pool.query<{ count: string }>(
-        `SELECT COUNT(*) AS count
+      pool.query<PendingCountRow>(
+        `SELECT COUNT(*)::INTEGER AS pending_count
          FROM leave_requests
          WHERE company_id = $1
            AND employee_user_id = $2
@@ -35,13 +39,12 @@ homeRouter.get(
         [companyId, userId],
       ),
       pool.query<RecentRequestRow>(
-        `SELECT
-           lr.id,
-           COALESCE(employee.display_name, employee.email) AS requester_name,
-           leave_types.name AS leave_type,
-           lr.start_date::TEXT AS start_date,
-           lr.end_date::TEXT AS end_date,
-           lr.status
+        `SELECT lr.id::TEXT AS id,
+                COALESCE(employee.display_name, employee.email) AS requester_name,
+                leave_types.name AS leave_type,
+                lr.start_date::TEXT AS start_date,
+                lr.end_date::TEXT AS end_date,
+                lr.status
          FROM leave_requests AS lr
          JOIN users AS employee
            ON employee.id = lr.employee_user_id
@@ -58,19 +61,15 @@ homeRouter.get(
     ]);
 
     res.json({
-      balances: balances.map((balance) => ({
-        leaveType: balance.leaveType,
-        daysRemaining: balance.daysRemaining,
-        daysUsed: balance.usedDays,
-      })),
-      pendingCount: Number(pendingResult.rows[0]?.count ?? 0),
-      recent: recentResult.rows.map((request) => ({
-        id: String(request.id),
-        requesterName: request.requester_name,
-        leaveType: request.leave_type,
-        startDate: request.start_date,
-        endDate: request.end_date,
-        status: request.status,
+      balances,
+      pendingCount: Number(pendingResult.rows[0]?.pending_count ?? 0),
+      recent: recentResult.rows.map((row) => ({
+        id: row.id,
+        requesterName: row.requester_name,
+        leaveType: row.leave_type,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        status: row.status,
       })),
     });
   },

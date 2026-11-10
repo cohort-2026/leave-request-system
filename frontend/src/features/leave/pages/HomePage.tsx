@@ -18,7 +18,7 @@ import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError
     ? error.message
-    : 'Could not load your home overview.'
+    : 'Could not load your home data.'
 }
 
 export function HomePage() {
@@ -39,12 +39,11 @@ export function HomePage() {
       try {
         setLoading(true)
         setError(null)
-        // Keep the balances endpoint as the source for the balance cards.
         const [homeData, balancesData] = await Promise.all([
           getHomeSummary(),
           getLeaveBalances(),
         ])
-        
+
         if (cancelled) return
         setSummary(homeData)
         setBalances(balancesData)
