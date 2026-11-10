@@ -19,6 +19,7 @@ import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
 import { authSsoRouter, companySsoRouter } from "./routes/sso.js";
 import { homeRouter } from "./routes/home.js";
+import { escalationsRouter } from "./routes/escalations.js";
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use("/api/ping", pingRouter);
 app.use("/api/users", userBalancesRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/auth", authSsoRouter);
+app.use("/api/dev", escalationsRouter);
 
 app.use(
   (

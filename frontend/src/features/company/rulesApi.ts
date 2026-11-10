@@ -6,6 +6,8 @@ export type CompanyLeaveRules = {
   staffReviewer: StaffReviewer
   managerReviewer: 'company_admin'
   minNoticeDays: number
+  escalateAfterHours: number
+  autoApproveAfterHours: number
 }
 
 export function getCompanyLeaveRules() {

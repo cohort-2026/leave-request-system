@@ -46,6 +46,8 @@ type CompanyLeaveRulesRow = {
   staff_reviewer: StaffReviewer;
   manager_reviewer: "company_admin";
   min_notice_days: number;
+  escalate_after_hours: string | number;
+  auto_approve_after_hours: string | number;
 };
 
 function isStaffReviewer(value: unknown): value is StaffReviewer {
@@ -60,7 +62,21 @@ function toPublicCompanyLeaveRules(row: CompanyLeaveRulesRow) {
     staffReviewer: row.staff_reviewer,
     managerReviewer: row.manager_reviewer,
     minNoticeDays: row.min_notice_days,
+    escalateAfterHours: Number(row.escalate_after_hours),
+    autoApproveAfterHours: Number(row.auto_approve_after_hours),
   };
+}
+
+const MAX_TIMEOUT_HOURS = 87_600;
+
+function isValidTimeoutHours(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= MAX_TIMEOUT_HOURS &&
+    Number.isInteger(value * 4)
+  );
 }
 
 type DepartmentRow = {
@@ -538,7 +554,8 @@ companiesRouter.get(
       [companyId],
     );
     const result = await pool.query<CompanyLeaveRulesRow>(
-      `SELECT staff_reviewer, manager_reviewer, min_notice_days
+      `SELECT staff_reviewer, manager_reviewer, min_notice_days,
+              escalate_after_hours, auto_approve_after_hours
        FROM company_leave_rules
        WHERE company_id = $1`,
       [companyId],
@@ -573,6 +590,8 @@ companiesRouter.patch(
       "staffReviewer",
       "managerReviewer",
       "minNoticeDays",
+      "escalateAfterHours",
+      "autoApproveAfterHours",
     ]);
     const providedFields = Object.keys(values);
     if (
@@ -627,6 +646,59 @@ companiesRouter.patch(
       minNoticeDays = value;
     }
 
+    const hasEscalateAfterHours = Object.prototype.hasOwnProperty.call(
+      values,
+      "escalateAfterHours",
+    );
+    if (
+      hasEscalateAfterHours &&
+      !isValidTimeoutHours(values.escalateAfterHours)
+    ) {
+      res.status(400).json({
+        error: "Escalate-after hours must be a non-negative quarter-hour value",
+      });
+      return;
+    }
+
+    const hasAutoApproveAfterHours = Object.prototype.hasOwnProperty.call(
+      values,
+      "autoApproveAfterHours",
+    );
+    if (
+      hasAutoApproveAfterHours &&
+      !isValidTimeoutHours(values.autoApproveAfterHours)
+    ) {
+      res.status(400).json({
+        error: "Auto-approve-after hours must be a non-negative quarter-hour value",
+      });
+      return;
+    }
+
+    const currentResult = await pool.query<CompanyLeaveRulesRow>(
+      `SELECT staff_reviewer, manager_reviewer, min_notice_days,
+              escalate_after_hours, auto_approve_after_hours
+       FROM company_leave_rules
+       WHERE company_id = $1`,
+      [companyId],
+    );
+    const current = currentResult.rows[0];
+    const effectiveEscalateHours = hasEscalateAfterHours
+      ? Number(values.escalateAfterHours)
+      : Number(current?.escalate_after_hours ?? 0);
+    const effectiveAutoApproveHours = hasAutoApproveAfterHours
+      ? Number(values.autoApproveAfterHours)
+      : Number(current?.auto_approve_after_hours ?? 0);
+    if (
+      effectiveEscalateHours > 0 &&
+      effectiveAutoApproveHours > 0 &&
+      effectiveAutoApproveHours < effectiveEscalateHours
+    ) {
+      res.status(400).json({
+        error: "Auto-approve-after hours must be at least escalate-after hours",
+      });
+      return;
+    }
+
     const assignments: string[] = [];
     const parameters: (number | string)[] = [companyId];
     if (staffReviewer !== undefined) {
@@ -641,6 +713,14 @@ companiesRouter.patch(
       parameters.push(minNoticeDays);
       assignments.push(`min_notice_days = $${parameters.length}`);
     }
+    if (hasEscalateAfterHours) {
+      parameters.push(Number(values.escalateAfterHours));
+      assignments.push(`escalate_after_hours = $${parameters.length}`);
+    }
+    if (hasAutoApproveAfterHours) {
+      parameters.push(Number(values.autoApproveAfterHours));
+      assignments.push(`auto_approve_after_hours = $${parameters.length}`);
+    }
 
     await pool.query(
       `INSERT INTO company_leave_rules (company_id)
@@ -652,7 +732,8 @@ companiesRouter.patch(
       `UPDATE company_leave_rules
        SET ${assignments.join(", ")}
        WHERE company_id = $1
-       RETURNING staff_reviewer, manager_reviewer, min_notice_days`,
+       RETURNING staff_reviewer, manager_reviewer, min_notice_days,
+                 escalate_after_hours, auto_approve_after_hours`,
       parameters,
     );
     const rules = updated.rows[0];

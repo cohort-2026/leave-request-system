@@ -23,6 +23,7 @@ psql "$DATABASE_URL" -f sql/017_company_sso.sql
 psql "$DATABASE_URL" -f sql/018_company_billing.sql
 psql "$DATABASE_URL" -f sql/019_scim.sql
 psql "$DATABASE_URL" -f sql/020_company_memberships.sql
+psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -70,6 +71,8 @@ psql "$DATABASE_URL" -f sql/020_company_memberships.sql
 `019_scim.sql` adds one SCIM token-hash row per company; the raw bearer token is not stored. It also adds `users.first_name`, `users.last_name`, and optional `users.phone` while keeping `display_name`.
 
 `020_company_memberships.sql` allows the same email address to have a separate user membership in multiple companies, while retaining one membership per email per company and one global account for users without a company. Password sign-in asks which matching company account to use; each membership keeps its own authenticator. Verifying one address activates its pending memberships, and resetting its password updates all memberships for that email.
+
+`021_leave_escalation.sql` adds company-configured escalation and automatic-approval timeouts (both off by default) and records the company-scoped users allowed to decide each pending request. Existing pending requests retain their original reviewer.
 
 ## Demo password
 

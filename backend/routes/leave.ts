@@ -602,6 +602,15 @@ leaveRouter.post(
           ],
         );
         request = insertResult.rows[0];
+        if (reviewer && !autoApprove) {
+          await client.query(
+            `INSERT INTO leave_request_assignees (
+               leave_request_id, company_id, user_id, assignment_type
+             )
+             VALUES ($1, $2, $3, 'original')`,
+            [request.id, companyId, reviewer.id],
+          );
+        }
         if (autoApprove) {
           const applied = await applyApprovedLeaveToBalance(
             req.user!.id,
@@ -695,6 +704,7 @@ type MyLeaveRow = {
   status: string;
   submitted_at: Date;
   reviewer_user_id: number | null;
+  assigned_user_ids: number[];
   decision_reason: string | null;
   employee_email: string;
   employee_name: string;
@@ -1092,6 +1102,7 @@ type QueueRequestRow = {
   working_days_count: number;
   status: string;
   reviewer_user_id: number | null;
+  assigned_user_ids: number[];
   employee_email: string;
   employee_name: string;
   employee_role: string;
@@ -1109,6 +1120,11 @@ const QUEUE_REQUEST_SQL = `SELECT
        lr.working_days_count,
        lr.status,
        lr.reviewer_user_id,
+       ARRAY(
+         SELECT assignee.user_id
+         FROM leave_request_assignees AS assignee
+         WHERE assignee.leave_request_id = lr.id
+       ) AS assigned_user_ids,
        employee.email AS employee_email,
        COALESCE(employee.display_name, employee.email) AS employee_name,
        employee.role AS employee_role,
@@ -1140,8 +1156,9 @@ function canSeeInQueue(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (actor.role === "company_admin") return true;
   if (actor.role === "manager") {
     return (
-      row.employee_role === "staff" &&
-      row.department_manager_id === actor.id
+      row.assigned_user_ids.includes(actor.id) ||
+      (row.employee_role === "staff" &&
+        row.department_manager_id === actor.id)
     );
   }
   return false;
@@ -1152,9 +1169,10 @@ function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (actor.role === "company_admin") return true;
   if (actor.role === "manager") {
     return (
-      row.employee_role === "staff" &&
-      (row.reviewer_user_id === actor.id ||
-        row.department_manager_id === actor.id)
+      row.assigned_user_ids.includes(actor.id) ||
+      (row.employee_role === "staff" &&
+        (row.reviewer_user_id === actor.id ||
+          row.department_manager_id === actor.id))
     );
   }
   return false;
@@ -1221,8 +1239,18 @@ teamRouter.get(
            $3 = 'company_admin'
            OR (
              $3 = 'manager'
-             AND employee.role = 'staff'
-             AND department.manager_id = $2
+             AND (
+               (
+                 employee.role = 'staff'
+                 AND department.manager_id = $2
+               )
+               OR EXISTS (
+                 SELECT 1
+                 FROM leave_request_assignees AS assignee
+                 WHERE assignee.leave_request_id = lr.id
+                   AND assignee.user_id = $2
+               )
+             )
            )
          )
        ORDER BY lr.submitted_at, lr.id`,
