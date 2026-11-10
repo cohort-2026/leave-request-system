@@ -18,6 +18,7 @@ import { calendarRouter } from "./routes/calendar.js";
 import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
 import { authSsoRouter, companySsoRouter } from "./routes/sso.js";
+import { homeRouter } from "./routes/home.js";
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use("/api/billing", billingRouter);
 app.use("/api/companies", companiesRouter);
 app.use("/api/companies", companySsoRouter);
 app.use("/api/leave", leaveRouter);
+app.use("/api/home", homeRouter);
 app.use("/api/team", teamRouter);
 app.use("/api/leave-types", leaveTypesRouter);
 app.use("/api/calendar", calendarRouter);
