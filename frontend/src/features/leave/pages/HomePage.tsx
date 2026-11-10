@@ -18,7 +18,7 @@ import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError
     ? error.message
-    : 'Could not load your leave balances.'
+    : 'Could not load your home overview.'
 }
 
 export function HomePage() {
@@ -34,23 +34,19 @@ export function HomePage() {
     if (!session || session.role === 'platform') {
       return
     }
-    const role = session.role
-
     let cancelled = false
     async function load() {
       try {
         setLoading(true)
         setError(null)
-        // Fetch both - per issue #153 we MUST call /leave/balances
+        // Keep the balances endpoint as the source for the balance cards.
         const [homeData, balancesData] = await Promise.all([
-          role === 'staff'
-            ? getHomeSummary().catch(() => null)
-            : Promise.resolve(null),
+          getHomeSummary(),
           getLeaveBalances(),
         ])
         
         if (cancelled) return
-        if (homeData) setSummary(homeData)
+        setSummary(homeData)
         setBalances(balancesData)
       } catch (loadError: unknown) {
         if (!cancelled) setError(getErrorMessage(loadError))
@@ -90,81 +86,79 @@ export function HomePage() {
       {loading ? <p className="text-muted">Loading your leave balances…</p> : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
       {!loading && !error ? (
-        <div className="flex flex-wrap gap-stack">
-          {balances.length === 0 ? (
-            <p className="text-muted text-sm">No balances yet</p>
-          ) : (
-            balances.map((balance) => (
-              <p key={balance.leaveType} className="bg-surface p-section">
-                <span className="text-title">{balance.daysRemaining}</span>
-                <br />
-                <span className="text-muted">
-                  {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
-                </span>
-              </p>
-            ))
-          )}
-        </div>
+        <>
+          <h2>Your remaining days</h2>
+          <div className="flex flex-wrap gap-stack">
+            {balances.length === 0 ? (
+              <p className="text-muted text-sm">No balances yet</p>
+            ) : (
+              balances.map((balance) => (
+                <p key={balance.leaveType} className="bg-surface p-section">
+                  <span className="text-title">{balance.daysRemaining}</span>
+                  <br />
+                  <span className="text-muted">
+                    {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
+                  </span>
+                </p>
+              ))
+            )}
+          </div>
+        </>
       ) : null}
 
-      {session.role === 'staff' ? (
+      {!loading && !error && summary ? (
         <>
-          <p className="text-muted">
-            My leave, remaining days, and a way to book leave.
+          <h2>Requests waiting</h2>
+          <p className="bg-surface p-section">
+            <span className="text-title">{summary.pendingCount}</span>
+            <br />
+            <span className="text-muted">Pending requests</span>
           </p>
 
-          {!loading && !error && summary ? (
-            <p className="bg-surface p-section">
-              <span className="text-title">{summary.pendingCount}</span>
-              <br />
-              <span className="text-muted">Pending requests</span>
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap gap-stack">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.leave)}
-            >
-              My leave
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.calendar)}
-            >
-              Calendar
-            </Button>
-          </div>
-
-          {!loading && !error && summary ? (
-            <DataTable
-              data={summary.recent.map((request) => ({
-                ...request,
-                id: String(request.id),
-              }))}
-              keyExtractor={(row) => row.id}
-              emptyTitle="No leave requests"
-              emptyDescription="Book leave to see it here."
-              headerRow={
-                <tr>
-                  <th>Person</th>
-                  <th>Type</th>
-                  <th>Dates</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              }
-              renderRow={(request) => (
-                <LeaveRequestRow
-                  request={request}
-                  onView={(id) => navigate(leaveDetailPath(id))}
-                />
-              )}
-            />
-          ) : null}
+          <h2>Recent requests</h2>
+          <DataTable
+            data={summary.recent.map((request) => ({
+              ...request,
+              id: String(request.id),
+            }))}
+            keyExtractor={(row) => row.id}
+            emptyTitle="No leave requests"
+            emptyDescription="Book leave to see it here."
+            headerRow={
+              <tr>
+                <th>Person</th>
+                <th>Type</th>
+                <th>Dates</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            }
+            renderRow={(request) => (
+              <LeaveRequestRow
+                request={request}
+                onView={(id) => navigate(leaveDetailPath(id))}
+              />
+            )}
+          />
         </>
+      ) : null}
+      {session.role === 'staff' ? (
+        <div className="flex flex-wrap gap-stack">
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={() => navigate(paths.leave)}
+          >
+            My leave
+          </Button>
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={() => navigate(paths.calendar)}
+          >
+            Calendar
+          </Button>
+        </div>
       ) : null}
       {session.role === 'manager' ? (
         <>
