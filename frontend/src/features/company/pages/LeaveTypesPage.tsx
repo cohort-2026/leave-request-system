@@ -70,7 +70,7 @@ function leaveTypeColumns(
       header: 'File required after',
       render: (type) =>
         type.requiresDocumentAfterDays === null
-          ? 'Never'
+          ? 'Not required'
           : `${type.requiresDocumentAfterDays} days`,
     },
     {
