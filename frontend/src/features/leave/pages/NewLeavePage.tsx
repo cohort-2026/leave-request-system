@@ -229,7 +229,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
   if (editMode && (editLoading || editRequest?.id !== id)) {
     return (
       <PageShell title="Edit leave request" eyebrow="Mine">
-        <p className="text-muted">Loading leave request…</p>
+        <p className="text-muted-foreground">Loading leave request…</p>
       </PageShell>
     )
   }
@@ -265,7 +265,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
       title={editMode ? 'Edit leave request' : 'Book leave'}
       eyebrow="Staff · manager · company admin"
     >
-      <p className="text-muted">
+      <p className="text-muted-foreground">
         {editMode
           ? 'Update your leave type, dates, reason, or supporting file.'
           : 'Choose your leave type and dates. Your working-day total is shown before you submit.'}
@@ -275,7 +275,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
       {balancesError ? <Alert tone="error">{balancesError}</Alert> : null}
 
       {loadingBalances ? (
-        <p className="text-muted text-sm">Loading balances…</p>
+        <p className="text-muted-foreground text-sm">Loading balances…</p>
       ) : null}
 
       <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
@@ -304,13 +304,13 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
             <p className="text-sm">
               Remaining for {currentBalance.leaveType}:{' '}
               <strong>{currentBalance.daysRemaining} days</strong>{' '}
-              <span className="text-muted">
+              <span className="text-muted-foreground">
                 ({currentBalance.usedDays} used of{' '}
                 {currentBalance.totalAllowance})
               </span>
             </p>
           ) : (
-            <p className="text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               No balance found for {selectedType.name}
             </p>
           )
@@ -373,7 +373,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
           <Alert tone="error">{currentPreview.error}</Alert>
         ) : null}
         {invalidDateRange ? null : loadingPreview ? (
-          <p className="text-muted" role="status">
+          <p className="text-muted-foreground" role="status">
             Calculating working days…
           </p>
         ) : currentPreview?.workingDaysCount !== undefined ? (

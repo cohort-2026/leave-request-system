@@ -1,27 +1,105 @@
 /*
-  Product tokens for Member 5.1 and 5.4. Change a value here to move login,
-  home, and the shared primitives together.
-
-  Colours (issue #15): one primary, one text, one muted, one danger, one surface.
-  Type: two title sizes, one body size, one font family.
-  Spacing: named scale for layout and stacked labelled fields.
-
-  Member 5.4 (issue #18): focus ring, disabled opacity, StatusBadge colours.
-  Badge hex matches the wireframe pending / approved / rejected / blocked chips.
+  Shared product tokens for shadcn/ui and the existing shared components.
+  Update these values here so both UI foundations use the same palette.
 */
 
-@theme static {
-  --color-primary: #2c3e6b;
-  --color-text: #1a1a1a;
-  --color-muted: #5c5c5c;
-  --color-danger: #7a1f1f;
-  --color-surface: #ffffff;
-  --color-focus: #2c3e6b;
-  --color-success: #1d5c2e;
-  --color-badge-pending: #fff3cd;
-  --color-badge-approved: #e7f3ea;
-  --color-badge-rejected: #f8e8e8;
-  --color-badge-waiting: #eeeeee;
+:root {
+  --background: #f4f7fb;
+  --foreground: #1b2431;
+  --card: #ffffff;
+  --card-foreground: #1b2431;
+  --popover: #ffffff;
+  --popover-foreground: #1b2431;
+  --primary: #1aaa8b;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f4f1;
+  --secondary-foreground: #164e43;
+  --muted: #f4f7fb;
+  --muted-foreground: #64748b;
+  --accent: #e6f4f1;
+  --accent-foreground: #146c5c;
+  --destructive: #dc2626;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #1aaa8b;
+
+  --chart-1: #1aaa8b;
+  --chart-2: #1b2431;
+  --chart-3: #d97706;
+  --chart-4: #64748b;
+  --chart-5: #dc2626;
+
+  --radius: 0.75rem;
+
+  --sidebar: #1b2431;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #1aaa8b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #273549;
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #334155;
+  --sidebar-ring: #1aaa8b;
+
+  --success: #15803d;
+  --warning: #d97706;
+  --badge-pending: #fef3c7;
+  --badge-approved: #dcfce7;
+  --badge-rejected: #fee2e2;
+  --badge-waiting: #f1f5f9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-badge-pending: var(--badge-pending);
+  --color-badge-approved: var(--badge-approved);
+  --color-badge-rejected: var(--badge-rejected);
+  --color-badge-waiting: var(--badge-waiting);
+
+  --color-text: var(--foreground);
+  --color-surface: var(--card);
+  --color-danger: var(--destructive);
+  --color-focus: var(--ring);
   --opacity-disabled: 45%;
 
   --font-sans: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;

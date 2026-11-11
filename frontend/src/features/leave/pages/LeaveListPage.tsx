@@ -54,7 +54,7 @@ export function LeaveListPage() {
   return (
     <PageShell title="My leave" eyebrow="Staff · manager · company admin">
       <p className="muted">Your leave requests and their current status.</p>
-      {loading ? <p className="text-muted">Loading your requests…</p> : null}
+      {loading ? <p className="text-muted-foreground">Loading your requests…</p> : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
       {!loading && !error ? (
         <DataTable

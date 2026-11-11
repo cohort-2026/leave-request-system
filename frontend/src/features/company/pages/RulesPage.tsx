@@ -100,7 +100,7 @@ export function RulesPage() {
 
   return (
     <PageShell title="Company rules" eyebrow="Company admin">
-      <p className="text-muted">
+      <p className="text-muted-foreground">
         Set who reviews leave requests, the minimum notice, and timeout rules.
       </p>
       <Alert tone="info">

@@ -2,6 +2,18 @@
 
 Plain controls with props and variants. No data fetching. Colour, type, and spacing come from `../styles/theme.css`. Do not put raw hex on a page if a token exists.
 
+## shadcn/ui primitives
+
+shadcn/ui primitives live separately in `src/components/ui` and use the `@/` alias. Use these for new UI while existing pages can keep using the shared controls below.
+
+```tsx
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+```
+
+From `frontend/`, add more primitives with `npx shadcn@latest add <component>`. Keep the generated files in `src/components/ui` and use the shared tokens in `src/shared/styles/theme.css`.
+
 ## Button
 
 ```tsx

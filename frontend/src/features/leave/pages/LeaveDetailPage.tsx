@@ -85,7 +85,7 @@ export function LeaveDetailPage() {
   if (loadedId !== id) {
     return (
       <PageShell title="Leave request" eyebrow="Mine">
-        <p className="text-muted">Loading leave request…</p>
+        <p className="text-muted-foreground">Loading leave request…</p>
       </PageShell>
     )
   }
@@ -108,40 +108,40 @@ export function LeaveDetailPage() {
       ) : null}
       <dl className="stack">
         <div>
-          <dt className="text-muted">Status</dt>
+          <dt className="text-muted-foreground">Status</dt>
           <dd>
             <StatusBadge status={request.status} />
           </dd>
         </div>
         <div>
-          <dt className="text-muted">Leave type</dt>
+          <dt className="text-muted-foreground">Leave type</dt>
           <dd>{request.leaveType}</dd>
         </div>
         <div>
-          <dt className="text-muted">Dates</dt>
+          <dt className="text-muted-foreground">Dates</dt>
           <dd>
             {request.startDate} – {request.endDate}
           </dd>
         </div>
         <div>
-          <dt className="text-muted">Working days</dt>
+          <dt className="text-muted-foreground">Working days</dt>
           <dd>{request.workingDays}</dd>
         </div>
         <div>
-          <dt className="text-muted">Reason</dt>
+          <dt className="text-muted-foreground">Reason</dt>
           <dd>{request.reason || 'No reason provided.'}</dd>
         </div>
         <div>
-          <dt className="text-muted">Supporting file</dt>
+          <dt className="text-muted-foreground">Supporting file</dt>
           <dd>{request.supportingFileName ?? 'None'}</dd>
         </div>
         <div>
-          <dt className="text-muted">Submitted</dt>
+          <dt className="text-muted-foreground">Submitted</dt>
           <dd>{new Date(request.submittedAt).toLocaleString()}</dd>
         </div>
         {request.decisionReason ? (
           <div>
-            <dt className="text-muted">Decision reason</dt>
+            <dt className="text-muted-foreground">Decision reason</dt>
             <dd>{request.decisionReason}</dd>
           </div>
         ) : null}

@@ -96,7 +96,7 @@ export function TeamReviewPage() {
   if (loadedId !== id) {
     return (
       <PageShell title="Review leave" eyebrow="A decision">
-        <p className="text-muted">Loading leave request...</p>
+        <p className="text-muted-foreground">Loading leave request...</p>
       </PageShell>
     )
   }
@@ -135,7 +135,7 @@ export function TeamReviewPage() {
         <Alert tone="error">{actionError}</Alert>
       ) : null}
       {!canDecide ? (
-        <p className="text-muted">This request has already been decided.</p>
+        <p className="text-muted-foreground">This request has already been decided.</p>
       ) : null}
       <p className="actions">
         <Button

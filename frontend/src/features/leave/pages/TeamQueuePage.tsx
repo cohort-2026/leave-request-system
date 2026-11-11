@@ -45,10 +45,10 @@ export function TeamQueuePage() {
 
   return (
     <PageShell title="Team queue" eyebrow="Manager · company admin">
-      <p className="text-muted">
+      <p className="text-muted-foreground">
         Leave requests still waiting for a decision.
       </p>
-      {loading ? <p className="text-muted">Loading team queue...</p> : null}
+      {loading ? <p className="text-muted-foreground">Loading team queue...</p> : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
       {!loading && !error ? (
         <>
@@ -56,7 +56,7 @@ export function TeamQueuePage() {
             <p className="bg-surface p-section">
               <span className="text-title">{queue.length}</span>
               <br />
-              <span className="text-muted">Waiting for a decision</span>
+              <span className="text-muted-foreground">Waiting for a decision</span>
             </p>
           </div>
           <DataTable

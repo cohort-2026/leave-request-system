@@ -6,13 +6,18 @@ Colour, type, and spacing live in `theme.css`. That file is the Tailwind theme.
 
 | Token | CSS variable | Tailwind |
 | --- | --- | --- |
-| Primary | `--color-primary` | `bg-primary`, `text-primary` |
-| Text | `--color-text` | `text-text`, `bg-text` |
-| Muted | `--color-muted` | `text-muted` |
-| Danger | `--color-danger` | `text-danger`, `bg-danger` |
-| Surface | `--color-surface` | `bg-surface` |
-| Focus | `--color-focus` | `outline-focus`, `ring-focus` |
+| Canvas | `--background` | `bg-background` |
+| Foreground | `--foreground` | `text-foreground` |
+| Primary | `--primary` | `bg-primary`, `text-primary` |
+| Primary foreground | `--primary-foreground` | `text-primary-foreground` |
+| Card | `--card` | `bg-card` |
+| Muted canvas | `--muted` | `bg-muted` |
+| Muted text | `--muted-foreground` | `text-muted-foreground` |
+| Destructive | `--destructive` | `text-destructive`, `bg-destructive` |
+| Sidebar | `--sidebar` | `bg-sidebar`, `text-sidebar-foreground` |
+| Charts | `--chart-1`…`--chart-5` | `bg-chart-1`…`bg-chart-5` |
 | Success | `--color-success` | `text-success`, `bg-success` |
+| Warning | `--color-warning` | `text-warning`, `bg-warning` |
 | Badge pending | `--color-badge-pending` | `bg-badge-pending` |
 | Badge approved | `--color-badge-approved` | `bg-badge-approved` |
 | Badge rejected | `--color-badge-rejected` | `bg-badge-rejected` |
@@ -27,7 +32,7 @@ Colour, type, and spacing live in `theme.css`. That file is the Tailwind theme.
 | Section | `--spacing-section` | `p-section` |
 | Page | `--spacing-page` | `p-page` |
 
-Primary, text, muted, danger, and surface come from the wireframe ink / accent / paper colours so the product has one palette. Focus, success, and badge chips come from the same wireframe (accent ring, ok, pending yellow, blocked grey).
+The palette follows the Behance dashboard reference: teal primary, navy sidebar, light-gray canvas, white cards, and green/amber/red status chips. Existing shared components retain compatibility aliases such as `--color-primary`, `--color-surface`, and `--color-danger`. Use `text-muted-foreground` for muted text; `text-muted` is now the light canvas colour.
 
 ## Rules
 
@@ -35,7 +40,7 @@ Primary, text, muted, danger, and surface come from the wireframe ink / accent /
 - Every field has a visible label (use `TextField`, `Select`, `DateField`, or `FileSlot`).
 - Do not add screens that are not on the route list.
 - Empty and error banners use shared `Alert` and `EmptyState`.
-- Focus rings use `--color-focus` on `:focus-visible`. Do not set `outline: none` without a visible replacement.
+- Focus rings use `--ring` (or its `--color-focus` alias) on `:focus-visible`. Do not set `outline: none` without a visible replacement.
 - Disabled buttons and fields use `--opacity-disabled` and muted fill. Native `disabled` is enough; do not add new props.
 - StatusBadge colours are `--color-badge-*`. Colour the chip, not the table row.
 - App-shell chrome is Member 5.2. Public-card chrome (login, claim, invite-off, verify) is Member 5.3.

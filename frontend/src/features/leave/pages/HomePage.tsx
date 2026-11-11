@@ -82,20 +82,20 @@ export function HomePage() {
         </Button>
       }
     >
-      {loading ? <p className="text-muted">Loading your leave balances…</p> : null}
+      {loading ? <p className="text-muted-foreground">Loading your leave balances…</p> : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
       {!loading && !error ? (
         <>
           <h2>Your remaining days</h2>
           <div className="flex flex-wrap gap-stack">
             {balances.length === 0 ? (
-              <p className="text-muted text-sm">No balances yet</p>
+              <p className="text-muted-foreground text-sm">No balances yet</p>
             ) : (
               balances.map((balance) => (
                 <p key={balance.leaveType} className="bg-surface p-section">
                   <span className="text-title">{balance.daysRemaining}</span>
                   <br />
-                  <span className="text-muted">
+                  <span className="text-muted-foreground">
                     {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
                   </span>
                 </p>
@@ -111,7 +111,7 @@ export function HomePage() {
           <p className="bg-surface p-section">
             <span className="text-title">{summary.pendingCount}</span>
             <br />
-            <span className="text-muted">Pending requests</span>
+            <span className="text-muted-foreground">Pending requests</span>
           </p>
 
           <h2>Recent requests</h2>
@@ -161,7 +161,7 @@ export function HomePage() {
       ) : null}
       {session.role === 'manager' ? (
         <>
-          <p className="text-muted">
+          <p className="text-muted-foreground">
             How many team requests are waiting, plus a way to book your own
             leave.
           </p>
@@ -185,7 +185,7 @@ export function HomePage() {
       ) : null}
       {session.role === 'company_admin' ? (
         <>
-          <p className="text-muted">
+          <p className="text-muted-foreground">
             Claims still waiting, company requests, and shortcuts to setup.
           </p>
           <EmptyState
