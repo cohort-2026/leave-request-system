@@ -10,8 +10,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "moduleDetection": "force",
-    "types": ["node"]
+    "moduleDetection": "force"
   },
   "include": [
     "app.mts",
