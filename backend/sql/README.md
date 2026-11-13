@@ -24,6 +24,7 @@ psql "$DATABASE_URL" -f sql/018_company_billing.sql
 psql "$DATABASE_URL" -f sql/019_scim.sql
 psql "$DATABASE_URL" -f sql/020_company_memberships.sql
 psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
+psql "$DATABASE_URL" -f sql/022_half_days.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -73,6 +74,8 @@ psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
 `020_company_memberships.sql` allows the same email address to have a separate user membership in multiple companies, while retaining one membership per email per company and one global account for users without a company. Password sign-in asks which matching company account to use; each membership keeps its own authenticator. Verifying one address activates its pending memberships, and resetting its password updates all memberships for that email.
 
 `021_leave_escalation.sql` adds company-configured escalation and automatic-approval timeouts (both off by default) and records the company-scoped users allowed to decide each pending request. Existing pending requests retain their original reviewer.
+
+`022_half_days.sql` (issue 252) adds `leave_requests.start_half` and `end_half` (`full`, `am`, `pm`, default `full`) so a request can start or end on a half day. Existing rows stay full. `working_days_count` and balance remaining/used become `NUMERIC(8, 2)` so 0.5 days can be stored.
 
 ## Demo password
 
