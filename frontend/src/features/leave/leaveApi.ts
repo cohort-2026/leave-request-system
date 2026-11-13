@@ -1,4 +1,4 @@
-import { apiRequest } from '../../services/api'
+import { ApiError, apiRequest } from '../../services/api'
 import type { RequestStatus } from '../../shared/components/StatusBadge'
 
 export type LeaveType = {
@@ -154,6 +154,35 @@ export function fetchMyLeaveRequest(id: string): Promise<MyLeaveRequest> {
   return apiRequest<MyLeaveRequest>(`/api/leave/${id}`)
 }
 
+export async function downloadSupportingFile(
+  id: string,
+  filename: string,
+): Promise<void> {
+  const response = await fetch(`/api/leave/${id}/file`, {
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    let message = 'Could not download the supporting file.'
+    try {
+      const body = (await response.json()) as { error?: unknown }
+      if (typeof body.error === 'string') message = body.error
+    } catch {
+      // Keep the fallback message.
+    }
+    throw new ApiError(message, response.status)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 export function cancelMyLeaveRequest(id: string): Promise<MyLeaveRequest> {
   return apiRequest<MyLeaveRequest>(`/api/leave/${id}/cancel`, {
     method: 'POST',
@@ -168,6 +197,7 @@ export type TeamQueueItem = {
   workingDays: number
   leaveType: string
   status: RequestStatus
+  supportingFileName?: string | null
 }
 
 export function fetchTeamQueue(): Promise<TeamQueueItem[]> {
