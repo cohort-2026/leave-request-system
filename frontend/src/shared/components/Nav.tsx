@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   Ban,
   Building2,
@@ -21,9 +22,11 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '../../components/ui/sidebar'
+import { fetchTeamQueue } from '../../features/leave/leaveApi'
 import { paths } from '../constants/paths'
 import type { Role } from '../types/session'
 
@@ -32,6 +35,7 @@ type NavItem = {
   label: string
   icon: LucideIcon
   end?: boolean
+  count?: number
 }
 
 const companyNav: NavItem[] = [
@@ -43,12 +47,11 @@ const companyNav: NavItem[] = [
 ]
 
 const managerNav: NavItem[] = [
-  { to: paths.teamQueue, label: 'Team queue', icon: ClipboardCheck, end: true },
+  { to: paths.teamQueue, label: 'Approvals', icon: ClipboardCheck, end: true },
 ]
 
 const adminNav: NavItem[] = [
   { to: paths.adminUsers, label: 'People', icon: UsersRound, end: true },
-  { to: paths.adminApprovals, label: 'Approvals', icon: ClipboardCheck },
   { to: paths.adminImport, label: 'Import', icon: FileUp },
   { to: paths.adminDepartments, label: 'Departments', icon: Building2 },
   { to: paths.adminLeaveTypes, label: 'Leave types', icon: CalendarRange },
@@ -69,14 +72,29 @@ const platformNav: NavItem[] = [
   { to: paths.profile, label: 'Profile', icon: UserRound },
 ]
 
-function NavGroup({ label, items }: { label: string; items: NavItem[] }) {
+function NavGroup({
+  label,
+  items,
+  approvalCount,
+}: {
+  label: string
+  items: NavItem[]
+  approvalCount?: number | null
+}) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
-            <NavMenuItem key={item.to} item={item} />
+            <NavMenuItem
+              key={item.to}
+              item={
+                item.to === paths.teamQueue && approvalCount !== undefined
+                  ? { ...item, count: approvalCount ?? undefined }
+                  : item
+              }
+            />
           ))}
         </SidebarMenu>
       </SidebarGroupContent>
@@ -104,6 +122,11 @@ function NavMenuItem({ item }: { item: NavItem }) {
           <span>{item.label}</span>
         </NavLink>
       </SidebarMenuButton>
+      {item.count !== undefined ? (
+        <SidebarMenuBadge aria-label={`${item.count} requests awaiting a decision`}>
+          {item.count}
+        </SidebarMenuBadge>
+      ) : null}
     </SidebarMenuItem>
   )
 }
@@ -116,6 +139,29 @@ export function Nav({ role }: NavProps) {
   const isPlatform = role === 'platform'
   const isManager = role === 'manager' || role === 'company_admin'
   const isAdmin = role === 'company_admin'
+  const [approvalCount, setApprovalCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!isManager) return
+
+    let active = true
+    const refreshCount = () => {
+      fetchTeamQueue()
+        .then((items) => {
+          if (active) setApprovalCount(items.length)
+        })
+        .catch(() => {
+          if (active) setApprovalCount(null)
+        })
+    }
+
+    refreshCount()
+    window.addEventListener('team-queue-updated', refreshCount)
+    return () => {
+      active = false
+      window.removeEventListener('team-queue-updated', refreshCount)
+    }
+  }, [isManager])
 
   return (
     <nav aria-label="Primary navigation" className="contents">
@@ -123,7 +169,13 @@ export function Nav({ role }: NavProps) {
         label={isPlatform ? 'Platform' : 'Workspace'}
         items={isPlatform ? platformNav : companyNav}
       />
-      {isManager ? <NavGroup label="Team" items={managerNav} /> : null}
+      {isManager ? (
+        <NavGroup
+          label="Team"
+          items={managerNav}
+          approvalCount={approvalCount}
+        />
+      ) : null}
       {isAdmin ? <NavGroup label="Administration" items={adminNav} /> : null}
     </nav>
   )

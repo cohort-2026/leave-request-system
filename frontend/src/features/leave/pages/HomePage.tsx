@@ -171,7 +171,7 @@ export function HomePage() {
               type="button"
               onClick={() => navigate(paths.teamQueue)}
             >
-              Team queue
+              Approvals
             </Button>
             <Button
               variant="secondary"
@@ -197,13 +197,6 @@ export function HomePage() {
               variant="secondary"
               type="button"
               onClick={() => navigate(paths.teamQueue)}
-            >
-              Team queue
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.adminApprovals)}
             >
               Approvals
             </Button>
