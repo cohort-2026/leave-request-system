@@ -19,7 +19,12 @@ import {
   applyApprovedLeaveToBalance,
   listBalances,
 } from "../leave/balances.js";
-import { countWorkingDays, type WorkingDayFlags } from "../leave/workingDays.js";
+import { todayInSast } from "../leave/todayInSast.js";
+import {
+  countWorkingDaysPreview,
+  type DayHalf,
+  type WorkingDayFlags,
+} from "../leave/workingDays.js";
 import { hasOverlappingLeaveRequest } from "../leave/overlap.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId, sameCompanyId } from "../tenancy.js";
@@ -61,7 +66,7 @@ const leaveUpload = multer({
   limits: {
     fileSize: MAX_FILE_SIZE,
     files: 1,
-    fields: 5,
+    fields: 12,
     fieldNameSize: 100,
     fieldSize: 10_000,
   },
@@ -139,7 +144,25 @@ function parseDate(value: unknown): string | null {
 
 function getLeaveTypeId(value: unknown): number | null {
   if (!isRecord(value)) return null;
-  return parsePositiveInteger(value.leaveTypeId ?? value.type);
+  return parsePositiveInteger(value.leaveTypeId ?? value.typeId ?? value.type);
+}
+
+function parseDayHalf(value: unknown): DayHalf | null {
+  if (value === undefined || value === null || value === "") return "full";
+  if (typeof value !== "string") return null;
+  const key = value.trim().toLowerCase();
+  if (key === "full") return "full";
+  if (key === "am" || key === "morning") return "am";
+  if (key === "pm" || key === "afternoon") return "pm";
+  return null;
+}
+
+function dayHalfFromBody(body: unknown, edge: "start" | "end"): DayHalf | null {
+  if (!isRecord(body)) return "full";
+  const halfKey = edge === "start" ? "startHalf" : "endHalf";
+  const partKey = edge === "start" ? "startPart" : "endPart";
+  const raw = body[halfKey] ?? body[partKey];
+  return parseDayHalf(raw);
 }
 
 async function getLeaveType(
@@ -194,16 +217,17 @@ async function getCalendarForRange(
     throw new LeaveRequestError("Company calendar not found", 404);
   }
 
-  const holidaysResult = await executor.query<{ date: string }>(
-    `SELECT holiday_date::TEXT AS date
+  const holidaysResult = await executor.query<{ date: string; name: string }>(
+    `SELECT holiday_date::date::TEXT AS date, name
      FROM public_holidays
      WHERE company_id = $1
-       AND holiday_date BETWEEN $2::date AND $3::date`,
+       AND holiday_date BETWEEN $2::date AND $3::date
+     ORDER BY holiday_date`,
     [companyId, startDate, endDate],
   );
   return {
     settings,
-    holidays: holidaysResult.rows.map((row) => row.date),
+    holidays: holidaysResult.rows,
   };
 }
 
@@ -211,10 +235,19 @@ function workingDaysBetween(
   startDate: string,
   endDate: string,
   settings: WorkingDayFlags,
-  holidays: string[],
-): number {
+  holidays: { date: string; name: string }[],
+  startHalf: DayHalf = "full",
+  endHalf: DayHalf = "full",
+) {
   try {
-    return countWorkingDays(settings, holidays, startDate, endDate);
+    return countWorkingDaysPreview(
+      settings,
+      holidays.map((holiday) => holiday.date),
+      startDate,
+      endDate,
+      startHalf,
+      endHalf,
+    );
   } catch (error) {
     if (error instanceof RangeError) {
       throw new LeaveRequestError(error.message);
@@ -233,7 +266,7 @@ async function findReviewer(
   companyId: number,
   employeeId: number,
   employeeRole: string,
-  executor: PoolClient,
+  executor: Queryable,
 ): Promise<{ id: number; email: string; name: string } | null> {
   const result = await executor.query<ReviewerRow>(
     `SELECT
@@ -349,10 +382,14 @@ leaveRouter.get(
     const companyId = requireCompanyId(req.user, res);
     if (companyId === null) return;
 
-    const leaveTypeId = parsePositiveInteger(req.query.leaveTypeId);
+    const leaveTypeId = parsePositiveInteger(
+      req.query.leaveTypeId ?? req.query.typeId,
+    );
     const startDate = parseDate(req.query.start);
     const endDate = parseDate(req.query.end);
-    if (!leaveTypeId || !startDate || !endDate) {
+    const startHalf = parseDayHalf(req.query.startHalf ?? req.query.startPart);
+    const endHalf = parseDayHalf(req.query.endHalf ?? req.query.endPart);
+    if (!leaveTypeId || !startDate || !endDate || !startHalf || !endHalf) {
       res.status(400).json({
         error: "Leave type, start date, and end date are required",
       });
@@ -378,19 +415,119 @@ leaveRouter.get(
       return;
     }
 
-    const calendar = await getCalendarForRange(
+    let calendar;
+    let previewDays;
+    try {
+      calendar = await getCalendarForRange(
+        companyId,
+        startDate,
+        endDate,
+        pool,
+      );
+      previewDays = workingDaysBetween(
+        startDate,
+        endDate,
+        calendar.settings,
+        calendar.holidays,
+        startHalf,
+        endHalf,
+      );
+    } catch (error) {
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+    const workingDaysCount = previewDays.workingDays;
+    const excluded = calendar.holidays
+      .filter((holiday) => previewDays.excluded.includes(holiday.date))
+      .map((holiday) => holiday.date);
+    const holidays = calendar.holidays.filter((holiday) =>
+      previewDays.excluded.includes(holiday.date),
+    );
+
+    const today = todayInSast();
+    const rulesResult = await pool.query<{ min_notice_days: number }>(
+      `SELECT COALESCE(min_notice_days, 0) AS min_notice_days
+       FROM company_leave_rules
+       WHERE company_id = $1
+       LIMIT 1`,
+      [companyId],
+    );
+    const minNoticeDays = Number(rulesResult.rows[0]?.min_notice_days ?? 0);
+    const warnings: string[] = [];
+    if (!leaveType.allow_backdate && startDate < today) {
+      warnings.push("This leave type does not allow backdated requests");
+    }
+    if (
+      !leaveType.allow_backdate &&
+      minNoticeDays > 0 &&
+      wholeDaysBetween(today, startDate) < minNoticeDays
+    ) {
+      warnings.push(
+        `This request must be submitted at least ${minNoticeDays} days in advance`,
+      );
+    }
+
+    const balanceResult = await pool.query<{ days_remaining: number }>(
+      `SELECT days_remaining
+       FROM leave_balances
+       WHERE company_id = $1
+         AND user_id = $2
+         AND leave_type_id = $3
+       LIMIT 1`,
+      [companyId, req.user!.id, leaveTypeId],
+    );
+    const remaining = balanceResult.rows[0]
+      ? Number(balanceResult.rows[0].days_remaining)
+      : null;
+    const availableAfter =
+      remaining === null ? null : remaining - workingDaysCount;
+    if (remaining !== null && workingDaysCount > remaining) {
+      warnings.push(
+        `This request exceeds your remaining balance of ${remaining} days`,
+      );
+    }
+
+    const documentRequired =
+      leaveType.requires_document_after_days !== null &&
+      workingDaysCount >= leaveType.requires_document_after_days;
+    const documentRule =
+      leaveType.requires_document_after_days === null
+        ? "No supporting file is required for this type."
+        : leaveType.requires_document_after_days === 0
+          ? "A supporting file is required."
+          : `A supporting file is required after ${leaveType.requires_document_after_days} working days.`;
+
+    const reviewer = await findReviewer(
       companyId,
-      startDate,
-      endDate,
+      req.user!.id,
+      req.user!.role,
       pool,
     );
-    const workingDaysCount = workingDaysBetween(
-      startDate,
-      endDate,
-      calendar.settings,
-      calendar.holidays,
-    );
-    res.json({ workingDaysCount });
+    const autoApprove = !reviewer && req.user!.role === "company_admin";
+    const approverName = reviewer?.name ?? (autoApprove ? "Auto-approved" : null);
+
+    res.json({
+      workingDays: workingDaysCount,
+      workingDaysCount,
+      excluded,
+      excludedDates: excluded,
+      holidays: holidays.map((holiday) => ({
+        date: holiday.date,
+        label: holiday.name,
+        name: holiday.name,
+      })),
+      availableAfter,
+      documentRequired,
+      documentRule,
+      approver: approverName,
+      approverName,
+      reviewerName: reviewer?.name ?? null,
+      warnings,
+      noticeWarnings: warnings,
+    });
   },
 );
 
@@ -410,11 +547,13 @@ leaveRouter.post(
       const leaveTypeId = getLeaveTypeId(req.body);
       const startDate = parseDate(req.body?.start);
       const endDate = parseDate(req.body?.end);
+      const startHalf = dayHalfFromBody(req.body, "start");
+      const endHalf = dayHalfFromBody(req.body, "end");
       const reasonValue = req.body?.reason;
       const reason =
         typeof reasonValue === "string" ? reasonValue.trim() : null;
 
-      if (!leaveTypeId || !startDate || !endDate) {
+      if (!leaveTypeId || !startDate || !endDate || !startHalf || !endHalf) {
         throw new LeaveRequestError(
           "Leave type, start date, and end date are required",
         );
@@ -436,7 +575,7 @@ leaveRouter.post(
         throw new LeaveRequestError("Reason must be 5000 characters or fewer");
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayInSast();
       const client = await pool.connect();
       let request: LeaveRequestRow;
       let leaveTypeName: string;
@@ -474,7 +613,9 @@ leaveRouter.post(
           endDate,
           calendar.settings,
           calendar.holidays,
-        );
+          startHalf,
+          endHalf,
+        ).workingDays;
 
         if (
           leaveType.requires_document_after_days !== null &&
@@ -566,6 +707,8 @@ leaveRouter.post(
              leave_type_id,
              start_date,
              end_date,
+             start_half,
+             end_half,
              working_days_count,
              reason,
              supporting_file_name,
@@ -576,7 +719,7 @@ leaveRouter.post(
              decision_reason
            )
            VALUES (
-             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13
+             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
            )
            RETURNING
              id,
@@ -591,6 +734,8 @@ leaveRouter.post(
             leaveTypeId,
             startDate,
             endDate,
+            startHalf,
+            endHalf,
             workingDaysCount,
             reason || null,
             uploadedFile?.originalname ?? null,
@@ -657,12 +802,6 @@ leaveRouter.post(
             requestId: request.id,
             message: error instanceof Error ? error.message : "Unknown error",
           });
-          res.status(502).json({
-            error:
-              "Leave request was saved, but the reviewer could not be notified",
-            leaveRequestId: request.id,
-          });
-          return;
         }
       }
 
@@ -794,6 +933,8 @@ leaveRouter.patch(
       const leaveTypeId = getLeaveTypeId(req.body);
       const startDate = parseDate(req.body?.start);
       const endDate = parseDate(req.body?.end);
+      const startHalf = dayHalfFromBody(req.body, "start");
+      const endHalf = dayHalfFromBody(req.body, "end");
       const reasonValue = req.body?.reason;
       const reason =
         typeof reasonValue === "string" ? reasonValue.trim() : null;
@@ -801,7 +942,7 @@ leaveRouter.patch(
       if (!id) {
         throw new LeaveRequestError("Invalid leave request id");
       }
-      if (!leaveTypeId || !startDate || !endDate) {
+      if (!leaveTypeId || !startDate || !endDate || !startHalf || !endHalf) {
         throw new LeaveRequestError(
           "Leave type, start date, and end date are required",
         );
@@ -861,7 +1002,7 @@ leaveRouter.patch(
         if (!leaveType) {
           throw new LeaveRequestError("Leave type not found", 404);
         }
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayInSast();
         if (!leaveType.allow_backdate && startDate < today) {
           throw new LeaveRequestError(
             "This leave type does not allow backdated requests",
@@ -879,7 +1020,9 @@ leaveRouter.patch(
           endDate,
           calendar.settings,
           calendar.holidays,
-        );
+          startHalf,
+          endHalf,
+        ).workingDays;
         const removeFile = removeFileValue === "true" && !uploadedFile;
         const hasSupportingFile = Boolean(
           uploadedFile ||
@@ -952,10 +1095,12 @@ leaveRouter.patch(
            SET leave_type_id = $3,
                start_date = $4::date,
                end_date = $5::date,
-               working_days_count = $6,
-               reason = $7,
-               supporting_file_name = $8,
-               supporting_file_key = $9
+               start_half = $6,
+               end_half = $7,
+               working_days_count = $8,
+               reason = $9,
+               supporting_file_name = $10,
+               supporting_file_key = $11
            WHERE id = $1
              AND employee_user_id = $2
              AND status = 'pending'
@@ -966,6 +1111,8 @@ leaveRouter.patch(
             leaveTypeId,
             startDate,
             endDate,
+            startHalf,
+            endHalf,
             workingDaysCount,
             reason || null,
             uploadedFile?.originalname ??
@@ -1214,10 +1361,7 @@ async function notifyRequester(row: QueueRequestRow, status: "approved" | "rejec
       status,
       message: error instanceof Error ? error.message : "Unknown error",
     });
-    throw new LeaveRequestError(
-      "Decision was saved, but the requester could not be notified",
-      502,
-    );
+    return;
   }
 }
 
@@ -1399,11 +1543,6 @@ leaveRouter.post(
           requestId: cancelled.id,
           message: error instanceof Error ? error.message : "Unknown error",
         });
-        res.status(502).json({
-          error: "Request was cancelled, but the reviewer could not be notified",
-          leaveRequestId: cancelled.id,
-        });
-        return;
       }
     }
 

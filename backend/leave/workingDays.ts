@@ -34,12 +34,43 @@ function dayNumber(date: string): number {
   return timestamp / DAY_MS;
 }
 
-export function countWorkingDays(
+export type DayHalf = "full" | "am" | "pm";
+
+export type WorkingDaysPreview = {
+  workingDays: number;
+  excluded: string[];
+};
+
+function dayFraction(
+  date: string,
+  start: string,
+  end: string,
+  startHalf: DayHalf,
+  endHalf: DayHalf,
+): number {
+  const sameDay = start === end;
+  if (sameDay) {
+    if (startHalf === "pm" && endHalf === "am") {
+      throw new RangeError(
+        "Afternoon start and morning end are not valid on the same day",
+      );
+    }
+    if (startHalf === "pm" || endHalf === "am") return 0.5;
+    return 1;
+  }
+  if (date === start && startHalf === "pm") return 0.5;
+  if (date === end && endHalf === "am") return 0.5;
+  return 1;
+}
+
+export function countWorkingDaysPreview(
   workingDays: WorkingDayFlags,
   holidayDates: readonly string[],
   start: string,
   end: string,
-): number {
+  startHalf: DayHalf = "full",
+  endHalf: DayHalf = "full",
+): WorkingDaysPreview {
   const firstDay = dayNumber(start);
   const lastDay = dayNumber(end);
   if (firstDay > lastDay) {
@@ -47,14 +78,37 @@ export function countWorkingDays(
   }
 
   const holidays = new Set(holidayDates);
+  const excluded: string[] = [];
   let count = 0;
   for (let day = firstDay; day <= lastDay; day += 1) {
     const date = new Date(day * DAY_MS);
     const dateString = date.toISOString().slice(0, 10);
     const workingField = WORKING_FIELD_BY_UTC_DAY[date.getUTCDay()];
-    if (workingDays[workingField] && !holidays.has(dateString)) {
-      count += 1;
+    const isWorkingWeekday = workingDays[workingField];
+    if (!isWorkingWeekday) continue;
+    if (holidays.has(dateString)) {
+      excluded.push(dateString);
+      continue;
     }
+    count += dayFraction(dateString, start, end, startHalf, endHalf);
   }
-  return count;
+  return { workingDays: count, excluded };
+}
+
+export function countWorkingDays(
+  workingDays: WorkingDayFlags,
+  holidayDates: readonly string[],
+  start: string,
+  end: string,
+  startHalf: DayHalf = "full",
+  endHalf: DayHalf = "full",
+): number {
+  return countWorkingDaysPreview(
+    workingDays,
+    holidayDates,
+    start,
+    end,
+    startHalf,
+    endHalf,
+  ).workingDays;
 }
