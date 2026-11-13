@@ -249,7 +249,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     currentPreview?.data?.documentRequired ??
     (documentRequiredAfter != null &&
       workingDays !== undefined &&
-      workingDays >= documentRequiredAfter)
+      workingDays > documentRequiredAfter)
   const missingReason = needsReason && reason.trim().length === 0
   const missingFile =
     documentRequired && !file && !(editMode && editRequest?.supportingFileName && !removeFile)

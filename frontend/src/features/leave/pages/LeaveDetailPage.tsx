@@ -14,6 +14,7 @@ import {
 } from '../../../shared/constants/paths'
 import {
   cancelMyLeaveRequest,
+  downloadSupportingFile,
   fetchMyLeaveRequest,
   type MyLeaveRequest,
 } from '../leaveApi'
@@ -31,6 +32,7 @@ export function LeaveDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -56,6 +58,21 @@ export function LeaveDetailPage() {
     }
   }, [id])
 
+  async function handleDownload() {
+    if (!id || !request?.supportingFileName || downloading) return
+    setDownloading(true)
+    setActionError(null)
+    try {
+      await downloadSupportingFile(id, request.supportingFileName)
+    } catch (err) {
+      setActionError(
+        getErrorMessage(err, 'Could not download the supporting file.'),
+      )
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   async function handleCancel() {
     if (!id || cancelling) return
     setCancelling(true)
@@ -75,7 +92,7 @@ export function LeaveDetailPage() {
 
   if (!id) {
     return (
-      <PageShell title="Leave request" eyebrow="Mine">
+      <PageShell title="Leave request">
         <Alert tone="error">A leave request ID is required.</Alert>
         <Link to={paths.leave}>Back to my leave</Link>
       </PageShell>
@@ -84,7 +101,7 @@ export function LeaveDetailPage() {
 
   if (loadedId !== id) {
     return (
-      <PageShell title="Leave request" eyebrow="Mine">
+      <PageShell title="Leave request">
         <p className="text-muted-foreground">Loading leave request…</p>
       </PageShell>
     )
@@ -92,7 +109,7 @@ export function LeaveDetailPage() {
 
   if (error || !request) {
     return (
-      <PageShell title="Leave request" eyebrow="Mine">
+      <PageShell title="Leave request">
         <Alert tone="error">{error ?? 'Leave request not found.'}</Alert>
         <Link to={paths.leave}>Back to my leave</Link>
       </PageShell>
@@ -133,7 +150,23 @@ export function LeaveDetailPage() {
         </div>
         <div>
           <dt className="text-muted-foreground">Supporting file</dt>
-          <dd>{request.supportingFileName ?? 'None'}</dd>
+          <dd>
+            {request.supportingFileName ? (
+              <span className="actions">
+                <span>{request.supportingFileName}</span>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  disabled={downloading}
+                  onClick={() => void handleDownload()}
+                >
+                  {downloading ? 'Downloading…' : 'Download'}
+                </Button>
+              </span>
+            ) : (
+              'None'
+            )}
+          </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Submitted</dt>
@@ -161,7 +194,7 @@ export function LeaveDetailPage() {
               type="button"
               onClick={() => setCancelOpen(true)}
             >
-              Cancel request
+              Withdraw
             </Button>
           </>
         ) : null}

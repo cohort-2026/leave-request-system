@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +6,13 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import multer, { type MulterError } from "multer";
 import type { Pool, PoolClient } from "pg";
 import { pool } from "../db.js";
+import {
+  assertSupportingFile,
+  asciiDownloadName,
+  documentIsRequired,
+  MAX_SUPPORTING_FILE_BYTES,
+  UnsupportedSupportingFileError,
+} from "../leave/supportingFile.js";
 import {
   appOrigin,
   leaveCancelled,
@@ -42,33 +48,26 @@ const uploadsDirectory =
   process.env.VERCEL === "1"
     ? resolve(tmpdir(), "leave-request-system", "uploads", "leave")
     : resolve(backendDirectory, "uploads", "leave");
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AUTO_APPROVE_REASON =
   "Automatically approved because no other eligible reviewer is available";
 type Queryable = Pool | PoolClient;
 
 const leaveUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, callback) => {
-      mkdir(uploadsDirectory, { recursive: true })
-        .then(() => callback(null, uploadsDirectory))
-        .catch((error: unknown) =>
-          callback(
-            error instanceof Error
-              ? error
-              : new Error("Could not create leave upload directory"),
-            uploadsDirectory,
-          ),
-        );
-    },
-    filename: (_req, _file, callback) => callback(null, randomUUID()),
-  }),
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_FILE_SIZE,
+    fileSize: MAX_SUPPORTING_FILE_BYTES,
     files: 1,
     fields: 12,
     fieldNameSize: 100,
     fieldSize: 10_000,
+  },
+  fileFilter: (_req, file, callback) => {
+    try {
+      file.mimetype = assertSupportingFile(file.originalname, file.mimetype);
+      callback(null, true);
+    } catch (error) {
+      callback(error as Error);
+    }
   },
 });
 
@@ -350,7 +349,10 @@ function getUploadErrorMessage(error: MulterError): {
   message: string;
 } {
   if (error.code === "LIMIT_FILE_SIZE") {
-    return { status: 413, message: "Supporting file must be 10 MB or smaller" };
+    return {
+      status: 413,
+      message: "Supporting file must be 4 MB or smaller",
+    };
   }
   return { status: 400, message: "Invalid supporting file upload" };
 }
@@ -365,6 +367,10 @@ function parseLeaveUpload(
       next();
       return;
     }
+    if (error instanceof UnsupportedSupportingFileError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
     if (error instanceof multer.MulterError) {
       const result = getUploadErrorMessage(error);
       res.status(result.status).json({ error: result.message });
@@ -372,6 +378,86 @@ function parseLeaveUpload(
     }
     next(error);
   });
+}
+
+async function saveSupportingDocument(
+  executor: Queryable,
+  leaveRequestId: number,
+  file: Express.Multer.File,
+): Promise<void> {
+  const mime = assertSupportingFile(file.originalname, file.mimetype);
+  await executor.query(
+    `DELETE FROM leave_documents WHERE leave_request_id = $1`,
+    [leaveRequestId],
+  );
+  await executor.query(
+    `INSERT INTO leave_documents (
+       leave_request_id, filename, mime, size_bytes, file
+     )
+     VALUES ($1, $2, $3, $4, $5)`,
+    [leaveRequestId, file.originalname, mime, file.size, file.buffer],
+  );
+}
+
+async function deleteSupportingDocuments(
+  executor: Queryable,
+  leaveRequestId: number,
+): Promise<void> {
+  await executor.query(
+    `DELETE FROM leave_documents WHERE leave_request_id = $1`,
+    [leaveRequestId],
+  );
+}
+
+async function loadSupportingDocument(
+  executor: Queryable,
+  leaveRequestId: number,
+): Promise<{
+  filename: string;
+  mime: string;
+  file: Buffer;
+} | null> {
+  const result = await executor.query<{
+    filename: string;
+    mime: string;
+    file: Buffer;
+  }>(
+    `SELECT filename, mime, file
+     FROM leave_documents
+     WHERE leave_request_id = $1
+     ORDER BY id DESC
+     LIMIT 1`,
+    [leaveRequestId],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function hasStoredSupportingFile(
+  executor: Queryable,
+  leaveRequestId: number,
+): Promise<boolean> {
+  const result = await executor.query<{ exists: boolean }>(
+    `SELECT EXISTS(
+       SELECT 1 FROM leave_documents WHERE leave_request_id = $1
+     ) AS exists`,
+    [leaveRequestId],
+  );
+  return Boolean(result.rows[0]?.exists);
+}
+
+function canDownloadSupportingFile(
+  actor: AuthedUser,
+  row: QueueRequestRow,
+): boolean {
+  if (row.employee_user_id === actor.id) return true;
+  if (actor.role === "company_admin") return true;
+  if (actor.role === "manager") {
+    return (
+      row.assigned_user_ids.includes(actor.id) ||
+      row.reviewer_user_id === actor.id
+    );
+  }
+  return false;
 }
 
 leaveRouter.get(
@@ -490,9 +576,10 @@ leaveRouter.get(
       );
     }
 
-    const documentRequired =
-      leaveType.requires_document_after_days !== null &&
-      workingDaysCount >= leaveType.requires_document_after_days;
+    const documentRequired = documentIsRequired(
+      leaveType.requires_document_after_days,
+      workingDaysCount,
+    );
     const documentRule =
       leaveType.requires_document_after_days === null
         ? "No supporting file is required for this type."
@@ -538,7 +625,6 @@ leaveRouter.post(
   parseLeaveUpload,
   async (req, res) => {
     const uploadedFile = req.file;
-    let keepUploadedFile = false;
 
     try {
       const companyId = requireCompanyId(req.user, res);
@@ -618,12 +704,14 @@ leaveRouter.post(
         ).workingDays;
 
         if (
-          leaveType.requires_document_after_days !== null &&
-          workingDaysCount >= leaveType.requires_document_after_days &&
+          documentIsRequired(
+            leaveType.requires_document_after_days,
+            workingDaysCount,
+          ) &&
           !uploadedFile
         ) {
           throw new LeaveRequestError(
-            `A supporting file is required for requests of ${leaveType.requires_document_after_days} or more working days`,
+            `A supporting file is required for requests of more than ${leaveType.requires_document_after_days} working days`,
           );
         }
 
@@ -739,7 +827,7 @@ leaveRouter.post(
             workingDaysCount,
             reason || null,
             uploadedFile?.originalname ?? null,
-            uploadedFile ? basename(uploadedFile.filename) : null,
+            uploadedFile ? "db" : null,
             autoApprove ? "approved" : "pending",
             reviewer?.id ?? null,
             autoApprove ? new Date() : null,
@@ -770,8 +858,10 @@ leaveRouter.post(
             );
           }
         }
+        if (uploadedFile) {
+          await saveSupportingDocument(client, request.id, uploadedFile);
+        }
         await client.query("COMMIT");
-        keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;
@@ -821,10 +911,6 @@ leaveRouter.post(
         return;
       }
       throw error;
-    } finally {
-      if (uploadedFile && !keepUploadedFile) {
-        await rm(uploadedFile.path, { force: true });
-      }
     }
   },
 );
@@ -923,8 +1009,6 @@ leaveRouter.patch(
   parseLeaveUpload,
   async (req, res) => {
     const uploadedFile = req.file;
-    let keepUploadedFile = false;
-    let oldFileKey: string | null = null;
     try {
       const companyId = requireCompanyId(req.user, res);
       if (companyId === null) return;
@@ -1024,17 +1108,20 @@ leaveRouter.patch(
           endHalf,
         ).workingDays;
         const removeFile = removeFileValue === "true" && !uploadedFile;
-        const hasSupportingFile = Boolean(
-          uploadedFile ||
-            (request.supporting_file_key && !removeFile),
-        );
+        const storedFile =
+          !removeFile &&
+          (await hasStoredSupportingFile(client, request.id) ||
+            Boolean(request.supporting_file_name));
+        const hasSupportingFile = Boolean(uploadedFile || storedFile);
         if (
-          leaveType.requires_document_after_days !== null &&
-          workingDaysCount >= leaveType.requires_document_after_days &&
+          documentIsRequired(
+            leaveType.requires_document_after_days,
+            workingDaysCount,
+          ) &&
           !hasSupportingFile
         ) {
           throw new LeaveRequestError(
-            `A supporting file is required for requests of ${leaveType.requires_document_after_days} or more working days`,
+            `A supporting file is required for requests of more than ${leaveType.requires_document_after_days} working days`,
           );
         }
 
@@ -1089,7 +1176,14 @@ leaveRouter.patch(
           );
         }
 
-        oldFileKey = request.supporting_file_key;
+        const nextFileName =
+          uploadedFile?.originalname ??
+          (removeFile ? null : request.supporting_file_name);
+        const nextFileKey = uploadedFile
+          ? "db"
+          : removeFile
+            ? null
+            : request.supporting_file_key;
         const updateResult = await client.query<MyLeaveRow>(
           `UPDATE leave_requests
            SET leave_type_id = $3,
@@ -1115,17 +1209,17 @@ leaveRouter.patch(
             endHalf,
             workingDaysCount,
             reason || null,
-            uploadedFile?.originalname ??
-              (removeFile ? null : request.supporting_file_name),
-            uploadedFile
-              ? basename(uploadedFile.filename)
-              : removeFile
-                ? null
-                : request.supporting_file_key,
+            nextFileName,
+            nextFileKey,
           ],
         );
         if (updateResult.rowCount !== 1) {
           throw new LeaveRequestError("Only pending requests can be changed");
+        }
+        if (uploadedFile) {
+          await saveSupportingDocument(client, id, uploadedFile);
+        } else if (removeFile) {
+          await deleteSupportingDocuments(client, id);
         }
         const updatedResult = await client.query<MyLeaveRow>(
           `${MY_LEAVE_SQL}
@@ -1139,7 +1233,6 @@ leaveRouter.patch(
         }
         updated = result;
         await client.query("COMMIT");
-        keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;
@@ -1147,21 +1240,6 @@ leaveRouter.patch(
         client.release();
       }
 
-      if (
-        oldFileKey &&
-        (uploadedFile || req.body?.removeFile === "true")
-      ) {
-        try {
-          await rm(resolve(uploadsDirectory, basename(oldFileKey)), {
-            force: true,
-          });
-        } catch (error) {
-          console.error("Could not remove replaced leave attachment", {
-            requestId: id,
-            message: error instanceof Error ? error.message : "Unknown error",
-          });
-        }
-      }
       res.json(toMyLeaveItem(updated));
     } catch (error) {
       if (error instanceof LeaveRequestError) {
@@ -1169,10 +1247,6 @@ leaveRouter.patch(
         return;
       }
       throw error;
-    } finally {
-      if (uploadedFile && !keepUploadedFile) {
-        await rm(uploadedFile.path, { force: true });
-      }
     }
   },
 );
@@ -1445,6 +1519,120 @@ leaveRouter.get(
       return;
     }
     res.json({ ...toQueueItem(request), ...toMyLeaveItem(detail) });
+  },
+);
+
+leaveRouter.get(
+  "/:id/file",
+  requireAuth,
+  requireRole("staff", "manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const request = await loadQueueRequest(id);
+    if (!request || request.company_id !== companyId) {
+      res.status(404).json({ error: "Leave request not found" });
+      return;
+    }
+    if (!canDownloadSupportingFile(req.user!, request)) {
+      res.status(403).json({ error: "You are not allowed to do that" });
+      return;
+    }
+
+    const stored = await loadSupportingDocument(pool, id);
+    let filename = stored?.filename;
+    let mime = stored?.mime ?? "application/octet-stream";
+    let body: Buffer | null = stored?.file ?? null;
+
+    if (!body) {
+      const detail = await pool.query<MyLeaveRow>(
+        `${MY_LEAVE_SQL}
+         WHERE lr.id = $1
+         LIMIT 1`,
+        [id],
+      );
+      const row = detail.rows[0];
+      if (row?.supporting_file_key && row.supporting_file_key !== "db") {
+        try {
+          body = await readFile(
+            resolve(uploadsDirectory, basename(row.supporting_file_key)),
+          );
+          filename = row.supporting_file_name ?? "supporting-file";
+        } catch {
+          body = null;
+        }
+      } else {
+        filename = row?.supporting_file_name ?? filename;
+      }
+    }
+
+    if (!body || !filename) {
+      res.status(404).json({ error: "No supporting file on this request" });
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO leave_document_access (
+         company_id, leave_request_id, user_id
+       )
+       VALUES ($1, $2, $3)`,
+      [companyId, id, req.user!.id],
+    );
+
+    res.setHeader("Content-Type", mime);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiDownloadName(filename)}"`,
+    );
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(body);
+  },
+);
+
+leaveRouter.get(
+  "/:id/file/access",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const request = await loadQueueRequest(id);
+    if (!request || request.company_id !== companyId) {
+      res.status(404).json({ error: "Leave request not found" });
+      return;
+    }
+
+    const result = await pool.query<{
+      user_id: number;
+      accessed_at: Date;
+    }>(
+      `SELECT user_id, accessed_at
+       FROM leave_document_access
+       WHERE company_id = $1
+         AND leave_request_id = $2
+       ORDER BY accessed_at DESC, id DESC`,
+      [companyId, id],
+    );
+    res.json({
+      access: result.rows.map((row) => ({
+        userId: row.user_id,
+        accessedAt: row.accessed_at,
+      })),
+    });
   },
 );
 

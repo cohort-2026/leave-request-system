@@ -25,6 +25,7 @@ psql "$DATABASE_URL" -f sql/019_scim.sql
 psql "$DATABASE_URL" -f sql/020_company_memberships.sql
 psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
 psql "$DATABASE_URL" -f sql/022_half_days.sql
+psql "$DATABASE_URL" -f sql/023_document_access.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -76,6 +77,8 @@ psql "$DATABASE_URL" -f sql/022_half_days.sql
 `021_leave_escalation.sql` adds company-configured escalation and automatic-approval timeouts (both off by default) and records the company-scoped users allowed to decide each pending request. Existing pending requests retain their original reviewer.
 
 `022_half_days.sql` (issue 252) adds `leave_requests.start_half` and `end_half` (`full`, `am`, `pm`, default `full`) so a request can start or end on a half day. Existing rows stay full. `working_days_count` and balance remaining/used become `NUMERIC(8, 2)` so 0.5 days can be stored.
+
+`023_document_access.sql` (issue 253) stores sick notes in `leave_documents.file` as BYTEA (filename, mime, size_bytes) and logs authorised downloads in `leave_document_access`. The file bytes are the source of truth; do not store a filesystem path.
 
 ## Demo password
 
