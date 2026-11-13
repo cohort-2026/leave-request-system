@@ -198,6 +198,10 @@ export type TeamQueueItem = {
   leaveType: string
   status: RequestStatus
   supportingFileName?: string | null
+  submittedAt?: string | null
+  balanceAfter?: number | null
+  clashCount?: number | null
+  documentRequired?: boolean
 }
 
 export function fetchTeamQueue(): Promise<TeamQueueItem[]> {
