@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
 import { PageShell } from '../../../app/layouts/PageShell'
-import { Alert, Button, TextField } from '../../../shared/components'
+import { Button } from '../../../components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../../components/ui/card'
+import { Input } from '../../../components/ui/input'
+import { Alert } from '../../../shared/components'
 import { ApiError } from '../../../services/api'
 import {
   createOnboardingLink,
@@ -118,55 +127,86 @@ export function OnboardingLinkPage() {
 
   return (
     <PageShell title="Invite link" eyebrow="Company admin">
-      <Alert tone="info">
-        This link is the fallback when SCIM or SSO is off.
-      </Alert>
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {notice ? <Alert tone="success">{notice}</Alert> : null}
-      {loading ? (
-        <p className="muted">Loading invite link…</p>
-      ) : (
-        <>
-          <p className="muted">{statusText}</p>
-          <TextField
-            label="Invitation URL"
-            name="inviteUrl"
-            value={url ?? ''}
-            placeholder={
-              active
-                ? 'Create or replace the link to see the URL'
-                : 'No active invite link'
-            }
-            readOnly
-          />
-          <div className="flex gap-stack">
-            <Button
-              variant="primary"
-              type="button"
-              onClick={handleCopy}
-              disabled={!url || busy}
-            >
-              {copied ? 'Copied!' : 'Copy URL'}
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={handleDisable}
-              disabled={!active || busy}
-            >
-              Disable link
-            </Button>
-            <Button
-              variant="primary"
-              type="button"
-              onClick={handleReplace}
-              disabled={busy}
-            >
-              {active ? 'Replace link' : 'Create invite link'}
-            </Button>
-          </div>
-        </>
-      )}
+      <div className="grid max-w-3xl gap-4">
+        <Alert tone="info">
+          This link is the fallback when SCIM or SSO is off. The URL is only
+          revealed when you create or replace it.
+        </Alert>
+        {error ? <Alert tone="error">{error}</Alert> : null}
+        {notice ? <Alert tone="success">{notice}</Alert> : null}
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="grid gap-1">
+                <CardTitle>Company invite link</CardTitle>
+                <CardDescription>
+                  Manage the link employees use to join your company.
+                </CardDescription>
+              </div>
+              <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {loading ? 'Loading' : active ? 'Active' : 'Disabled'}
+              </span>
+            </div>
+          </CardHeader>
+
+          <CardContent className="grid gap-4">
+            {loading ? (
+              <p className="text-sm text-muted-foreground" role="status">
+                Loading invite link…
+              </p>
+            ) : (
+              <>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {statusText}
+                </p>
+                <label
+                  className="grid gap-2 text-sm font-medium"
+                  htmlFor="inviteUrl"
+                >
+                  Invitation URL
+                  <Input
+                    id="inviteUrl"
+                    name="inviteUrl"
+                    value={url ?? ''}
+                    placeholder={
+                      active
+                        ? 'Create or replace the link to see the URL'
+                        : 'No active invite link'
+                    }
+                    readOnly
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleCopy}
+                    disabled={!url || busy}
+                  >
+                    {copied ? 'Copied!' : 'Copy URL'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={handleDisable}
+                    disabled={!active || busy}
+                  >
+                    Disable link
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={handleReplace}
+                    disabled={busy}
+                  >
+                    {active ? 'Replace link' : 'Create invite link'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </PageShell>
   )
 }
