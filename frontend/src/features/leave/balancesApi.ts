@@ -1,6 +1,7 @@
 import { apiRequest } from '../../services/api'
 
 export type LeaveBalance = {
+  leaveTypeId: number | null
   leaveType: string
   totalAllowance: number
   usedDays: number
@@ -12,14 +13,22 @@ type LeaveBalancesResponse = {
 }
 
 type BalancePayload = Partial<LeaveBalance> & {
+  id?: number
+  leave_type_id?: number
   total?: number
   used?: number
   remainingDays?: number
   remaining?: number
 }
 
+function asPositiveId(value: unknown): number | null {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : null
+}
+
 function mapBalance(row: BalancePayload): LeaveBalance {
   return {
+    leaveTypeId: asPositiveId(row.leaveTypeId ?? row.id ?? row.leave_type_id),
     leaveType: String(row.leaveType ?? '').trim(),
     totalAllowance: Number(row.totalAllowance ?? row.total ?? 0),
     usedDays: Number(row.usedDays ?? row.used ?? 0),
