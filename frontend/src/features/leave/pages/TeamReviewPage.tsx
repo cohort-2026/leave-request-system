@@ -6,6 +6,7 @@ import { Alert, Button, Modal, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import {
   approveTeamRequest,
+  downloadSupportingFile,
   fetchTeamQueueDetail,
   rejectTeamRequest,
   type TeamQueueItem,
@@ -25,6 +26,7 @@ export function TeamReviewPage() {
   const [rejectOpen, setRejectOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -129,6 +131,38 @@ export function TeamReviewPage() {
         </p>
         <p>
           <strong>Status:</strong> {request.status}
+        </p>
+        <p>
+          <strong>Supporting file:</strong>{' '}
+          {request.supportingFileName ? (
+            <>
+              {request.supportingFileName}{' '}
+              <Button
+                variant="secondary"
+                type="button"
+                disabled={downloading}
+                onClick={() => {
+                  if (!id || !request.supportingFileName) return
+                  setDownloading(true)
+                  setActionError(null)
+                  void downloadSupportingFile(id, request.supportingFileName)
+                    .catch((err: unknown) => {
+                      setActionError(
+                        getErrorMessage(
+                          err,
+                          'Could not download the supporting file.',
+                        ),
+                      )
+                    })
+                    .finally(() => setDownloading(false))
+                }}
+              >
+                {downloading ? 'Downloading…' : 'Download'}
+              </Button>
+            </>
+          ) : (
+            'None'
+          )}
         </p>
       </div>
       {actionError && !rejectOpen ? (

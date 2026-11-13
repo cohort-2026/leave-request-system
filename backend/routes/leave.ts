@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +6,13 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import multer, { type MulterError } from "multer";
 import type { Pool, PoolClient } from "pg";
 import { pool } from "../db.js";
+import {
+  assertSupportingFile,
+  asciiDownloadName,
+  documentIsRequired,
+  MAX_SUPPORTING_FILE_BYTES,
+  UnsupportedSupportingFileError,
+} from "../leave/supportingFile.js";
 import {
   appOrigin,
   leaveCancelled,
@@ -19,7 +25,12 @@ import {
   applyApprovedLeaveToBalance,
   listBalances,
 } from "../leave/balances.js";
-import { countWorkingDays, type WorkingDayFlags } from "../leave/workingDays.js";
+import { todayInSast } from "../leave/todayInSast.js";
+import {
+  countWorkingDaysPreview,
+  type DayHalf,
+  type WorkingDayFlags,
+} from "../leave/workingDays.js";
 import { hasOverlappingLeaveRequest } from "../leave/overlap.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId, sameCompanyId } from "../tenancy.js";
@@ -37,33 +48,26 @@ const uploadsDirectory =
   process.env.VERCEL === "1"
     ? resolve(tmpdir(), "leave-request-system", "uploads", "leave")
     : resolve(backendDirectory, "uploads", "leave");
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const AUTO_APPROVE_REASON =
   "Automatically approved because no other eligible reviewer is available";
 type Queryable = Pool | PoolClient;
 
 const leaveUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, callback) => {
-      mkdir(uploadsDirectory, { recursive: true })
-        .then(() => callback(null, uploadsDirectory))
-        .catch((error: unknown) =>
-          callback(
-            error instanceof Error
-              ? error
-              : new Error("Could not create leave upload directory"),
-            uploadsDirectory,
-          ),
-        );
-    },
-    filename: (_req, _file, callback) => callback(null, randomUUID()),
-  }),
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_FILE_SIZE,
+    fileSize: MAX_SUPPORTING_FILE_BYTES,
     files: 1,
-    fields: 5,
+    fields: 12,
     fieldNameSize: 100,
     fieldSize: 10_000,
+  },
+  fileFilter: (_req, file, callback) => {
+    try {
+      file.mimetype = assertSupportingFile(file.originalname, file.mimetype);
+      callback(null, true);
+    } catch (error) {
+      callback(error as Error);
+    }
   },
 });
 
@@ -139,7 +143,25 @@ function parseDate(value: unknown): string | null {
 
 function getLeaveTypeId(value: unknown): number | null {
   if (!isRecord(value)) return null;
-  return parsePositiveInteger(value.leaveTypeId ?? value.type);
+  return parsePositiveInteger(value.leaveTypeId ?? value.typeId ?? value.type);
+}
+
+function parseDayHalf(value: unknown): DayHalf | null {
+  if (value === undefined || value === null || value === "") return "full";
+  if (typeof value !== "string") return null;
+  const key = value.trim().toLowerCase();
+  if (key === "full") return "full";
+  if (key === "am" || key === "morning") return "am";
+  if (key === "pm" || key === "afternoon") return "pm";
+  return null;
+}
+
+function dayHalfFromBody(body: unknown, edge: "start" | "end"): DayHalf | null {
+  if (!isRecord(body)) return "full";
+  const halfKey = edge === "start" ? "startHalf" : "endHalf";
+  const partKey = edge === "start" ? "startPart" : "endPart";
+  const raw = body[halfKey] ?? body[partKey];
+  return parseDayHalf(raw);
 }
 
 async function getLeaveType(
@@ -194,16 +216,17 @@ async function getCalendarForRange(
     throw new LeaveRequestError("Company calendar not found", 404);
   }
 
-  const holidaysResult = await executor.query<{ date: string }>(
-    `SELECT holiday_date::TEXT AS date
+  const holidaysResult = await executor.query<{ date: string; name: string }>(
+    `SELECT holiday_date::date::TEXT AS date, name
      FROM public_holidays
      WHERE company_id = $1
-       AND holiday_date BETWEEN $2::date AND $3::date`,
+       AND holiday_date BETWEEN $2::date AND $3::date
+     ORDER BY holiday_date`,
     [companyId, startDate, endDate],
   );
   return {
     settings,
-    holidays: holidaysResult.rows.map((row) => row.date),
+    holidays: holidaysResult.rows,
   };
 }
 
@@ -211,10 +234,19 @@ function workingDaysBetween(
   startDate: string,
   endDate: string,
   settings: WorkingDayFlags,
-  holidays: string[],
-): number {
+  holidays: { date: string; name: string }[],
+  startHalf: DayHalf = "full",
+  endHalf: DayHalf = "full",
+) {
   try {
-    return countWorkingDays(settings, holidays, startDate, endDate);
+    return countWorkingDaysPreview(
+      settings,
+      holidays.map((holiday) => holiday.date),
+      startDate,
+      endDate,
+      startHalf,
+      endHalf,
+    );
   } catch (error) {
     if (error instanceof RangeError) {
       throw new LeaveRequestError(error.message);
@@ -233,7 +265,7 @@ async function findReviewer(
   companyId: number,
   employeeId: number,
   employeeRole: string,
-  executor: PoolClient,
+  executor: Queryable,
 ): Promise<{ id: number; email: string; name: string } | null> {
   const result = await executor.query<ReviewerRow>(
     `SELECT
@@ -317,7 +349,10 @@ function getUploadErrorMessage(error: MulterError): {
   message: string;
 } {
   if (error.code === "LIMIT_FILE_SIZE") {
-    return { status: 413, message: "Supporting file must be 10 MB or smaller" };
+    return {
+      status: 413,
+      message: "Supporting file must be 4 MB or smaller",
+    };
   }
   return { status: 400, message: "Invalid supporting file upload" };
 }
@@ -332,6 +367,10 @@ function parseLeaveUpload(
       next();
       return;
     }
+    if (error instanceof UnsupportedSupportingFileError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
     if (error instanceof multer.MulterError) {
       const result = getUploadErrorMessage(error);
       res.status(result.status).json({ error: result.message });
@@ -339,6 +378,86 @@ function parseLeaveUpload(
     }
     next(error);
   });
+}
+
+async function saveSupportingDocument(
+  executor: Queryable,
+  leaveRequestId: number,
+  file: Express.Multer.File,
+): Promise<void> {
+  const mime = assertSupportingFile(file.originalname, file.mimetype);
+  await executor.query(
+    `DELETE FROM leave_documents WHERE leave_request_id = $1`,
+    [leaveRequestId],
+  );
+  await executor.query(
+    `INSERT INTO leave_documents (
+       leave_request_id, filename, mime, size_bytes, file
+     )
+     VALUES ($1, $2, $3, $4, $5)`,
+    [leaveRequestId, file.originalname, mime, file.size, file.buffer],
+  );
+}
+
+async function deleteSupportingDocuments(
+  executor: Queryable,
+  leaveRequestId: number,
+): Promise<void> {
+  await executor.query(
+    `DELETE FROM leave_documents WHERE leave_request_id = $1`,
+    [leaveRequestId],
+  );
+}
+
+async function loadSupportingDocument(
+  executor: Queryable,
+  leaveRequestId: number,
+): Promise<{
+  filename: string;
+  mime: string;
+  file: Buffer;
+} | null> {
+  const result = await executor.query<{
+    filename: string;
+    mime: string;
+    file: Buffer;
+  }>(
+    `SELECT filename, mime, file
+     FROM leave_documents
+     WHERE leave_request_id = $1
+     ORDER BY id DESC
+     LIMIT 1`,
+    [leaveRequestId],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function hasStoredSupportingFile(
+  executor: Queryable,
+  leaveRequestId: number,
+): Promise<boolean> {
+  const result = await executor.query<{ exists: boolean }>(
+    `SELECT EXISTS(
+       SELECT 1 FROM leave_documents WHERE leave_request_id = $1
+     ) AS exists`,
+    [leaveRequestId],
+  );
+  return Boolean(result.rows[0]?.exists);
+}
+
+function canDownloadSupportingFile(
+  actor: AuthedUser,
+  row: QueueRequestRow,
+): boolean {
+  if (row.employee_user_id === actor.id) return true;
+  if (actor.role === "company_admin") return true;
+  if (actor.role === "manager") {
+    return (
+      row.assigned_user_ids.includes(actor.id) ||
+      row.reviewer_user_id === actor.id
+    );
+  }
+  return false;
 }
 
 leaveRouter.get(
@@ -349,10 +468,14 @@ leaveRouter.get(
     const companyId = requireCompanyId(req.user, res);
     if (companyId === null) return;
 
-    const leaveTypeId = parsePositiveInteger(req.query.leaveTypeId);
+    const leaveTypeId = parsePositiveInteger(
+      req.query.leaveTypeId ?? req.query.typeId,
+    );
     const startDate = parseDate(req.query.start);
     const endDate = parseDate(req.query.end);
-    if (!leaveTypeId || !startDate || !endDate) {
+    const startHalf = parseDayHalf(req.query.startHalf ?? req.query.startPart);
+    const endHalf = parseDayHalf(req.query.endHalf ?? req.query.endPart);
+    if (!leaveTypeId || !startDate || !endDate || !startHalf || !endHalf) {
       res.status(400).json({
         error: "Leave type, start date, and end date are required",
       });
@@ -378,19 +501,120 @@ leaveRouter.get(
       return;
     }
 
-    const calendar = await getCalendarForRange(
+    let calendar;
+    let previewDays;
+    try {
+      calendar = await getCalendarForRange(
+        companyId,
+        startDate,
+        endDate,
+        pool,
+      );
+      previewDays = workingDaysBetween(
+        startDate,
+        endDate,
+        calendar.settings,
+        calendar.holidays,
+        startHalf,
+        endHalf,
+      );
+    } catch (error) {
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+    const workingDaysCount = previewDays.workingDays;
+    const excluded = calendar.holidays
+      .filter((holiday) => previewDays.excluded.includes(holiday.date))
+      .map((holiday) => holiday.date);
+    const holidays = calendar.holidays.filter((holiday) =>
+      previewDays.excluded.includes(holiday.date),
+    );
+
+    const today = todayInSast();
+    const rulesResult = await pool.query<{ min_notice_days: number }>(
+      `SELECT COALESCE(min_notice_days, 0) AS min_notice_days
+       FROM company_leave_rules
+       WHERE company_id = $1
+       LIMIT 1`,
+      [companyId],
+    );
+    const minNoticeDays = Number(rulesResult.rows[0]?.min_notice_days ?? 0);
+    const warnings: string[] = [];
+    if (!leaveType.allow_backdate && startDate < today) {
+      warnings.push("This leave type does not allow backdated requests");
+    }
+    if (
+      !leaveType.allow_backdate &&
+      minNoticeDays > 0 &&
+      wholeDaysBetween(today, startDate) < minNoticeDays
+    ) {
+      warnings.push(
+        `This request must be submitted at least ${minNoticeDays} days in advance`,
+      );
+    }
+
+    const balanceResult = await pool.query<{ days_remaining: number }>(
+      `SELECT days_remaining
+       FROM leave_balances
+       WHERE company_id = $1
+         AND user_id = $2
+         AND leave_type_id = $3
+       LIMIT 1`,
+      [companyId, req.user!.id, leaveTypeId],
+    );
+    const remaining = balanceResult.rows[0]
+      ? Number(balanceResult.rows[0].days_remaining)
+      : null;
+    const availableAfter =
+      remaining === null ? null : remaining - workingDaysCount;
+    if (remaining !== null && workingDaysCount > remaining) {
+      warnings.push(
+        `This request exceeds your remaining balance of ${remaining} days`,
+      );
+    }
+
+    const documentRequired = documentIsRequired(
+      leaveType.requires_document_after_days,
+      workingDaysCount,
+    );
+    const documentRule =
+      leaveType.requires_document_after_days === null
+        ? "No supporting file is required for this type."
+        : leaveType.requires_document_after_days === 0
+          ? "A supporting file is required."
+          : `A supporting file is required after ${leaveType.requires_document_after_days} working days.`;
+
+    const reviewer = await findReviewer(
       companyId,
-      startDate,
-      endDate,
+      req.user!.id,
+      req.user!.role,
       pool,
     );
-    const workingDaysCount = workingDaysBetween(
-      startDate,
-      endDate,
-      calendar.settings,
-      calendar.holidays,
-    );
-    res.json({ workingDaysCount });
+    const autoApprove = !reviewer && req.user!.role === "company_admin";
+    const approverName = reviewer?.name ?? (autoApprove ? "Auto-approved" : null);
+
+    res.json({
+      workingDays: workingDaysCount,
+      workingDaysCount,
+      excluded,
+      excludedDates: excluded,
+      holidays: holidays.map((holiday) => ({
+        date: holiday.date,
+        label: holiday.name,
+        name: holiday.name,
+      })),
+      availableAfter,
+      documentRequired,
+      documentRule,
+      approver: approverName,
+      approverName,
+      reviewerName: reviewer?.name ?? null,
+      warnings,
+      noticeWarnings: warnings,
+    });
   },
 );
 
@@ -401,7 +625,6 @@ leaveRouter.post(
   parseLeaveUpload,
   async (req, res) => {
     const uploadedFile = req.file;
-    let keepUploadedFile = false;
 
     try {
       const companyId = requireCompanyId(req.user, res);
@@ -410,11 +633,13 @@ leaveRouter.post(
       const leaveTypeId = getLeaveTypeId(req.body);
       const startDate = parseDate(req.body?.start);
       const endDate = parseDate(req.body?.end);
+      const startHalf = dayHalfFromBody(req.body, "start");
+      const endHalf = dayHalfFromBody(req.body, "end");
       const reasonValue = req.body?.reason;
       const reason =
         typeof reasonValue === "string" ? reasonValue.trim() : null;
 
-      if (!leaveTypeId || !startDate || !endDate) {
+      if (!leaveTypeId || !startDate || !endDate || !startHalf || !endHalf) {
         throw new LeaveRequestError(
           "Leave type, start date, and end date are required",
         );
@@ -436,7 +661,7 @@ leaveRouter.post(
         throw new LeaveRequestError("Reason must be 5000 characters or fewer");
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayInSast();
       const client = await pool.connect();
       let request: LeaveRequestRow;
       let leaveTypeName: string;
@@ -474,15 +699,19 @@ leaveRouter.post(
           endDate,
           calendar.settings,
           calendar.holidays,
-        );
+          startHalf,
+          endHalf,
+        ).workingDays;
 
         if (
-          leaveType.requires_document_after_days !== null &&
-          workingDaysCount >= leaveType.requires_document_after_days &&
+          documentIsRequired(
+            leaveType.requires_document_after_days,
+            workingDaysCount,
+          ) &&
           !uploadedFile
         ) {
           throw new LeaveRequestError(
-            `A supporting file is required for requests of ${leaveType.requires_document_after_days} or more working days`,
+            `A supporting file is required for requests of more than ${leaveType.requires_document_after_days} working days`,
           );
         }
 
@@ -566,6 +795,8 @@ leaveRouter.post(
              leave_type_id,
              start_date,
              end_date,
+             start_half,
+             end_half,
              working_days_count,
              reason,
              supporting_file_name,
@@ -576,7 +807,7 @@ leaveRouter.post(
              decision_reason
            )
            VALUES (
-             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13
+             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
            )
            RETURNING
              id,
@@ -591,10 +822,12 @@ leaveRouter.post(
             leaveTypeId,
             startDate,
             endDate,
+            startHalf,
+            endHalf,
             workingDaysCount,
             reason || null,
             uploadedFile?.originalname ?? null,
-            uploadedFile ? basename(uploadedFile.filename) : null,
+            uploadedFile ? "db" : null,
             autoApprove ? "approved" : "pending",
             reviewer?.id ?? null,
             autoApprove ? new Date() : null,
@@ -625,8 +858,10 @@ leaveRouter.post(
             );
           }
         }
+        if (uploadedFile) {
+          await saveSupportingDocument(client, request.id, uploadedFile);
+        }
         await client.query("COMMIT");
-        keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;
@@ -657,12 +892,6 @@ leaveRouter.post(
             requestId: request.id,
             message: error instanceof Error ? error.message : "Unknown error",
           });
-          res.status(502).json({
-            error:
-              "Leave request was saved, but the reviewer could not be notified",
-            leaveRequestId: request.id,
-          });
-          return;
         }
       }
 
@@ -682,10 +911,6 @@ leaveRouter.post(
         return;
       }
       throw error;
-    } finally {
-      if (uploadedFile && !keepUploadedFile) {
-        await rm(uploadedFile.path, { force: true });
-      }
     }
   },
 );
@@ -784,8 +1009,6 @@ leaveRouter.patch(
   parseLeaveUpload,
   async (req, res) => {
     const uploadedFile = req.file;
-    let keepUploadedFile = false;
-    let oldFileKey: string | null = null;
     try {
       const companyId = requireCompanyId(req.user, res);
       if (companyId === null) return;
@@ -794,6 +1017,8 @@ leaveRouter.patch(
       const leaveTypeId = getLeaveTypeId(req.body);
       const startDate = parseDate(req.body?.start);
       const endDate = parseDate(req.body?.end);
+      const startHalf = dayHalfFromBody(req.body, "start");
+      const endHalf = dayHalfFromBody(req.body, "end");
       const reasonValue = req.body?.reason;
       const reason =
         typeof reasonValue === "string" ? reasonValue.trim() : null;
@@ -801,7 +1026,7 @@ leaveRouter.patch(
       if (!id) {
         throw new LeaveRequestError("Invalid leave request id");
       }
-      if (!leaveTypeId || !startDate || !endDate) {
+      if (!leaveTypeId || !startDate || !endDate || !startHalf || !endHalf) {
         throw new LeaveRequestError(
           "Leave type, start date, and end date are required",
         );
@@ -861,7 +1086,7 @@ leaveRouter.patch(
         if (!leaveType) {
           throw new LeaveRequestError("Leave type not found", 404);
         }
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayInSast();
         if (!leaveType.allow_backdate && startDate < today) {
           throw new LeaveRequestError(
             "This leave type does not allow backdated requests",
@@ -879,19 +1104,24 @@ leaveRouter.patch(
           endDate,
           calendar.settings,
           calendar.holidays,
-        );
+          startHalf,
+          endHalf,
+        ).workingDays;
         const removeFile = removeFileValue === "true" && !uploadedFile;
-        const hasSupportingFile = Boolean(
-          uploadedFile ||
-            (request.supporting_file_key && !removeFile),
-        );
+        const storedFile =
+          !removeFile &&
+          (await hasStoredSupportingFile(client, request.id) ||
+            Boolean(request.supporting_file_name));
+        const hasSupportingFile = Boolean(uploadedFile || storedFile);
         if (
-          leaveType.requires_document_after_days !== null &&
-          workingDaysCount >= leaveType.requires_document_after_days &&
+          documentIsRequired(
+            leaveType.requires_document_after_days,
+            workingDaysCount,
+          ) &&
           !hasSupportingFile
         ) {
           throw new LeaveRequestError(
-            `A supporting file is required for requests of ${leaveType.requires_document_after_days} or more working days`,
+            `A supporting file is required for requests of more than ${leaveType.requires_document_after_days} working days`,
           );
         }
 
@@ -946,16 +1176,25 @@ leaveRouter.patch(
           );
         }
 
-        oldFileKey = request.supporting_file_key;
+        const nextFileName =
+          uploadedFile?.originalname ??
+          (removeFile ? null : request.supporting_file_name);
+        const nextFileKey = uploadedFile
+          ? "db"
+          : removeFile
+            ? null
+            : request.supporting_file_key;
         const updateResult = await client.query<MyLeaveRow>(
           `UPDATE leave_requests
            SET leave_type_id = $3,
                start_date = $4::date,
                end_date = $5::date,
-               working_days_count = $6,
-               reason = $7,
-               supporting_file_name = $8,
-               supporting_file_key = $9
+               start_half = $6,
+               end_half = $7,
+               working_days_count = $8,
+               reason = $9,
+               supporting_file_name = $10,
+               supporting_file_key = $11
            WHERE id = $1
              AND employee_user_id = $2
              AND status = 'pending'
@@ -966,19 +1205,21 @@ leaveRouter.patch(
             leaveTypeId,
             startDate,
             endDate,
+            startHalf,
+            endHalf,
             workingDaysCount,
             reason || null,
-            uploadedFile?.originalname ??
-              (removeFile ? null : request.supporting_file_name),
-            uploadedFile
-              ? basename(uploadedFile.filename)
-              : removeFile
-                ? null
-                : request.supporting_file_key,
+            nextFileName,
+            nextFileKey,
           ],
         );
         if (updateResult.rowCount !== 1) {
           throw new LeaveRequestError("Only pending requests can be changed");
+        }
+        if (uploadedFile) {
+          await saveSupportingDocument(client, id, uploadedFile);
+        } else if (removeFile) {
+          await deleteSupportingDocuments(client, id);
         }
         const updatedResult = await client.query<MyLeaveRow>(
           `${MY_LEAVE_SQL}
@@ -992,7 +1233,6 @@ leaveRouter.patch(
         }
         updated = result;
         await client.query("COMMIT");
-        keepUploadedFile = Boolean(uploadedFile);
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;
@@ -1000,21 +1240,6 @@ leaveRouter.patch(
         client.release();
       }
 
-      if (
-        oldFileKey &&
-        (uploadedFile || req.body?.removeFile === "true")
-      ) {
-        try {
-          await rm(resolve(uploadsDirectory, basename(oldFileKey)), {
-            force: true,
-          });
-        } catch (error) {
-          console.error("Could not remove replaced leave attachment", {
-            requestId: id,
-            message: error instanceof Error ? error.message : "Unknown error",
-          });
-        }
-      }
       res.json(toMyLeaveItem(updated));
     } catch (error) {
       if (error instanceof LeaveRequestError) {
@@ -1022,10 +1247,6 @@ leaveRouter.patch(
         return;
       }
       throw error;
-    } finally {
-      if (uploadedFile && !keepUploadedFile) {
-        await rm(uploadedFile.path, { force: true });
-      }
     }
   },
 );
@@ -1214,10 +1435,7 @@ async function notifyRequester(row: QueueRequestRow, status: "approved" | "rejec
       status,
       message: error instanceof Error ? error.message : "Unknown error",
     });
-    throw new LeaveRequestError(
-      "Decision was saved, but the requester could not be notified",
-      502,
-    );
+    return;
   }
 }
 
@@ -1301,6 +1519,120 @@ leaveRouter.get(
       return;
     }
     res.json({ ...toQueueItem(request), ...toMyLeaveItem(detail) });
+  },
+);
+
+leaveRouter.get(
+  "/:id/file",
+  requireAuth,
+  requireRole("staff", "manager", "company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const request = await loadQueueRequest(id);
+    if (!request || request.company_id !== companyId) {
+      res.status(404).json({ error: "Leave request not found" });
+      return;
+    }
+    if (!canDownloadSupportingFile(req.user!, request)) {
+      res.status(403).json({ error: "You are not allowed to do that" });
+      return;
+    }
+
+    const stored = await loadSupportingDocument(pool, id);
+    let filename = stored?.filename;
+    let mime = stored?.mime ?? "application/octet-stream";
+    let body: Buffer | null = stored?.file ?? null;
+
+    if (!body) {
+      const detail = await pool.query<MyLeaveRow>(
+        `${MY_LEAVE_SQL}
+         WHERE lr.id = $1
+         LIMIT 1`,
+        [id],
+      );
+      const row = detail.rows[0];
+      if (row?.supporting_file_key && row.supporting_file_key !== "db") {
+        try {
+          body = await readFile(
+            resolve(uploadsDirectory, basename(row.supporting_file_key)),
+          );
+          filename = row.supporting_file_name ?? "supporting-file";
+        } catch {
+          body = null;
+        }
+      } else {
+        filename = row?.supporting_file_name ?? filename;
+      }
+    }
+
+    if (!body || !filename) {
+      res.status(404).json({ error: "No supporting file on this request" });
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO leave_document_access (
+         company_id, leave_request_id, user_id
+       )
+       VALUES ($1, $2, $3)`,
+      [companyId, id, req.user!.id],
+    );
+
+    res.setHeader("Content-Type", mime);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiDownloadName(filename)}"`,
+    );
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(body);
+  },
+);
+
+leaveRouter.get(
+  "/:id/file/access",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid leave request id" });
+      return;
+    }
+
+    const request = await loadQueueRequest(id);
+    if (!request || request.company_id !== companyId) {
+      res.status(404).json({ error: "Leave request not found" });
+      return;
+    }
+
+    const result = await pool.query<{
+      user_id: number;
+      accessed_at: Date;
+    }>(
+      `SELECT user_id, accessed_at
+       FROM leave_document_access
+       WHERE company_id = $1
+         AND leave_request_id = $2
+       ORDER BY accessed_at DESC, id DESC`,
+      [companyId, id],
+    );
+    res.json({
+      access: result.rows.map((row) => ({
+        userId: row.user_id,
+        accessedAt: row.accessed_at,
+      })),
+    });
   },
 );
 
@@ -1399,11 +1731,6 @@ leaveRouter.post(
           requestId: cancelled.id,
           message: error instanceof Error ? error.message : "Unknown error",
         });
-        res.status(502).json({
-          error: "Request was cancelled, but the reviewer could not be notified",
-          leaveRequestId: cancelled.id,
-        });
-        return;
       }
     }
 

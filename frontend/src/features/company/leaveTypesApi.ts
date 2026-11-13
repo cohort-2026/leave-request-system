@@ -8,6 +8,9 @@ export type CompanyLeaveType = {
   isActive: boolean
   allowBackdate: boolean
   requiresDocumentAfterDays: number | null
+  color?: string
+  hasBalance?: boolean
+  cycleMonths?: number | null
 }
 
 export type LeaveTypeInput = {
@@ -16,21 +19,57 @@ export type LeaveTypeInput = {
   isActive: boolean
   allowBackdate: boolean
   requiresDocumentAfterDays: number | null
+  color: string
+  hasBalance: boolean
+  cycleMonths: number | null
 }
 
 type LeaveTypesResponse = {
-  leaveTypes: CompanyLeaveType[]
+  leaveTypes: LeaveTypeApiRow[]
 }
 
 type LeaveTypeResponse = {
-  leaveType: CompanyLeaveType
+  leaveType: LeaveTypeApiRow
+}
+
+type LeaveTypeApiRow = CompanyLeaveType & {
+  colour?: unknown
+  has_balance?: unknown
+  cycle_months?: unknown
+}
+
+function mapCompanyLeaveType(row: LeaveTypeApiRow): CompanyLeaveType {
+  const color =
+    typeof row.color === 'string'
+      ? row.color
+      : typeof row.colour === 'string'
+        ? row.colour
+        : undefined
+  const hasBalanceValue = row.hasBalance ?? row.has_balance
+  const cycleMonthsValue = row.cycleMonths ?? row.cycle_months
+  const cycleMonths =
+    cycleMonthsValue === null
+      ? null
+      : typeof cycleMonthsValue === 'number' &&
+          Number.isInteger(cycleMonthsValue) &&
+          cycleMonthsValue > 0
+        ? cycleMonthsValue
+        : undefined
+
+  return {
+    ...row,
+    color,
+    hasBalance:
+      typeof hasBalanceValue === 'boolean' ? hasBalanceValue : undefined,
+    cycleMonths,
+  }
 }
 
 export async function getCompanyLeaveTypes(): Promise<CompanyLeaveType[]> {
   const response = await apiRequest<LeaveTypesResponse>(
     '/api/admin/leave-types',
   )
-  return response.leaveTypes
+  return response.leaveTypes.map(mapCompanyLeaveType)
 }
 
 export async function createCompanyLeaveType(
@@ -43,7 +82,7 @@ export async function createCompanyLeaveType(
       body: JSON.stringify(input),
     },
   )
-  return response.leaveType
+  return mapCompanyLeaveType(response.leaveType)
 }
 
 export async function updateCompanyLeaveType(
@@ -57,5 +96,5 @@ export async function updateCompanyLeaveType(
       body: JSON.stringify(input),
     },
   )
-  return response.leaveType
+  return mapCompanyLeaveType(response.leaveType)
 }
