@@ -13,9 +13,6 @@ export function GuestOnly() {
   if (session?.status === 'pending_verification') {
     return <Navigate to={paths.verify} replace />
   }
-  if (session?.status === 'pending_approval') {
-    return <Navigate to={paths.pendingApproval} replace />
-  }
   if (session?.status === 'active') {
     return <Navigate to={homeFor(session.role)} replace />
   }
@@ -45,13 +42,9 @@ export function SessionGate() {
     return <Navigate to={paths.verify} replace />
   }
 
-  if (session.status === 'pending_approval' && path !== paths.pendingApproval) {
-    return <Navigate to={paths.pendingApproval} replace />
-  }
-
   if (
     session.status === 'active' &&
-    (path === paths.verify || path === paths.pendingApproval)
+    path === paths.verify
   ) {
     return <Navigate to={homeFor(session.role)} replace />
   }
