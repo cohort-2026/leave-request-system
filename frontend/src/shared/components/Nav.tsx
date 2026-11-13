@@ -16,7 +16,7 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
-import { NavLink, useMatch } from 'react-router-dom'
+import { NavLink, useLocation, useMatch } from 'react-router-dom'
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -136,6 +136,7 @@ type NavProps = {
 }
 
 export function Nav({ role }: NavProps) {
+  const { pathname } = useLocation()
   const isPlatform = role === 'platform'
   const isManager = role === 'manager' || role === 'company_admin'
   const isAdmin = role === 'company_admin'
@@ -161,7 +162,7 @@ export function Nav({ role }: NavProps) {
       active = false
       window.removeEventListener('team-queue-updated', refreshCount)
     }
-  }, [isManager])
+  }, [isManager, pathname])
 
   return (
     <nav aria-label="Primary navigation" className="contents">
