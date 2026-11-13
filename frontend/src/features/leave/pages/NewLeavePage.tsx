@@ -43,6 +43,7 @@ import {
   type MyLeaveRequest,
 } from '../leaveApi'
 import { ApiError } from '../../../services/api'
+import { cn } from '../../../lib/utils'
 
 const PREVIEW_DEBOUNCE_MS = 300
 const ACCEPTED_FILES = '.pdf,.jpg,.jpeg,.png,.heic,application/pdf,image/jpeg,image/png,image/heic'
@@ -463,11 +464,21 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
                     : balance
                       ? `${balance.daysRemaining} days available`
                       : 'No balance'
+                  const selected = selectedTypeId === String(type.id)
                   return (
-                    <FieldLabel key={type.id} htmlFor={`leave-type-${type.id}`}>
+                    <FieldLabel
+                      key={type.id}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedTypeId(String(type.id))}
+                    >
                       <Field
                         orientation="horizontal"
-                        className="items-start rounded-xl border p-3"
+                        className={cn(
+                          'items-start rounded-xl border p-3 transition-colors',
+                          selected
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
+                            : 'border-border',
+                        )}
                         data-invalid={Boolean(
                           submitFieldErrors.leaveTypeId ?? submitFieldErrors.type,
                         )}
@@ -475,6 +486,11 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
                         <RadioGroupItem
                           id={`leave-type-${type.id}`}
                           value={String(type.id)}
+                          className={
+                            selected
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : undefined
+                          }
                         />
                         <FieldContent>
                           <span className="font-medium">{type.name}</span>
