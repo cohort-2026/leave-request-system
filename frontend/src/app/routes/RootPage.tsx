@@ -25,10 +25,6 @@ export function RootPage() {
     return <Navigate to={paths.verify} replace />
   }
 
-  if (session.status === 'pending_approval') {
-    return <Navigate to={paths.pendingApproval} replace />
-  }
-
   if (session.status !== 'active') {
     return <Navigate to={paths.login} replace />
   }

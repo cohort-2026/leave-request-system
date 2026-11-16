@@ -1,7 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from '../layouts/AppLayout'
 import { MarketingLayout } from '../layouts/MarketingLayout'
-import { PendingLayout } from '../layouts/PendingLayout'
 import { PublicLayout } from '../layouts/PublicLayout'
 import { NotFoundPage } from '../NotFoundPage'
 import { GuestOnly, RequireActive, RequireRole, SessionGate } from './guards'
@@ -15,7 +14,6 @@ import { StartCompanyPage } from '../../features/auth/pages/StartCompanyPage'
 import { StartCompanyPayPage } from '../../features/auth/pages/StartCompanyPayPage'
 import { OnboardDisabledPage } from '../../features/auth/pages/OnboardDisabledPage'
 import { OnboardPage } from '../../features/auth/pages/OnboardPage'
-import { PendingApprovalPage } from '../../features/auth/pages/PendingApprovalPage'
 import { VerifyPage } from '../../features/auth/pages/VerifyPage'
 import { ResetAuthenticatorPage } from '../../features/auth/pages/ResetAuthenticatorPage'
 import { ProfilePage } from '../../features/auth/pages/ProfilePage'
@@ -70,12 +68,6 @@ export const router = createBrowserRouter([
   {
     element: <SessionGate />,
     children: [
-      {
-        element: <PendingLayout />,
-        children: [
-          { path: paths.pendingApproval, element: <PendingApprovalPage /> },
-        ],
-      },
       {
         element: <RequireActive />,
         children: [

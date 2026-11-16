@@ -30,7 +30,6 @@ import {
 const statusLabel = {
   active: 'Active',
   pending_verification: 'Pending verification',
-  pending_approval: 'Pending approval',
 } as const
 
 function initials(name: string) {

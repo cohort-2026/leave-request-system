@@ -2,7 +2,6 @@ export type Role = 'staff' | 'manager' | 'company_admin' | 'platform'
 
 export type AccountStatus =
   | 'pending_verification'
-  | 'pending_approval'
   | 'active'
 
 export type Session = {

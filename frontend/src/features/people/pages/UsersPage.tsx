@@ -14,7 +14,6 @@ import { listCompanyUsers, type PublicUser } from './usersApi'
 const statusLabel: Record<AccountStatus, string> = {
   active: 'Active',
   pending_verification: 'Pending verification',
-  pending_approval: 'Pending approval',
 }
 
 const columns: DataTableColumn<PublicUser>[] = [

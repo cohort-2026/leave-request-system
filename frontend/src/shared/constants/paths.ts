@@ -14,7 +14,6 @@ export const paths = {
   resetAuthenticator: '/reset-authenticator',
   profile: '/profile',
   forbidden: '/forbidden',
-  pendingApproval: '/pending-approval',
   home: '/',
   leave: '/leave',
   leaveNew: '/leave/new',

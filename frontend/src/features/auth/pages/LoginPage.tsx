@@ -58,10 +58,6 @@ export function LoginPage() {
       navigate(paths.verify, { replace: true })
       return
     }
-    if (session.status === 'pending_approval') {
-      navigate(paths.pendingApproval, { replace: true })
-      return
-    }
     navigate(homeFor(session.role), { replace: true })
   }
 
