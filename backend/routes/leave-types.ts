@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { grantLeaveTypeBalances } from "../leave/balances.js";
 import { pool } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId } from "../tenancy.js";
@@ -13,6 +14,8 @@ type LeaveTypeRow = {
   id: number;
   name: string;
   default_days: number;
+  has_balance: boolean;
+  cycle_months: number | null;
   allowance_period: string;
   is_active: boolean;
   allow_backdate: boolean;
@@ -22,6 +25,8 @@ type LeaveTypeRow = {
 type LeaveTypeFields = {
   name?: string;
   defaultDays?: number;
+  hasBalance?: boolean;
+  cycleMonths?: number | null;
   isActive?: boolean;
   allowBackdate?: boolean;
   requiresDocumentAfterDays?: number | null;
@@ -32,6 +37,8 @@ function toPublicLeaveType(row: LeaveTypeRow) {
     id: row.id,
     name: row.name,
     defaultDays: row.default_days,
+    hasBalance: row.has_balance,
+    cycleMonths: row.cycle_months,
     allowancePeriod: row.allowance_period,
     isActive: row.is_active,
     allowBackdate: row.allow_backdate,
@@ -39,7 +46,7 @@ function toPublicLeaveType(row: LeaveTypeRow) {
   };
 }
 
-const LEAVE_TYPE_SELECT = `id, name, default_days,
+const LEAVE_TYPE_SELECT = `id, name, default_days, has_balance, cycle_months,
        COALESCE(allowance_period, 'annual') AS allowance_period,
        COALESCE(is_active, true) AS is_active,
        allow_backdate,
@@ -70,7 +77,12 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function isPositiveInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= MAX_INT
+  );
 }
 
 function hasOwn(values: Record<string, unknown>, key: string): boolean {
@@ -110,6 +122,26 @@ function parseLeaveTypeBody(
       };
     }
     fields.defaultDays = values.defaultDays;
+  }
+
+  if (hasOwn(values, "hasBalance")) {
+    if (typeof values.hasBalance !== "boolean") {
+      return { ok: false, error: "Balance flag must be a boolean" };
+    }
+    fields.hasBalance = values.hasBalance;
+  }
+
+  if (hasOwn(values, "cycleMonths")) {
+    if (values.cycleMonths === null) {
+      fields.cycleMonths = null;
+    } else if (!isPositiveInteger(values.cycleMonths)) {
+      return {
+        ok: false,
+        error: "Cycle months must be a positive integer or null",
+      };
+    } else {
+      fields.cycleMonths = values.cycleMonths;
+    }
   }
 
   if (hasOwn(values, "isActive")) {
@@ -152,11 +184,20 @@ function parseLeaveTypeBody(
   if (
     fields.name === undefined &&
     fields.defaultDays === undefined &&
+    fields.hasBalance === undefined &&
+    fields.cycleMonths === undefined &&
     fields.isActive === undefined &&
     fields.allowBackdate === undefined &&
     fields.requiresDocumentAfterDays === undefined
   ) {
     return { ok: false, error: "Provide at least one leave type field" };
+  }
+  if (
+    fields.cycleMonths === null &&
+    fields.hasBalance !== false &&
+    fields.name?.toLocaleLowerCase() !== "unpaid"
+  ) {
+    return { ok: false, error: "Cycle months required for a balanced leave type" };
   }
 
   return { ok: true, value: fields };
@@ -233,31 +274,45 @@ adminLeaveTypesRouter.post(
     }
 
     const name = parsed.value.name!;
-    const defaultDays = parsed.value.defaultDays!;
+    const isUnpaid = name.toLocaleLowerCase() === "unpaid";
+    const hasBalance = isUnpaid ? false : (parsed.value.hasBalance ?? true);
+    const defaultDays = hasBalance ? parsed.value.defaultDays! : 0;
+    const cycleMonths = hasBalance
+      ? (parsed.value.cycleMonths ?? 12)
+      : null;
     const isActive = parsed.value.isActive ?? true;
     const allowBackdate = parsed.value.allowBackdate ?? false;
     const requiresDocumentAfterDays =
       parsed.value.requiresDocumentAfterDays ?? null;
 
+    const client = await pool.connect();
     try {
-      const result = await pool.query<LeaveTypeRow>(
+      await client.query("BEGIN");
+      const result = await client.query<LeaveTypeRow>(
         `INSERT INTO leave_types (
-           company_id, name, default_days, allowance_period, is_active,
-           allow_backdate, requires_document_after_days
+           company_id, name, default_days, has_balance, cycle_months,
+           allowance_period, is_active, allow_backdate,
+           requires_document_after_days
          )
-         VALUES ($1, $2, $3, 'annual', $4, $5, $6)
+         VALUES ($1, $2, $3, $4, $5, 'annual', $6, $7, $8)
          RETURNING ${LEAVE_TYPE_SELECT}`,
         [
           companyId,
           name,
           defaultDays,
+          hasBalance,
+          cycleMonths,
           isActive,
           allowBackdate,
           requiresDocumentAfterDays,
         ],
       );
-      res.status(201).json({ leaveType: toPublicLeaveType(result.rows[0]) });
+      const row = result.rows[0];
+      await grantLeaveTypeBalances(companyId, row.id, client);
+      await client.query("COMMIT");
+      res.status(201).json({ leaveType: toPublicLeaveType(row) });
     } catch (err) {
+      await client.query("ROLLBACK");
       if (isLeaveTypeNameConflict(err)) {
         res.status(409).json({
           error: "A leave type with this name already exists",
@@ -265,6 +320,8 @@ adminLeaveTypesRouter.post(
         return;
       }
       throw err;
+    } finally {
+      client.release();
     }
   },
 );
@@ -294,14 +351,43 @@ adminLeaveTypesRouter.patch(
     const assignments: string[] = [];
     const parameters: Array<string | number | boolean | null> = [id, companyId];
     const fields = parsed.value;
+    const isUnpaid = fields.name?.toLocaleLowerCase() === "unpaid";
 
+    let nameParameter: string | null = null;
     if (fields.name !== undefined) {
       parameters.push(fields.name);
+      nameParameter = `$${parameters.length}`;
       assignments.push(`name = $${parameters.length}`);
     }
-    if (fields.defaultDays !== undefined) {
+    if (isUnpaid) {
+      assignments.push("default_days = 0");
+    } else if (fields.defaultDays !== undefined) {
       parameters.push(fields.defaultDays);
       assignments.push(`default_days = $${parameters.length}`);
+    }
+    const nameExpression = nameParameter ?? "name";
+    const hasBalance = isUnpaid ? false : fields.hasBalance;
+    if (hasBalance !== undefined) {
+      parameters.push(hasBalance);
+      assignments.push(
+        `has_balance = CASE WHEN LOWER(${nameExpression}) = 'unpaid' THEN false ELSE $${parameters.length} END`,
+      );
+      if (fields.cycleMonths === undefined) {
+        assignments.push(
+          hasBalance
+            ? `cycle_months = CASE WHEN LOWER(${nameExpression}) = 'unpaid' THEN NULL ELSE COALESCE(cycle_months, 12) END`
+            : "cycle_months = NULL",
+        );
+      }
+    } else if (isUnpaid) {
+      assignments.push("has_balance = false");
+      assignments.push("cycle_months = NULL");
+    }
+    if (fields.cycleMonths !== undefined) {
+      parameters.push(isUnpaid ? null : fields.cycleMonths);
+      assignments.push(
+        `cycle_months = CASE WHEN LOWER(${nameExpression}) = 'unpaid' THEN NULL ELSE $${parameters.length} END`,
+      );
     }
     if (fields.isActive !== undefined) {
       parameters.push(fields.isActive);
@@ -318,8 +404,10 @@ adminLeaveTypesRouter.patch(
       );
     }
 
+    const client = await pool.connect();
     try {
-      const updated = await pool.query<LeaveTypeRow>(
+      await client.query("BEGIN");
+      const updated = await client.query<LeaveTypeRow>(
         `UPDATE leave_types
          SET ${assignments.join(", ")}
          WHERE id = $1 AND company_id = $2
@@ -328,11 +416,17 @@ adminLeaveTypesRouter.patch(
       );
       const row = updated.rows[0];
       if (!row) {
+        await client.query("ROLLBACK");
         res.status(404).json({ error: "Leave type not found" });
         return;
       }
+      if (row.is_active) {
+        await grantLeaveTypeBalances(companyId, row.id, client);
+      }
+      await client.query("COMMIT");
       res.json({ leaveType: toPublicLeaveType(row) });
     } catch (err) {
+      await client.query("ROLLBACK");
       if (isLeaveTypeNameConflict(err)) {
         res.status(409).json({
           error: "A leave type with this name already exists",
@@ -340,6 +434,8 @@ adminLeaveTypesRouter.patch(
         return;
       }
       throw err;
+    } finally {
+      client.release();
     }
   },
 );
