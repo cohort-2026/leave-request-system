@@ -5,6 +5,7 @@ function Empty({ className, ...props }: React.ComponentProps<"section">) {
   return (
     <section
       data-slot="empty"
+      role="status"
       className={cn(
         "flex min-w-0 flex-col items-center justify-center gap-6 rounded-xl text-center",
         className
