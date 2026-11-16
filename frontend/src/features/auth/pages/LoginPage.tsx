@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
+import { Card, CardContent } from '../../../components/ui/card'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { homeFor, paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
@@ -19,7 +20,7 @@ import {
 
 type Step = 'password' | 'account' | 'enroll' | 'totp' | 'recoveryCodes'
 
-const SHOW_SSO_LOGIN = true
+const SHOW_SSO_LOGIN = import.meta.env.VITE_ALLOW_MOCK_SSO === 'true'
 
 export function LoginPage() {
   const { signIn } = useAuth()
@@ -251,17 +252,46 @@ export function LoginPage() {
           ? 'Save recovery codes'
           : 'Sign in'
 
+  const nextStep =
+    step === 'password'
+      ? selectedAccount
+        ? "Confirm this account's password. Next, we'll verify your authenticator if it is enabled."
+        : "Enter your work email and password. Next, we'll verify or help set up your authenticator before opening your leave workspace."
+      : step === 'account'
+        ? 'Choose the company account to continue. Next, confirm its password.'
+        : step === 'enroll'
+          ? 'Set up your authenticator. Next, save your recovery codes before continuing to your leave workspace.'
+          : step === 'totp'
+            ? useRecovery
+              ? 'Use a recovery code to replace your authenticator. Next, set up a new one.'
+              : "Verify your sign-in with a current code. Next, you'll go to your leave workspace."
+            : "Save these recovery codes now. Continue to your leave workspace when you're ready."
+
   return (
-    <PageShell title={title} eyebrow="Public">
+    <PageShell title={title}>
       {resetNotice && step === 'password' ? (
         <Alert tone="success">Password updated. You can sign in.</Alert>
       ) : null}
       {formError ? <Alert tone="error">{formError}</Alert> : null}
 
+      <Card className="gap-0 border-border/70 bg-muted/50 py-0 shadow-none ring-0">
+        <CardContent className="px-4 py-3">
+          <p className="m-0 text-sm leading-relaxed text-muted-foreground">
+            {nextStep}
+          </p>
+        </CardContent>
+      </Card>
+
       {step === 'password' ? (
         <>
           {SHOW_SSO_LOGIN ? (
             <>
+              <div className="grid gap-1">
+                <p className="m-0 text-sm font-medium">Simulated sign-in</p>
+                <p className="m-0 text-sm text-muted-foreground">
+                  Test the company SSO flow, or use your password below.
+                </p>
+              </div>
               <form
                 className="auth-form"
                 onSubmit={handleSso}
