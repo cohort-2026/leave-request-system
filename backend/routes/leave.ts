@@ -23,6 +23,7 @@ import {
 import type { AuthedUser } from "../middleware/auth.js";
 import {
   applyApprovedLeaveToBalance,
+  getBalance,
   listBalances,
 } from "../leave/balances.js";
 import { todayInSast } from "../leave/todayInSast.js";
@@ -110,6 +111,14 @@ class LeaveRequestError extends Error {
     super(message);
     this.name = "LeaveRequestError";
   }
+}
+
+function formatBalanceDays(days: number): string {
+  return String(Math.round((days + Number.EPSILON) * 10) / 10);
+}
+
+function insufficientBalanceMessage(available: number, pending: number): string {
+  return `You have ${formatBalanceDays(available)} days available (${formatBalanceDays(pending)} pending)`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -556,23 +565,31 @@ leaveRouter.get(
       );
     }
 
-    const balanceResult = await pool.query<{ days_remaining: number }>(
-      `SELECT days_remaining
-       FROM leave_balances
-       WHERE company_id = $1
-         AND user_id = $2
-         AND leave_type_id = $3
-       LIMIT 1`,
-      [companyId, req.user!.id, leaveTypeId],
+    const balance = await getBalance(
+      req.user!.id,
+      companyId,
+      leaveTypeId,
+      pool,
     );
-    const remaining = balanceResult.rows[0]
-      ? Number(balanceResult.rows[0].days_remaining)
-      : null;
+    const remaining =
+      balance?.hasBalance && balance.hasBalanceRow
+        ? balance.available
+        : null;
     const availableAfter =
       remaining === null ? null : remaining - workingDaysCount;
-    if (remaining !== null && workingDaysCount > remaining) {
+    if (workingDaysCount <= 0) {
+      warnings.push("Your dates contain no working days");
+    }
+    if (balance?.hasBalance && !balance.hasBalanceRow) {
+      warnings.push("No balance exists for this leave type");
+    }
+    if (
+      balance?.hasBalance &&
+      balance.available !== null &&
+      workingDaysCount > balance.available
+    ) {
       warnings.push(
-        `This request exceeds your remaining balance of ${remaining} days`,
+        insufficientBalanceMessage(balance.available, balance.pending),
       );
     }
 
@@ -702,6 +719,9 @@ leaveRouter.post(
           startHalf,
           endHalf,
         ).workingDays;
+        if (workingDaysCount <= 0) {
+          throw new LeaveRequestError("Your dates contain no working days");
+        }
 
         if (
           documentIsRequired(
@@ -735,27 +755,31 @@ leaveRouter.post(
           );
         }
 
-        const balanceResult = await client.query<{
-          days_remaining: number;
-        }>(
-          `SELECT days_remaining
-           FROM leave_balances
-           WHERE company_id = $1
-             AND user_id = $2
-             AND leave_type_id = $3
-           LIMIT 1`,
-          [companyId, req.user!.id, leaveTypeId],
+        const balance = await getBalance(
+          req.user!.id,
+          companyId,
+          leaveTypeId,
+          client,
         );
-        const balance = balanceResult.rows[0];
         if (!balance) {
           throw new LeaveRequestError(
             "No balance exists for this leave type",
             400,
           );
         }
-        if (workingDaysCount > Number(balance.days_remaining)) {
+        if (balance.hasBalance && !balance.hasBalanceRow) {
           throw new LeaveRequestError(
-            `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+            "No balance exists for this leave type",
+            400,
+          );
+        }
+        if (
+          balance.hasBalance &&
+          balance.available !== null &&
+          workingDaysCount > balance.available
+        ) {
+          throw new LeaveRequestError(
+            insufficientBalanceMessage(balance.available, balance.pending),
           );
         }
 
@@ -854,7 +878,10 @@ leaveRouter.post(
           );
           if (!applied) {
             throw new LeaveRequestError(
-              `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+              insufficientBalanceMessage(
+                balance.available ?? 0,
+                balance.pending,
+              ),
             );
           }
         }
@@ -1107,6 +1134,9 @@ leaveRouter.patch(
           startHalf,
           endHalf,
         ).workingDays;
+        if (workingDaysCount <= 0) {
+          throw new LeaveRequestError("Your dates contain no working days");
+        }
         const removeFile = removeFileValue === "true" && !uploadedFile;
         const storedFile =
           !removeFile &&
@@ -1143,22 +1173,26 @@ leaveRouter.patch(
           );
         }
 
-        const balanceResult = await client.query<{ days_remaining: number }>(
-          `SELECT days_remaining
-           FROM leave_balances
-           WHERE company_id = $1
-             AND user_id = $2
-             AND leave_type_id = $3
-           LIMIT 1`,
-          [companyId, req.user!.id, leaveTypeId],
+        const balance = await getBalance(
+          req.user!.id,
+          companyId,
+          leaveTypeId,
+          client,
+          id,
         );
-        const balance = balanceResult.rows[0];
         if (!balance) {
           throw new LeaveRequestError("No balance exists for this leave type");
         }
-        if (workingDaysCount > Number(balance.days_remaining)) {
+        if (balance.hasBalance && !balance.hasBalanceRow) {
+          throw new LeaveRequestError("No balance exists for this leave type");
+        }
+        if (
+          balance.hasBalance &&
+          balance.available !== null &&
+          workingDaysCount > balance.available
+        ) {
           throw new LeaveRequestError(
-            `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+            insufficientBalanceMessage(balance.available, balance.pending),
           );
         }
         if (
