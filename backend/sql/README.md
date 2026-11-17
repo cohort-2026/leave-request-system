@@ -26,6 +26,7 @@ psql "$DATABASE_URL" -f sql/020_company_memberships.sql
 psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
 psql "$DATABASE_URL" -f sql/022_half_days.sql
 psql "$DATABASE_URL" -f sql/023_document_access.sql
+psql "$DATABASE_URL" -f sql/025_events.sql
 psql "$DATABASE_URL" -f sql/026_policy_holidays.sql
 psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 ```
@@ -81,6 +82,8 @@ psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 `022_half_days.sql` (issue 252) adds `leave_requests.start_half` and `end_half` (`full`, `am`, `pm`, default `full`) so a request can start or end on a half day. Existing rows stay full. `working_days_count` and balance remaining/used become `NUMERIC(8, 2)` so 0.5 days can be stored.
 
 `023_document_access.sql` (issue 253) stores sick notes in `leave_documents.file` as BYTEA (filename, mime, size_bytes) and logs authorised downloads in `leave_document_access`. The file bytes are the source of truth; do not store a filesystem path.
+
+`025_events.sql` (issue 254) creates append-only `leave_request_events` (company, request, actor, action, from/to status, JSONB details) and changes `leave_requests.employee_user_id` to `ON DELETE RESTRICT` so deleting a user who has leave fails with a foreign-key error. Actions: submitted, edited, approved, declined, withdrawn, cancelled, auto_approved, document_viewed.
 
 `026_policy_holidays.sql` adds the leave-type `colour` token and seeds colours for existing starter types (Annual: violet, Sick: rose, Family responsibility: amber, Unpaid: slate, Study: sky). It also adds `public_holidays.source` (default `custom`; ZA-seeded holidays use `za`) and nullable `public_holidays.actual_date` for observed dates.
 
