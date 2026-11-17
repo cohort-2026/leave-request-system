@@ -1,31 +1,206 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
+import { CalendarX } from 'lucide-react'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
-import { ApiError } from '../../../services/api'
+import { Alert } from '../../../components/ui/alert'
+import { Button } from '../../../components/ui/button'
+import { Card, CardContent } from '../../../components/ui/card'
 import {
-  Alert,
-  Button,
-  DataTable,
-  EmptyState,
-  LeaveRequestRow,
-} from '../../../shared/components'
-import { leaveDetailPath, paths } from '../../../shared/constants/paths'
-import { roleLabel } from '../../../shared/types/session'
-import { getHomeSummary, type HomeSummary } from '../homeApi'
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '../../../components/ui/empty'
+import { Progress } from '../../../components/ui/progress'
+import { Skeleton } from '../../../components/ui/skeleton'
+import { paths } from '../../../shared/constants/paths'
+import { ApiError } from '../../../services/api'
 import { getLeaveBalances, type LeaveBalance } from '../balancesApi'
+
+type TypeColour = 'violet' | 'rose' | 'amber' | 'sky' | 'slate' | 'teal'
+
+// Full class names are written out so Tailwind can see them. The "!" beats the
+// default card and progress colours, because `cn` does not merge conflicts.
+const colourStyles: Record<
+  TypeColour,
+  { card: string; square: string; figure: string; track: string; bar: string }
+> = {
+  violet: {
+    card: 'bg-violet-50! ring-violet-200!',
+    square: 'bg-violet-600',
+    figure: 'text-violet-800',
+    track: 'bg-violet-100!',
+    bar: '[&>[data-slot=progress-indicator]]:bg-violet-600!',
+  },
+  rose: {
+    card: 'bg-rose-50! ring-rose-200!',
+    square: 'bg-rose-500',
+    figure: 'text-rose-800',
+    track: 'bg-rose-100!',
+    bar: '[&>[data-slot=progress-indicator]]:bg-rose-500!',
+  },
+  amber: {
+    card: 'bg-amber-50! ring-amber-200!',
+    square: 'bg-amber-500',
+    figure: 'text-amber-800',
+    track: 'bg-amber-100!',
+    bar: '[&>[data-slot=progress-indicator]]:bg-amber-500!',
+  },
+  sky: {
+    card: 'bg-sky-50! ring-sky-200!',
+    square: 'bg-sky-500',
+    figure: 'text-sky-800',
+    track: 'bg-sky-100!',
+    bar: '[&>[data-slot=progress-indicator]]:bg-sky-500!',
+  },
+  slate: {
+    card: 'bg-slate-50! ring-slate-200!',
+    square: 'bg-slate-500',
+    figure: 'text-slate-800',
+    track: 'bg-slate-200!',
+    bar: '[&>[data-slot=progress-indicator]]:bg-slate-500!',
+  },
+  teal: {
+    card: 'bg-teal-50! ring-teal-200!',
+    square: 'bg-teal-500',
+    figure: 'text-teal-800',
+    track: 'bg-teal-100!',
+    bar: '[&>[data-slot=progress-indicator]]:bg-teal-500!',
+  },
+}
+
+function colourFor(leaveType: string): TypeColour {
+  const name = leaveType.toLowerCase()
+  if (name.includes('annual')) return 'violet'
+  if (name.includes('sick')) return 'rose'
+  if (name.includes('family')) return 'amber'
+  if (name.includes('parental')) return 'sky'
+  if (name.includes('unpaid')) return 'slate'
+  if (name.includes('study')) return 'teal'
+  return 'slate'
+}
+
+function isUnpaid(leaveType: string) {
+  return leaveType.toLowerCase().includes('unpaid')
+}
+
+function formatDays(days: number) {
+  return String(Number(days.toFixed(2)))
+}
 
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError
     ? error.message
-    : 'Could not load your home data.'
+    : 'Could not load your leave balances.'
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-semibold text-foreground">{value}</dd>
+    </div>
+  )
+}
+
+function BalanceCard({ balance }: { balance: LeaveBalance }) {
+  const styles = colourStyles[colourFor(balance.leaveType)]
+  const unlimited = isUnpaid(balance.leaveType)
+  const pending = balance.pendingDays ?? null
+  const showProgress = !unlimited && balance.totalAllowance > 0
+  const committed = balance.usedDays + (pending ?? 0)
+  const progress = showProgress
+    ? (committed / balance.totalAllowance) * 100
+    : 0
+
+  return (
+    <Card
+      className={`shadow-sm [--card-spacing:--spacing(5)] ${styles.card}`}
+      data-leave-type={balance.leaveType}
+    >
+      <CardContent className="grid gap-4">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className={`size-3 shrink-0 rounded-[3px] ${styles.square}`}
+          />
+          <h2 className="truncate text-sm font-medium text-foreground">
+            {balance.leaveType}
+          </h2>
+        </div>
+
+        <div className="grid gap-0.5">
+          <p
+            className={`text-4xl leading-none font-semibold tracking-tight ${styles.figure}`}
+          >
+            {unlimited ? 'No limit' : formatDays(balance.daysRemaining)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {unlimited ? 'Available' : 'Days available'}
+          </p>
+        </div>
+
+        {showProgress ? (
+          <Progress
+            value={progress}
+            aria-label={`${balance.leaveType} days used or pending`}
+            className={`h-1.5 ${styles.track} ${styles.bar}`}
+          />
+        ) : null}
+
+        <dl
+          className={`grid gap-3 ${unlimited ? 'grid-cols-2' : 'grid-cols-3'}`}
+        >
+          {unlimited ? null : (
+            <Stat label="Entitled" value={formatDays(balance.totalAllowance)} />
+          )}
+          <Stat label="Taken" value={formatDays(balance.usedDays)} />
+          <Stat
+            label="Pending"
+            value={pending === null ? '—' : formatDays(pending)}
+          />
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
+
+function BalanceSkeletons() {
+  return (
+    <div
+      aria-busy="true"
+      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+    >
+      <span className="sr-only" role="status">
+        Loading your leave balances
+      </span>
+      {[0, 1, 2, 3].map((index) => (
+        <Card
+          key={index}
+          aria-hidden="true"
+          className="shadow-sm [--card-spacing:--spacing(5)]"
+        >
+          <CardContent className="grid gap-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-1.5 w-full" />
+            <div className="grid grid-cols-3 gap-3">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
 }
 
 export function HomePage() {
   const { session } = useAuth()
-  const navigate = useNavigate()
 
-  const [summary, setSummary] = useState<HomeSummary | null>(null)
   const [balances, setBalances] = useState<LeaveBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,14 +214,9 @@ export function HomePage() {
       try {
         setLoading(true)
         setError(null)
-        const [homeData, balancesData] = await Promise.all([
-          getHomeSummary(),
-          getLeaveBalances(),
-        ])
-
+        const data = await getLeaveBalances()
         if (cancelled) return
-        setSummary(homeData)
-        setBalances(balancesData)
+        setBalances(data)
       } catch (loadError: unknown) {
         if (!cancelled) setError(getErrorMessage(loadError))
       } finally {
@@ -68,154 +238,50 @@ export function HomePage() {
     return <Navigate to={paths.platform} replace />
   }
 
+  const firstName = session.displayName.trim().split(/\s+/)[0] || 'there'
+
   return (
     <PageShell
-      title="Home"
-      eyebrow={roleLabel[session.role]}
+      title={`Hi, ${firstName}`}
       action={
-        <Button
-          variant="primary"
-          type="button"
-          onClick={() => navigate(paths.leaveNew)}
-        >
-          Book leave
+        <Button asChild>
+          <Link to={paths.leaveNew}>Request leave</Link>
         </Button>
       }
     >
-      {loading ? <p className="text-muted-foreground">Loading your leave balances…</p> : null}
-      {error ? <Alert tone="error">{error}</Alert> : null}
-      {!loading && !error ? (
-        <>
-          <h2>Your remaining days</h2>
-          <div className="flex flex-wrap gap-stack">
-            {balances.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No balances yet</p>
-            ) : (
-              balances.map((balance) => (
-                <p key={balance.leaveType} className="bg-surface p-section">
-                  <span className="text-title">{balance.daysRemaining}</span>
-                  <br />
-                  <span className="text-muted-foreground">
-                    {balance.leaveType} days left ({balance.usedDays} used of {balance.totalAllowance})
-                  </span>
-                </p>
-              ))
-            )}
-          </div>
-        </>
+      {loading ? <BalanceSkeletons /> : null}
+
+      {!loading && error ? (
+        <Alert variant="destructive">{error}</Alert>
       ) : null}
 
-      {!loading && !error && summary ? (
-        <>
-          <h2>Requests waiting</h2>
-          <p className="bg-surface p-section">
-            <span className="text-title">{summary.pendingCount}</span>
-            <br />
-            <span className="text-muted-foreground">Pending requests</span>
-          </p>
+      {!loading && !error && balances.length === 0 ? (
+        <Empty className="rounded-xl border border-dashed bg-card p-8">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <CalendarX />
+            </EmptyMedia>
+            <EmptyTitle>No leave balances yet</EmptyTitle>
+            <EmptyDescription>
+              Your balances will appear here once leave types are set up for
+              your company.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : null}
 
-          <h2>Recent requests</h2>
-          <DataTable
-            data={summary.recent.map((request) => ({
-              ...request,
-              id: String(request.id),
-            }))}
-            keyExtractor={(row) => row.id}
-            emptyTitle="No leave requests"
-            emptyDescription="Book leave to see it here."
-            headerRow={
-              <tr>
-                <th>Person</th>
-                <th>Type</th>
-                <th>Dates</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            }
-            renderRow={(request) => (
-              <LeaveRequestRow
-                request={request}
-                onView={(id) => navigate(leaveDetailPath(id))}
-              />
-            )}
-          />
-        </>
-      ) : null}
-      {session.role === 'staff' ? (
-        <div className="flex flex-wrap gap-stack">
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => navigate(paths.leave)}
-          >
-            My leave
-          </Button>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => navigate(paths.calendar)}
-          >
-            Calendar
-          </Button>
-        </div>
-      ) : null}
-      {session.role === 'manager' ? (
-        <>
-          <p className="text-muted-foreground">
-            How many team requests are waiting, plus a way to book your own
-            leave.
-          </p>
-          <div className="flex flex-wrap gap-stack">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.teamQueue)}
-            >
-              Approvals
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.leave)}
-            >
-              My leave
-            </Button>
-          </div>
-        </>
-      ) : null}
-      {session.role === 'company_admin' ? (
-        <>
-          <p className="text-muted-foreground">
-            Claims still waiting, company requests, and shortcuts to setup.
-          </p>
-          <EmptyState
-            title="No account claims waiting"
-            description="New staff claims will show here."
-          />
-          <div className="flex flex-wrap gap-stack">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.teamQueue)}
-            >
-              Approvals
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.adminRules)}
-            >
-              Company rules
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => navigate(paths.adminImport)}
-            >
-              Import
-            </Button>
-          </div>
-        </>
+      {!loading && !error && balances.length > 0 ? (
+        <section
+          aria-label="Your leave balances"
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          {balances.map((balance) => (
+            <BalanceCard
+              key={balance.leaveTypeId ?? balance.leaveType}
+              balance={balance}
+            />
+          ))}
+        </section>
       ) : null}
     </PageShell>
   )
