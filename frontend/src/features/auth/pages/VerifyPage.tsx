@@ -2,10 +2,26 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
-import { Alert, Button, TextField } from '../../../shared/components'
+import { Alert } from '../../../components/ui/alert'
+import { Button } from '../../../components/ui/button'
+import { Card, CardContent } from '../../../components/ui/card'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from '../../../components/ui/empty'
+import { Field, FieldLabel } from '../../../components/ui/field'
+import { Input } from '../../../components/ui/input'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
 import { getMe, resendVerification, verifyEmail } from '../api'
+
+const INVALID_VERIFICATION_LINK =
+  'This verification link is invalid or has expired.'
+const RESEND_VERIFICATION_MESSAGE =
+  'If that email is registered and still needs verifying, we sent a link. Open it to continue to sign in.'
 
 function emailFromState(state: unknown): string {
   if (!state || typeof state !== 'object' || !('email' in state)) {
@@ -30,7 +46,7 @@ export function VerifyPage() {
     () => emailFromState(location.state) || session?.email || '',
   )
   const [verifyState, setVerifyState] = useState<
-    'idle' | 'working' | 'ok' | 'error'
+    'idle' | 'working' | 'ok' | 'expired' | 'error'
   >(token ? 'working' : 'idle')
   const [verifyMessage, setVerifyMessage] = useState('')
   const [resendMessage, setResendMessage] = useState('')
@@ -71,11 +87,15 @@ export function VerifyPage() {
       })
       .catch((error) => {
         if (cancelled) return
+        if (error instanceof ApiError && error.status === 400) {
+          setVerifyState('expired')
+          return
+        }
         setVerifyState('error')
         setVerifyMessage(
           error instanceof ApiError
             ? error.message
-            : 'This verification link is invalid or has expired.',
+            : 'Unable to verify your email. Please try again.',
         )
       })
 
@@ -91,11 +111,8 @@ export function VerifyPage() {
     setResending(true)
 
     try {
-      const result = await resendVerification(email)
-      setResendMessage(
-        result.message ??
-          'If that email is registered and still needs verifying, we sent a link.',
-      )
+      await resendVerification(email)
+      setResendMessage(RESEND_VERIFICATION_MESSAGE)
     } catch (error) {
       setResendError(
         error instanceof ApiError
@@ -116,76 +133,106 @@ export function VerifyPage() {
     }
   }
 
+  const resendForm = (
+    <form
+      className="grid w-full gap-4"
+      onSubmit={handleResend}
+      aria-busy={resending}
+    >
+      <Field>
+        <FieldLabel htmlFor="email">Email</FieldLabel>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+          disabled={resending}
+        />
+      </Field>
+      <Button type="submit" size="lg" disabled={resending}>
+        {resending ? 'Sending...' : 'Send a new link'}
+      </Button>
+    </form>
+  )
+
   return (
-    <PageShell title="Verify email" eyebrow="Public">
-      {verifyState === 'ok' ? (
-        <Alert tone="success">{verifyMessage}</Alert>
-      ) : null}
-      {verifyState === 'error' ? (
-        <Alert tone="error">{verifyMessage}</Alert>
-      ) : null}
-      {verifyState === 'working' ? (
-        <Alert tone="info">Verifying your email…</Alert>
-      ) : null}
-      {verifyState === 'idle' ? (
-        <Alert tone="info">
-          {email ? (
+    <PageShell title="Verify email">
+      <Card className="gap-0 border-border/70 bg-card py-0 shadow-sm ring-1 ring-foreground/5">
+        <CardContent className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5">
+          {verifyState === 'ok' ? (
             <>
-              We sent a verification link to <strong>{email}</strong>. Check
-              your inbox, or resend it below.
+              <Alert className="border-primary/20 bg-primary/5">
+                {verifyMessage}
+              </Alert>
+              <p className="m-0 text-sm text-muted-foreground">
+                Next, sign in to continue to your account.
+              </p>
+              <Button asChild size="lg" className="w-full">
+                <Link to={paths.login}>Continue to sign in</Link>
+              </Button>
             </>
+          ) : verifyState === 'expired' ? (
+            <Empty className="gap-5 py-2">
+              <EmptyHeader>
+                <EmptyTitle>This verification link can&apos;t be used</EmptyTitle>
+                <EmptyDescription>
+                  {INVALID_VERIFICATION_LINK} Send a new link, then open it to
+                  continue to sign in.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                {resendError ? (
+                  <Alert variant="destructive">{resendError}</Alert>
+                ) : null}
+                {resendMessage ? (
+                  <Alert aria-live="polite">{resendMessage}</Alert>
+                ) : null}
+                {resendForm}
+              </EmptyContent>
+            </Empty>
           ) : (
-            'Check your inbox for the verification link, or enter your email to request another.'
+            <>
+              {verifyState === 'error' ? (
+                <Alert variant="destructive">{verifyMessage}</Alert>
+              ) : null}
+              {verifyState === 'working' ? (
+                <Alert aria-live="polite">Verifying your email...</Alert>
+              ) : null}
+              {verifyState === 'idle' ? (
+                <Alert>
+                  {email ? (
+                    <>
+                      We sent a verification link to <strong>{email}</strong>.
+                      Check your inbox or send a new link below.
+                    </>
+                  ) : (
+                    'Enter your email to send a new verification link.'
+                  )}
+                </Alert>
+              ) : null}
+              {resendError ? (
+                <Alert variant="destructive">{resendError}</Alert>
+              ) : null}
+              {resendMessage ? (
+                <Alert aria-live="polite">{resendMessage}</Alert>
+              ) : null}
+              {resendForm}
+            </>
           )}
-        </Alert>
+        </CardContent>
+      </Card>
+
+      {actionError ? (
+        <Alert variant="destructive">{actionError}</Alert>
       ) : null}
-
-      {verifyState === 'ok' ? (
-        <Link
-          to={paths.login}
-          className="button button-primary auth-full-button"
-        >
-          {session ? 'Continue to your account' : 'Sign in'}
-        </Link>
-      ) : (
-        <>
-          {resendError ? <Alert tone="error">{resendError}</Alert> : null}
-          {resendMessage ? <Alert tone="success">{resendMessage}</Alert> : null}
-          <form
-            className="auth-form"
-            onSubmit={handleResend}
-            aria-busy={resending}
-          >
-            <TextField
-              label="Email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              disabled={resending}
-            />
-            <Button variant="primary" type="submit" disabled={resending}>
-              {resending ? 'Sending…' : 'Resend verification email'}
-            </Button>
-          </form>
-          <p className="auth-help">
-            In local development, open{' '}
-            <a href="http://localhost:8025">Mailpit</a> to find the email.
-          </p>
-          <p className="auth-footer">
-            <Link to={paths.login}>Back to sign in</Link>
-          </p>
-        </>
-      )}
-
-      {actionError ? <Alert tone="error">{actionError}</Alert> : null}
       {session ? (
         <Button
-          variant="secondary"
+          variant="outline"
           type="button"
-          className="auth-wide"
+          className="w-full"
           onClick={() => void handleSignOut()}
         >
           Sign out
