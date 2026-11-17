@@ -1,3 +1,4 @@
+import { recordEvent } from "../leave/events.js";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
@@ -861,6 +862,21 @@ leaveRouter.post(
         if (uploadedFile) {
           await saveSupportingDocument(client, request.id, uploadedFile);
         }
+       
+        await recordEvent(client, {
+          companyId,
+          leaveRequestId: request.id,
+          actorUserId: req.user!.id,
+          type: autoApprove ? "auto_approve" : "submit",
+          after: {
+            status: request.status,
+            startDate: request.start_date,
+            endDate: request.end_date,
+            workingDays: Number(request.working_days_count),
+          },
+          balanceDelta: autoApprove ? -Number(request.working_days_count) : null,
+        });
+
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");
@@ -1232,6 +1248,16 @@ leaveRouter.patch(
           throw new LeaveRequestError("Leave request not found", 404);
         }
         updated = result;
+
+          await recordEvent(client, {
+          companyId,
+          leaveRequestId: id,
+          actorUserId: req.user!.id,
+          type: "edit",
+          before: toMyLeaveItem(request),
+          after: toMyLeaveItem(updated),
+        });
+
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");
@@ -1518,6 +1544,34 @@ leaveRouter.get(
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
+
+      const eventsResult = await pool.query<{
+      id: number;
+      type: string;
+      before: Record<string, unknown> | null;
+      after: Record<string, unknown> | null;
+      balance_delta: string | null;
+      created_at: Date;
+      actor_user_id: number;
+      actor_name: string;
+    }>(
+      `SELECT
+         e.id,
+         e.event_type AS type,
+         e.before_state AS before,
+         e.after_state AS after,
+         e.balance_delta,
+         e.created_at,
+         e.actor_user_id,
+         COALESCE(u.display_name, u.email) AS actor_name
+       FROM leave_events e
+       JOIN users u ON u.id = e.actor_user_id
+       WHERE e.company_id = $1
+         AND e.leave_request_id = $2
+       ORDER BY e.created_at ASC, e.id ASC`,
+      [companyId, id],
+    );
+
     res.json({ ...toQueueItem(request), ...toMyLeaveItem(detail) });
   },
 );
@@ -1585,6 +1639,14 @@ leaveRouter.get(
        VALUES ($1, $2, $3)`,
       [companyId, id, req.user!.id],
     );
+
+    await recordEvent(pool, {
+      companyId,
+      leaveRequestId: id,
+      actorUserId: req.user!.id,
+      type: "document_view",
+    });
+
 
     res.setHeader("Content-Type", mime);
     res.setHeader(
@@ -1697,6 +1759,16 @@ leaveRouter.post(
         throw new LeaveRequestError("Leave request not found", 404);
       }
       cancelled = cancelledRow;
+
+      await recordEvent(client, {
+        companyId,
+        leaveRequestId: id,
+        actorUserId: req.user!.id,
+        type: "withdraw",
+        before: { status: request.status },
+        after: { status: "cancelled" },
+      });
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1807,6 +1879,17 @@ leaveRouter.post(
         throw new LeaveRequestError("Leave request not found", 404);
       }
       decided = updated;
+
+      await recordEvent(client, {
+        companyId,
+        leaveRequestId: request.id,
+        actorUserId: req.user!.id,
+        type: "approve",
+        before: { status: "pending" },
+        after: { status: "approved" },
+        balanceDelta: -Number(request.working_days_count),
+      });
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1895,6 +1978,16 @@ leaveRouter.post(
         throw new LeaveRequestError("Leave request not found", 404);
       }
       decided = updated;
+
+     await recordEvent(client, {
+        companyId,
+        leaveRequestId: request.id,
+        actorUserId: req.user!.id,
+        type: "decline",
+        before: { status: "pending" },
+        after: { status: "rejected", decisionReason },
+      });
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
