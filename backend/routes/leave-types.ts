@@ -9,6 +9,17 @@ export const adminLeaveTypesRouter = Router();
 
 const MAX_NAME_LEN = 80;
 const MAX_INT = 2_147_483_647;
+export const LEAVE_TYPE_COLOURS = [
+  "violet",
+  "rose",
+  "amber",
+  "sky",
+  "slate",
+  "teal",
+] as const;
+const DEFAULT_LEAVE_TYPE_COLOUR = "teal";
+
+type LeaveTypeColour = (typeof LEAVE_TYPE_COLOURS)[number];
 
 type LeaveTypeRow = {
   id: number;
@@ -16,6 +27,7 @@ type LeaveTypeRow = {
   default_days: number;
   has_balance: boolean;
   cycle_months: number | null;
+  colour: string | null;
   allowance_period: string;
   is_active: boolean;
   allow_backdate: boolean;
@@ -27,6 +39,7 @@ type LeaveTypeFields = {
   defaultDays?: number;
   hasBalance?: boolean;
   cycleMonths?: number | null;
+  colour?: LeaveTypeColour;
   isActive?: boolean;
   allowBackdate?: boolean;
   requiresDocumentAfterDays?: number | null;
@@ -39,6 +52,7 @@ function toPublicLeaveType(row: LeaveTypeRow) {
     defaultDays: row.default_days,
     hasBalance: row.has_balance,
     cycleMonths: row.cycle_months,
+    colour: row.colour,
     allowancePeriod: row.allowance_period,
     isActive: row.is_active,
     allowBackdate: row.allow_backdate,
@@ -47,10 +61,18 @@ function toPublicLeaveType(row: LeaveTypeRow) {
 }
 
 const LEAVE_TYPE_SELECT = `id, name, default_days, has_balance, cycle_months,
+       colour,
        COALESCE(allowance_period, 'annual') AS allowance_period,
        COALESCE(is_active, true) AS is_active,
        allow_backdate,
        requires_document_after_days`;
+
+function isLeaveTypeColour(value: unknown): value is LeaveTypeColour {
+  return (
+    typeof value === "string" &&
+    (LEAVE_TYPE_COLOURS as readonly string[]).includes(value)
+  );
+}
 
 function asObject(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -144,6 +166,17 @@ function parseLeaveTypeBody(
     }
   }
 
+  if (hasOwn(values, "colour") || hasOwn(values, "color")) {
+    const colour = hasOwn(values, "colour") ? values.colour : values.color;
+    if (!isLeaveTypeColour(colour)) {
+      return {
+        ok: false,
+        error: "Colour must be violet, rose, amber, sky, slate, or teal",
+      };
+    }
+    fields.colour = colour;
+  }
+
   if (hasOwn(values, "isActive")) {
     if (typeof values.isActive !== "boolean") {
       return { ok: false, error: "Active flag must be a boolean" };
@@ -186,6 +219,7 @@ function parseLeaveTypeBody(
     fields.defaultDays === undefined &&
     fields.hasBalance === undefined &&
     fields.cycleMonths === undefined &&
+    fields.colour === undefined &&
     fields.isActive === undefined &&
     fields.allowBackdate === undefined &&
     fields.requiresDocumentAfterDays === undefined
@@ -280,6 +314,7 @@ adminLeaveTypesRouter.post(
     const cycleMonths = hasBalance
       ? (parsed.value.cycleMonths ?? 12)
       : null;
+    const colour = parsed.value.colour ?? DEFAULT_LEAVE_TYPE_COLOUR;
     const isActive = parsed.value.isActive ?? true;
     const allowBackdate = parsed.value.allowBackdate ?? false;
     const requiresDocumentAfterDays =
@@ -291,10 +326,10 @@ adminLeaveTypesRouter.post(
       const result = await client.query<LeaveTypeRow>(
         `INSERT INTO leave_types (
            company_id, name, default_days, has_balance, cycle_months,
-           allowance_period, is_active, allow_backdate,
+           colour, allowance_period, is_active, allow_backdate,
            requires_document_after_days
          )
-         VALUES ($1, $2, $3, $4, $5, 'annual', $6, $7, $8)
+         VALUES ($1, $2, $3, $4, $5, $6, 'annual', $7, $8, $9)
          RETURNING ${LEAVE_TYPE_SELECT}`,
         [
           companyId,
@@ -302,6 +337,7 @@ adminLeaveTypesRouter.post(
           defaultDays,
           hasBalance,
           cycleMonths,
+          colour,
           isActive,
           allowBackdate,
           requiresDocumentAfterDays,
@@ -388,6 +424,10 @@ adminLeaveTypesRouter.patch(
       assignments.push(
         `cycle_months = CASE WHEN LOWER(${nameExpression}) = 'unpaid' THEN NULL ELSE $${parameters.length} END`,
       );
+    }
+    if (fields.colour !== undefined) {
+      parameters.push(fields.colour);
+      assignments.push(`colour = $${parameters.length}`);
     }
     if (fields.isActive !== undefined) {
       parameters.push(fields.isActive);

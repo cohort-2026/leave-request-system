@@ -1,5 +1,16 @@
 import { apiRequest } from '../../services/api'
 
+export const LEAVE_TYPE_COLOURS = [
+  'violet',
+  'rose',
+  'amber',
+  'sky',
+  'slate',
+  'teal',
+] as const
+
+export type LeaveTypeColour = (typeof LEAVE_TYPE_COLOURS)[number]
+
 export type CompanyLeaveType = {
   id: number
   name: string
@@ -8,7 +19,8 @@ export type CompanyLeaveType = {
   isActive: boolean
   allowBackdate: boolean
   requiresDocumentAfterDays: number | null
-  color?: string
+  color?: LeaveTypeColour
+  colour?: LeaveTypeColour
   hasBalance?: boolean
   cycleMonths?: number | null
 }
@@ -19,7 +31,7 @@ export type LeaveTypeInput = {
   isActive: boolean
   allowBackdate: boolean
   requiresDocumentAfterDays: number | null
-  color: string
+  colour: LeaveTypeColour
   hasBalance: boolean
   cycleMonths: number | null
 }
@@ -38,13 +50,19 @@ type LeaveTypeApiRow = CompanyLeaveType & {
   cycle_months?: unknown
 }
 
+function isLeaveTypeColour(value: unknown): value is LeaveTypeColour {
+  return (
+    typeof value === 'string' &&
+    (LEAVE_TYPE_COLOURS as readonly string[]).includes(value)
+  )
+}
+
 function mapCompanyLeaveType(row: LeaveTypeApiRow): CompanyLeaveType {
-  const color =
-    typeof row.color === 'string'
-      ? row.color
-      : typeof row.colour === 'string'
-        ? row.colour
-        : undefined
+  const color = isLeaveTypeColour(row.color)
+    ? row.color
+    : isLeaveTypeColour(row.colour)
+      ? row.colour
+      : undefined
   const hasBalanceValue = row.hasBalance ?? row.has_balance
   const cycleMonthsValue = row.cycleMonths ?? row.cycle_months
   const cycleMonths =

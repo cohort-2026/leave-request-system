@@ -11,6 +11,7 @@ export const DEFAULT_LEAVE_TYPES = [
     defaultDays: 15,
     hasBalance: true,
     cycleMonths: 12,
+    colour: "violet",
     allowBackdate: false,
     requiresDocumentAfterDays: null,
   },
@@ -19,6 +20,7 @@ export const DEFAULT_LEAVE_TYPES = [
     defaultDays: 10,
     hasBalance: true,
     cycleMonths: 36,
+    colour: "rose",
     allowBackdate: true,
     requiresDocumentAfterDays: 2,
   },
@@ -27,6 +29,7 @@ export const DEFAULT_LEAVE_TYPES = [
     defaultDays: 3,
     hasBalance: true,
     cycleMonths: 12,
+    colour: "amber",
     allowBackdate: true,
     requiresDocumentAfterDays: null,
   },
@@ -35,6 +38,7 @@ export const DEFAULT_LEAVE_TYPES = [
     defaultDays: 0,
     hasBalance: false,
     cycleMonths: null,
+    colour: "slate",
     allowBackdate: false,
     requiresDocumentAfterDays: null,
   },
@@ -43,6 +47,7 @@ export const DEFAULT_LEAVE_TYPES = [
     defaultDays: 5,
     hasBalance: true,
     cycleMonths: 12,
+    colour: "sky",
     allowBackdate: false,
     requiresDocumentAfterDays: null,
   },
@@ -53,15 +58,16 @@ const INSERT_COLUMNS = `company_id,
     default_days,
     has_balance,
     cycle_months,
+    colour,
     allowance_period,
     is_active,
     allow_backdate,
     requires_document_after_days`;
 
 const FROM_DEFAULTS = `UNNEST($1::text[], $2::int[], $3::boolean[], $4::int[],
-                   $5::boolean[], $6::int[])
+                   $5::boolean[], $6::int[], $7::text[])
      AS lt(name, default_days, allow_backdate, requires_document_after_days,
-           has_balance, cycle_months)`;
+           has_balance, cycle_months, colour)`;
 
 function defaultTypeParams(): [
   string[],
@@ -70,6 +76,7 @@ function defaultTypeParams(): [
   Array<number | null>,
   boolean[],
   Array<number | null>,
+  string[],
 ] {
   return [
     DEFAULT_LEAVE_TYPES.map((type) => type.name),
@@ -78,6 +85,7 @@ function defaultTypeParams(): [
     DEFAULT_LEAVE_TYPES.map((type) => type.requiresDocumentAfterDays),
     DEFAULT_LEAVE_TYPES.map((type) => type.hasBalance),
     DEFAULT_LEAVE_TYPES.map((type) => type.cycleMonths),
+    DEFAULT_LEAVE_TYPES.map((type) => type.colour),
   ];
 }
 
@@ -92,17 +100,19 @@ export async function seedDefaultLeaveTypes(
     requiresDocumentAfterDays,
     hasBalance,
     cycleMonths,
+    colours,
   ] = defaultTypeParams();
   await executor.query(
     `INSERT INTO leave_types (
        ${INSERT_COLUMNS}
      )
      SELECT
-       $7,
+       $8,
        lt.name,
        lt.default_days,
        lt.has_balance,
        lt.cycle_months,
+       lt.colour,
        'annual',
        true,
        lt.allow_backdate,
@@ -116,6 +126,7 @@ export async function seedDefaultLeaveTypes(
       requiresDocumentAfterDays,
       hasBalance,
       cycleMonths,
+      colours,
       companyId,
     ],
   );
@@ -131,6 +142,7 @@ export async function backfillDefaultLeaveTypes(
     requiresDocumentAfterDays,
     hasBalance,
     cycleMonths,
+    colours,
   ] = defaultTypeParams();
   await executor.query(
     `INSERT INTO leave_types (
@@ -142,6 +154,7 @@ export async function backfillDefaultLeaveTypes(
        lt.default_days,
        lt.has_balance,
        lt.cycle_months,
+       lt.colour,
        'annual',
        true,
        lt.allow_backdate,
@@ -156,6 +169,7 @@ export async function backfillDefaultLeaveTypes(
       requiresDocumentAfterDays,
       hasBalance,
       cycleMonths,
+      colours,
     ],
   );
 }
