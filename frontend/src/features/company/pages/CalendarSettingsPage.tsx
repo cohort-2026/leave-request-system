@@ -1,19 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { toast } from 'sonner'
 import { PageShell } from '../../../app/layouts/PageShell'
-import { ApiError } from '../../../services/api'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
-  Alert,
-  Button,
-  DataTable,
-  DateField,
-  TextField,
-  type DataTableColumn,
-} from '../../../shared/components'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert } from '../../../shared/components'
+import { ApiError } from '../../../services/api'
 import {
   createPublicHoliday,
   deletePublicHoliday,
   getCalendarSettings,
   saveWorkingDays,
+  seedZaHolidays,
   type CalendarSettings,
   type PublicHoliday,
   type WorkingDaySettings,
@@ -32,57 +38,63 @@ const WEEKDAYS: {
   { field: 'sundayIsWorking', label: 'Sunday' },
 ]
 
+const HOLIDAY_YEARS = [2026, 2027, 2028, 2029, 2030] as const
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
 }
 
-function holidayColumns(
-  removingHolidayId: number | null,
-  onRemove: (holiday: PublicHoliday) => void,
-): DataTableColumn<PublicHoliday>[] {
-  return [
-    {
-      key: 'date',
-      header: 'Date',
-      render: (holiday) => holiday.date,
-    },
-    {
-      key: 'name',
-      header: 'Name',
-      render: (holiday) => holiday.name,
-    },
-    {
-      key: 'remove',
-      header: '',
-      className: 'cell-action',
-      render: (holiday) => (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => onRemove(holiday)}
-          disabled={removingHolidayId !== null}
-          aria-label={`Remove ${holiday.name} on ${holiday.date}`}
-        >
-          {removingHolidayId === holiday.id ? 'Removing…' : 'Remove'}
-        </Button>
-      ),
-    },
-  ]
+function holidayYear(date: string): number {
+  return Number(date.slice(0, 4))
+}
+
+function formatObserved(date: string): string {
+  const parsed = new Date(`${date}T00:00:00.000Z`)
+  const weekday = parsed.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    timeZone: 'UTC',
+  })
+  const day = parsed.getUTCDate()
+  const month = parsed.toLocaleDateString('en-GB', {
+    month: 'short',
+    timeZone: 'UTC',
+  })
+  return `${weekday} ${day} ${month}`
+}
+
+function seedToastMessage(
+  added: number,
+  observed: Array<{ name: string; date: string }>,
+): string {
+  const womensDay = observed.find((holiday) => holiday.name === "Women's Day")
+  const addedLabel = `${added} holiday${added === 1 ? '' : 's'} added`
+  if (womensDay) {
+    return `${addedLabel} · Women's Day observed ${formatObserved(womensDay.date)}`
+  }
+  return addedLabel
 }
 
 export function CalendarSettingsPage() {
   const [calendar, setCalendar] = useState<CalendarSettings | null>(null)
+  const [year, setYear] = useState<number>(2026)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
   const [savingWeek, setSavingWeek] = useState(false)
+  const [seeding, setSeeding] = useState(false)
   const [holidayDate, setHolidayDate] = useState('')
   const [holidayName, setHolidayName] = useState('')
   const [addingHoliday, setAddingHoliday] = useState(false)
   const [removingHolidayId, setRemovingHolidayId] = useState<number | null>(
     null,
   )
+
+  const yearHolidays = useMemo(() => {
+    if (!calendar) return []
+    return calendar.holidays.filter(
+      (holiday) => holidayYear(holiday.date) === year,
+    )
+  }, [calendar, year])
 
   async function loadCalendar() {
     setLoading(true)
@@ -126,7 +138,6 @@ export function CalendarSettingsPage() {
       current ? { ...current, [field]: checked } : current,
     )
     setError(null)
-    setNotice(null)
   }
 
   async function handleSaveWeek() {
@@ -134,7 +145,6 @@ export function CalendarSettingsPage() {
 
     setSavingWeek(true)
     setError(null)
-    setNotice(null)
     const settings: WorkingDaySettings = {
       mondayIsWorking: calendar.mondayIsWorking,
       tuesdayIsWorking: calendar.tuesdayIsWorking,
@@ -150,11 +160,29 @@ export function CalendarSettingsPage() {
       setCalendar((current) =>
         current ? { ...current, ...saved, holidays: current.holidays } : saved,
       )
-      setNotice('Working days saved.')
+      toast.success('Working days saved.')
     } catch (saveFailure: unknown) {
       setError(getErrorMessage(saveFailure, 'Could not save working days.'))
     } finally {
       setSavingWeek(false)
+    }
+  }
+
+  async function handleSeedZa() {
+    setSeeding(true)
+    setError(null)
+    try {
+      const result = await seedZaHolidays(year)
+      setCalendar((current) =>
+        current ? { ...current, holidays: result.holidays } : current,
+      )
+      toast.success(seedToastMessage(result.added, result.observed))
+    } catch (seedFailure: unknown) {
+      setError(
+        getErrorMessage(seedFailure, 'Could not load SA public holidays.'),
+      )
+    } finally {
+      setSeeding(false)
     }
   }
 
@@ -164,7 +192,6 @@ export function CalendarSettingsPage() {
 
     setAddingHoliday(true)
     setError(null)
-    setNotice(null)
     try {
       const result = await createPublicHoliday(holidayDate, holidayName)
       setCalendar((current) =>
@@ -179,7 +206,7 @@ export function CalendarSettingsPage() {
       )
       setHolidayDate('')
       setHolidayName('')
-      setNotice('Holiday added.')
+      toast.success('Holiday added.')
     } catch (addFailure: unknown) {
       setError(getErrorMessage(addFailure, 'Could not add the holiday.'))
     } finally {
@@ -190,7 +217,6 @@ export function CalendarSettingsPage() {
   async function handleRemoveHoliday(holiday: PublicHoliday) {
     setRemovingHolidayId(holiday.id)
     setError(null)
-    setNotice(null)
     try {
       await deletePublicHoliday(holiday.id)
       setCalendar((current) =>
@@ -203,7 +229,7 @@ export function CalendarSettingsPage() {
             }
           : current,
       )
-      setNotice(`${holiday.name} removed.`)
+      toast.success(`${holiday.name} removed.`)
     } catch (removeFailure: unknown) {
       setError(getErrorMessage(removeFailure, 'Could not remove the holiday.'))
     } finally {
@@ -213,30 +239,37 @@ export function CalendarSettingsPage() {
 
   return (
     <PageShell title="Week and holidays" eyebrow="Company admin">
-      <p className="muted">
+      <p className="text-muted-foreground">
         Which weekdays count, and public holidays that do not count. A holiday
         is not a blocked date.
       </p>
       {loadError ? (
-        <>
+        <div className="flex flex-wrap items-center gap-3">
           <Alert tone="error">{loadError}</Alert>
-          <Button type="button" onClick={() => void loadCalendar()}>
+          <Button type="button" variant="outline" onClick={() => void loadCalendar()}>
             Try again
           </Button>
-        </>
+        </div>
       ) : null}
       {error ? <Alert tone="error">{error}</Alert> : null}
-      {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       {loading ? (
-        <p className="muted">Loading calendar settings…</p>
+        <p className="text-sm text-muted-foreground">
+          Loading calendar settings…
+        </p>
       ) : calendar ? (
-        <div className="calendar-settings">
-          <section className="stack" aria-labelledby="working-days-heading">
-            <h2 id="working-days-heading">Working days</h2>
-            <div className="check-list">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+          <section className="space-y-4" aria-labelledby="working-days-heading">
+            <h2 id="working-days-heading" className="text-base font-semibold">
+              Working days
+            </h2>
+            <div className="space-y-2">
               {WEEKDAYS.map(({ field, label }) => (
-                <label key={field} className="check-row" htmlFor={field}>
+                <label
+                  key={field}
+                  className="flex items-center gap-3 text-sm"
+                  htmlFor={field}
+                >
                   <input
                     id={field}
                     type="checkbox"
@@ -260,44 +293,138 @@ export function CalendarSettingsPage() {
             </Button>
           </section>
 
-          <section className="stack" aria-labelledby="public-holidays-heading">
-            <h2 id="public-holidays-heading">Public holidays</h2>
-            <p className="muted">
-              Holidays are excluded from the day count; they are not blocked
-              dates.
-            </p>
-            <div className="calendar-settings-table">
-              <DataTable
-                data={calendar.holidays}
-                keyExtractor={(holiday) => String(holiday.id)}
-                emptyTitle="No public holidays"
-                emptyDescription="Add a holiday date for your company."
-                columns={holidayColumns(removingHolidayId, (holiday) => {
-                  void handleRemoveHoliday(holiday)
-                })}
-              />
+          <section className="space-y-4" aria-labelledby="public-holidays-heading">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2
+                  id="public-holidays-heading"
+                  className="text-base font-semibold"
+                >
+                  Public holidays
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Holidays are excluded from the day count; they are not blocked
+                  dates.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => void handleSeedZa()}
+                disabled={seeding}
+              >
+                {seeding
+                  ? 'Loading…'
+                  : `Load SA public holidays ${year}`}
+              </Button>
             </div>
+
+            <Tabs
+              value={String(year)}
+              onValueChange={(value: string) => setYear(Number(value))}
+            >
+              <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+                {HOLIDAY_YEARS.map((holidayYearValue) => (
+                  <TabsTrigger
+                    key={holidayYearValue}
+                    value={String(holidayYearValue)}
+                  >
+                    {holidayYearValue}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+
+            {yearHolidays.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-8 text-center">
+                <h3 className="m-0 text-base font-semibold">
+                  No public holidays in {year}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Load South Africa’s public holidays or add a company date.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="w-24" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {yearHolidays.map((holiday) => (
+                    <TableRow key={holiday.id}>
+                      <TableCell className="tabular-nums">
+                        {holiday.date}
+                        {holiday.actualDate ? (
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            Observed from {holiday.actualDate}
+                          </span>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {holiday.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            holiday.source === 'za' ? 'secondary' : 'outline'
+                          }
+                        >
+                          {holiday.source === 'za' ? 'SA' : 'Custom'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleRemoveHoliday(holiday)}
+                          disabled={removingHolidayId !== null}
+                          aria-label={`Remove ${holiday.name} on ${holiday.date}`}
+                        >
+                          {removingHolidayId === holiday.id
+                            ? 'Removing…'
+                            : 'Remove'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+
             <form
-              className="stack"
+              className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] sm:items-end"
               onSubmit={(event) => void handleAddHoliday(event)}
             >
-              <DateField
-                label="Holiday date"
-                name="holidayDate"
-                value={holidayDate}
-                onChange={(event) => setHolidayDate(event.target.value)}
-                required
-                disabled={addingHoliday}
-              />
-              <TextField
-                label="Holiday name"
-                name="holidayName"
-                value={holidayName}
-                onChange={(event) => setHolidayName(event.target.value)}
-                maxLength={120}
-                required
-                disabled={addingHoliday}
-              />
+              <label className="grid gap-1 text-sm">
+                <span>Holiday date</span>
+                <input
+                  type="date"
+                  name="holidayDate"
+                  value={holidayDate}
+                  required
+                  disabled={addingHoliday}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  onChange={(event) => setHolidayDate(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span>Holiday name</span>
+                <input
+                  type="text"
+                  name="holidayName"
+                  value={holidayName}
+                  maxLength={120}
+                  required
+                  disabled={addingHoliday}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  onChange={(event) => setHolidayName(event.target.value)}
+                />
+              </label>
               <Button
                 type="submit"
                 disabled={addingHoliday || !holidayDate || !holidayName.trim()}
