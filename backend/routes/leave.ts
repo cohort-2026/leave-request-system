@@ -1544,8 +1544,7 @@ leaveRouter.get(
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
-
-      const eventsResult = await pool.query<{
+    const eventsResult = await pool.query<{
       id: number;
       type: string;
       before: Record<string, unknown> | null;
@@ -1572,9 +1571,23 @@ leaveRouter.get(
       [companyId, id],
     );
 
-    res.json({ ...toQueueItem(request), ...toMyLeaveItem(detail) });
+    res.json({
+      ...toQueueItem(request),
+      ...toMyLeaveItem(detail),
+      events: eventsResult.rows.map((ev) => ({
+        id: String(ev.id),
+        type: ev.type,
+        before: ev.before,
+        after: ev.after,
+        balanceDelta: ev.balance_delta === null ? null : Number(ev.balance_delta),
+        createdAt: ev.created_at,
+        actorUserId: ev.actor_user_id,
+        actorName: ev.actor_name,
+      })),
+    });
   },
 );
+
 
 leaveRouter.get(
   "/:id/file",
