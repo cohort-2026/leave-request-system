@@ -9,6 +9,10 @@ import {
 } from "../companies/signup.js";
 import { pool } from "../db.js";
 import type { WorkingDayFlags } from "../leave/workingDays.js";
+import {
+  isZaHolidayYear,
+  zaPublicHolidays,
+} from "../leave/zaHolidays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   disableOnboardingLink,
@@ -140,6 +144,8 @@ type HolidayRow = {
   id: number;
   date: string;
   name: string;
+  source: string;
+  actualDate: string | null;
 };
 
 function isWorkingDaySettings(value: unknown): value is WorkingDaySettings {
@@ -199,7 +205,11 @@ async function readCompanyCalendar(
   }
 
   const holidaysResult = await pool.query<HolidayRow>(
-    `SELECT id, holiday_date::TEXT AS date, name
+    `SELECT id,
+            holiday_date::TEXT AS date,
+            name,
+            COALESCE(source, 'custom') AS source,
+            actual_date::TEXT AS "actualDate"
      FROM public_holidays
      WHERE company_id = $1
      ORDER BY holiday_date, id`,
@@ -855,9 +865,13 @@ companiesRouter.post(
 
     try {
       const result = await pool.query<HolidayRow>(
-        `INSERT INTO public_holidays (company_id, holiday_date, name)
-         VALUES ($1, $2, $3)
-         RETURNING id, holiday_date::TEXT AS date, name`,
+        `INSERT INTO public_holidays (company_id, holiday_date, name, source)
+         VALUES ($1, $2, $3, 'custom')
+         RETURNING id,
+                   holiday_date::TEXT AS date,
+                   name,
+                   COALESCE(source, 'custom') AS source,
+                   actual_date::TEXT AS "actualDate"`,
         [companyId, date, name],
       );
       res.status(201).json({ holiday: result.rows[0] });
@@ -870,6 +884,75 @@ companiesRouter.post(
       }
       throw err;
     }
+  },
+);
+
+companiesRouter.post(
+  "/current/holidays/seed-za",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    const rawYear = Array.isArray(req.query.year)
+      ? req.query.year[0]
+      : req.query.year;
+    const year = typeof rawYear === "string" ? Number(rawYear) : Number.NaN;
+    if (!Number.isInteger(year) || !isZaHolidayYear(year)) {
+      res.status(400).json({
+        error: "Year must be an integer from 2026 to 2030",
+      });
+      return;
+    }
+
+    const holidays = zaPublicHolidays(year);
+    const result = await pool.query<HolidayRow>(
+      `INSERT INTO public_holidays (
+         company_id, holiday_date, name, source, actual_date
+       )
+       SELECT
+         $1,
+         seeded.holiday_date,
+         seeded.name,
+         'za',
+         seeded.actual_date
+       FROM UNNEST($2::date[], $3::text[], $4::date[])
+         AS seeded(holiday_date, name, actual_date)
+       ON CONFLICT (company_id, holiday_date) DO NOTHING
+       RETURNING id,
+                 holiday_date::TEXT AS date,
+                 name,
+                 COALESCE(source, 'custom') AS source,
+                 actual_date::TEXT AS "actualDate"`,
+      [
+        companyId,
+        holidays.map((holiday) => holiday.date),
+        holidays.map((holiday) => holiday.name),
+        holidays.map((holiday) => holiday.actualDate),
+      ],
+    );
+
+    const calendar = await readCompanyCalendar(companyId);
+    if (!calendar) {
+      res.status(403).json({ error: NOT_IN_COMPANY });
+      return;
+    }
+
+    res.json({
+      year,
+      added: result.rowCount ?? 0,
+      holidays: calendar.holidays,
+      observed: holidays
+        .filter((holiday) => holiday.actualDate !== null)
+        .map((holiday) => ({
+          name: holiday.name,
+          date: holiday.date,
+          actualDate: holiday.actualDate,
+        })),
+    });
   },
 );
 

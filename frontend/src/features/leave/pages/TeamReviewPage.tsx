@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { FileText } from 'lucide-react'
 import { PageShell } from '../../../app/layouts/PageShell'
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -10,9 +12,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../../components/ui/alert-dialog'
+import { Alert } from '../../../components/ui/alert'
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar'
 import { Badge } from '../../../components/ui/badge'
-import { Button } from '../../../components/ui/button'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,6 +23,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '../../../components/ui/breadcrumb'
+import { Button } from '../../../components/ui/button'
 import {
   Card,
   CardContent,
@@ -28,9 +31,19 @@ import {
   CardHeader,
   CardTitle,
 } from '../../../components/ui/card'
-import { Field, FieldLabel } from '../../../components/ui/field'
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from '../../../components/ui/item'
+import { Label } from '../../../components/ui/label'
+import { Separator } from '../../../components/ui/separator'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { Textarea } from '../../../components/ui/textarea'
-import { Alert as UiAlert } from '../../../components/ui/alert'
 import { ApiError } from '../../../services/api'
 import { paths } from '../../../shared/constants/paths'
 import {
@@ -41,47 +54,181 @@ import {
   type TeamQueueItem,
 } from '../leaveApi'
 
+// GET /api/leave/:id returns these today (reason, decisionReason) or will once
+// the S3 backend ships (balanceBefore, teamOverlaps, events). Every extra is
+// optional so the page never shows a number the API did not send.
+type Overlap = {
+  id?: string | number
+  employeeName?: string
+  name?: string
+  leaveType?: string
+  startDate?: string
+  endDate?: string
+}
+
+type HistoryEvent = {
+  id?: string | number
+  label?: string
+  action?: string
+  type?: string
+  actorName?: string | null
+  note?: string | null
+  createdAt?: string
+  at?: string
+}
+
+type ReviewRequest = TeamQueueItem & {
+  reason?: string | null
+  decisionReason?: string | null
+  balanceBefore?: number | null
+  teamOverlaps?: Overlap[] | null
+  events?: HistoryEvent[] | null
+}
+
+const statusStyles: Record<
+  TeamQueueItem['status'],
+  { label: string; pill: string; dot: string }
+> = {
+  pending: {
+    label: 'Pending',
+    pill: 'bg-badge-pending! text-amber-800!',
+    dot: 'bg-amber-500',
+  },
+  approved: {
+    label: 'Approved',
+    pill: 'bg-badge-approved! text-green-800!',
+    dot: 'bg-green-600',
+  },
+  rejected: {
+    label: 'Declined',
+    pill: 'bg-badge-rejected! text-red-800!',
+    dot: 'bg-red-600',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    pill: 'bg-badge-waiting! text-slate-700!',
+    dot: 'bg-slate-500',
+  },
+  waiting: {
+    label: 'Waiting',
+    pill: 'bg-badge-waiting! text-slate-700!',
+    dot: 'bg-slate-500',
+  },
+}
+
+const cardClass = 'shadow-sm [--card-spacing:--spacing(5)]'
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
 }
 
 function getInitials(name: string) {
-  return name
+  const initials = name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0] ?? '')
     .join('')
     .toUpperCase()
+  return initials || '?'
 }
 
-function formatDays(value: number | null | undefined) {
-  return value == null ? 'Not tracked' : `${value} ${value === 1 ? 'day' : 'days'}`
+function parseDate(value?: string | null) {
+  if (!value) return null
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
-function eventLabel(type: string) {
-  switch (type) {
-    case 'submitted':
-      return 'Request submitted'
-    case 'approved':
-      return 'Request approved'
-    case 'rejected':
-      return 'Request declined'
-    case 'cancelled':
-      return 'Request cancelled'
-    default:
-      return type
-  }
+function formatDate(value?: string | null) {
+  const date = parseDate(value)
+  if (!date) return value || '—'
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatRange(start: string, end: string) {
+  return start === end
+    ? formatDate(start)
+    : `${formatDate(start)} – ${formatDate(end)}`
+}
+
+function formatDays(days: number) {
+  return String(Number(days.toFixed(2)))
+}
+
+function pluralDays(days: number) {
+  return `${formatDays(days)} ${days === 1 ? 'day' : 'days'}`
+}
+
+function noticeLabel(submittedAt?: string | null, startDate?: string) {
+  const submitted = parseDate(submittedAt)
+  const start = parseDate(startDate)
+  if (!submitted || !start) return '—'
+  const submittedDay = new Date(
+    submitted.getFullYear(),
+    submitted.getMonth(),
+    submitted.getDate(),
+  )
+  const days = Math.round((start.getTime() - submittedDay.getTime()) / 86_400_000)
+  if (days < 0) return 'Submitted after the start date'
+  if (days === 0) return 'Same day'
+  return `${days} ${days === 1 ? 'day' : 'days'} ahead`
+}
+
+function humanise(value: string) {
+  const text = value.replace(/[_-]+/g, ' ').trim()
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+function StatusPill({ status }: { status: TeamQueueItem['status'] }) {
+  const style = statusStyles[status] ?? statusStyles.waiting
+  return (
+    <Badge variant="outline" className={`gap-1.5 border-transparent! ${style.pill}`}>
+      <span
+        aria-hidden="true"
+        className={`size-1.5 rounded-full ${style.dot}`}
+      />
+      {style.label}
+    </Badge>
+  )
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-foreground">{value}</dd>
+    </div>
+  )
+}
+
+function ReviewSkeleton() {
+  return (
+    <div aria-busy="true" className="grid gap-4">
+      <span className="sr-only" role="status">
+        Loading leave request
+      </span>
+      <Skeleton className="h-4 w-48" />
+      <Skeleton className="h-40 w-full rounded-xl" />
+      <Skeleton className="h-32 w-full rounded-xl" />
+    </div>
+  )
 }
 
 export function TeamReviewPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [request, setRequest] = useState<TeamQueueItem | null>(null)
+  const [request, setRequest] = useState<ReviewRequest | null>(null)
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [approveOpen, setApproveOpen] = useState(false)
+  const [declineOpen, setDeclineOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -93,16 +240,14 @@ export function TeamReviewPage() {
     fetchTeamQueueDetail(id)
       .then((data) => {
         if (active) {
-          setRequest(data)
+          setRequest(data as ReviewRequest)
           setError(null)
           setLoadedId(id)
         }
       })
       .catch((err: unknown) => {
         if (active) {
-          setError(
-            getErrorMessage(err, 'Could not load this leave request.'),
-          )
+          setError(getErrorMessage(err, 'Could not load this leave request.'))
           setLoadedId(id)
         }
       })
@@ -111,6 +256,19 @@ export function TeamReviewPage() {
       active = false
     }
   }, [id])
+
+  // If a decision call errors, check whether it was in fact recorded (for
+  // example when only a follow-up step failed) so a recorded decision is never
+  // reported as a failed one.
+  async function wasRecorded(expected: TeamQueueItem['status']) {
+    if (!id) return false
+    try {
+      const latest = await fetchTeamQueueDetail(id)
+      return latest.status === expected
+    } catch {
+      return false
+    }
+  }
 
   const handleApprove = async () => {
     if (!id || submitting) return
@@ -122,14 +280,17 @@ export function TeamReviewPage() {
       window.dispatchEvent(new Event('team-queue-updated'))
       navigate(paths.teamQueue)
     } catch (err) {
+      if (await wasRecorded('approved')) {
+        navigate(paths.teamQueue)
+        return
+      }
       setActionError(getErrorMessage(err, 'Could not approve this request.'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleReject = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleDecline = async () => {
     const trimmedReason = reason.trim()
     if (!id || !trimmedReason || submitting) return
 
@@ -140,54 +301,57 @@ export function TeamReviewPage() {
       window.dispatchEvent(new Event('team-queue-updated'))
       navigate(paths.teamQueue)
     } catch (err) {
-      setActionError(getErrorMessage(err, 'Could not reject this request.'))
+      if (await wasRecorded('rejected')) {
+        navigate(paths.teamQueue)
+        return
+      }
+      setActionError(getErrorMessage(err, 'Could not decline this request.'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleDownload = async () => {
-    if (!id || !request?.supportingFileName || downloading) return
-
+  const handleDownload = () => {
+    if (!id || !request?.supportingFileName) return
     setDownloading(true)
     setActionError(null)
-    try {
-      await downloadSupportingFile(id, request.supportingFileName)
-    } catch (err) {
-      setActionError(
-        getErrorMessage(err, 'Could not download the supporting file.'),
-      )
-    } finally {
-      setDownloading(false)
-    }
+    void downloadSupportingFile(id, request.supportingFileName)
+      .catch((err: unknown) => {
+        setActionError(
+          getErrorMessage(err, 'Could not download the supporting file.'),
+        )
+      })
+      .finally(() => setDownloading(false))
   }
+
+  const dialogOpen = approveOpen || declineOpen
 
   if (!id) {
     return (
-      <PageShell title="Review leave" eyebrow="A decision">
-        <UiAlert variant="destructive">A leave request ID is required.</UiAlert>
-        <Link to={paths.teamQueue}>Back to queue</Link>
+      <PageShell title="Review request">
+        <Alert variant="destructive">A leave request ID is required.</Alert>
+        <div>
+          <Button asChild variant="outline">
+            <Link to={paths.teamQueue}>Back to approvals</Link>
+          </Button>
+        </div>
       </PageShell>
     )
   }
 
   if (loadedId !== id) {
     return (
-      <PageShell title="Review leave" eyebrow="A decision">
-        <p className="text-muted-foreground" role="status">
-          Loading leave request…
-        </p>
+      <PageShell title="Review request">
+        <ReviewSkeleton />
       </PageShell>
     )
   }
 
   if (error || !request) {
     return (
-      <PageShell title="Review leave" eyebrow="A decision">
-        <div className="space-y-4">
-          <UiAlert variant="destructive">
-            {error ?? 'Leave request not found'}
-          </UiAlert>
+      <PageShell title="Review request">
+        <Alert variant="destructive">{error ?? 'Leave request not found'}</Alert>
+        <div>
           <Button asChild variant="outline">
             <Link to={paths.teamQueue}>Back to approvals</Link>
           </Button>
@@ -197,319 +361,380 @@ export function TeamReviewPage() {
   }
 
   const canDecide = request.status === 'pending'
-  const statusLabel =
-    request.status.charAt(0).toUpperCase() + request.status.slice(1)
+  const firstName = request.employeeName.trim().split(/\s+/)[0] || 'them'
+  const overlaps = request.teamOverlaps
+  const balanceAfter = request.balanceAfter ?? null
+  const balanceBefore = request.balanceBefore ?? null
+  const historyEvents = request.events ?? null
 
   return (
-    <PageShell title="Review leave request" eyebrow="Approvals">
-      <div className="space-y-5">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link to={paths.teamQueue}>Approvals</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Request details</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+    <PageShell title="Review request">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link to={paths.teamQueue}>Approvals</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{request.employeeName}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-        {actionError ? (
-          <UiAlert variant="destructive">{actionError}</UiAlert>
-        ) : null}
-
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.8fr)]">
-          <div className="space-y-5">
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Avatar className="size-12">
-                      <AvatarFallback className="bg-primary/10 font-semibold text-primary">
-                        {getInitials(request.employeeName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 space-y-1">
-                      <CardTitle className="text-xl">
-                        {request.employeeName}
-                      </CardTitle>
-                      <CardDescription>
-                        {request.leaveType} · {request.workingDays}{' '}
-                        {request.workingDays === 1
-                          ? 'working day'
-                          : 'working days'}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={canDecide ? 'secondary' : 'outline'}
-                    className="capitalize"
-                  >
-                    {statusLabel}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <dl className="grid gap-4 rounded-lg bg-muted/40 p-4 sm:grid-cols-2">
-                  <div>
-                    <dt className="text-sm text-muted-foreground">Start date</dt>
-                    <dd className="mt-1 font-medium">{request.startDate}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-muted-foreground">End date</dt>
-                    <dd className="mt-1 font-medium">{request.endDate}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-muted-foreground">
-                      Submitted
-                    </dt>
-                    <dd className="mt-1 font-medium">
-                      {request.submittedAt
-                        ? new Date(request.submittedAt).toLocaleString()
-                        : 'Date unavailable'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-muted-foreground">
-                      Supporting document
-                    </dt>
-                    <dd className="mt-1 flex flex-wrap items-center gap-2 font-medium">
-                      {request.supportingFileName ? (
-                        <>
-                          <span className="break-all">
-                            {request.supportingFileName}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={downloading}
-                            onClick={() => void handleDownload()}
-                          >
-                            {downloading ? 'Downloading…' : 'Download'}
-                          </Button>
-                        </>
-                      ) : (
-                        'None attached'
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-
-                <section aria-labelledby="request-reason-heading">
-                  <h2
-                    id="request-reason-heading"
-                    className="mb-2 text-sm font-semibold"
-                  >
-                    Reason for leave
-                  </h2>
-                  <p className="m-0 whitespace-pre-wrap text-sm text-muted-foreground">
-                    {request.reason?.trim() || 'No reason provided.'}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div className="grid min-w-0 gap-4">
+          <Card className={cardClass}>
+            <CardContent className="grid gap-5">
+              <div className="flex items-center gap-3">
+                <Avatar size="lg" className="data-[size=lg]:size-12">
+                  <AvatarFallback className="bg-accent! font-medium text-accent-foreground">
+                    {getInitials(request.employeeName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-semibold text-foreground">
+                    {request.employeeName}
                   </p>
-                </section>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Team schedule</CardTitle>
-                <CardDescription>
-                  Other pending or approved leave that overlaps these dates.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {request.teamOverlaps?.length ? (
-                  <ul className="m-0 divide-y p-0">
-                    {request.teamOverlaps.map((overlap) => (
-                      <li
-                        key={overlap.id}
-                        className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0"
-                      >
-                        <div>
-                          <p className="m-0 font-medium">
-                            {overlap.employeeName}
-                          </p>
-                          <p className="m-0 text-sm text-muted-foreground">
-                            {overlap.leaveType} · {overlap.startDate} –{' '}
-                            {overlap.endDate}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="capitalize">
-                          {overlap.status}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="m-0 text-sm text-muted-foreground">
-                    No overlapping team requests.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Request history</CardTitle>
-                <CardDescription>
-                  Activity recorded for this request.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {request.events?.length ? (
-                  <ol className="m-0 space-y-4 border-l pl-5">
-                    {request.events.map((event, index) => (
-                      <li
-                        key={`${event.type}-${event.at}-${index}`}
-                        className="relative"
-                      >
-                        <span className="absolute -left-[1.55rem] top-1.5 size-2 rounded-full bg-primary" />
-                        <p className="m-0 font-medium">{eventLabel(event.type)}</p>
-                        <p className="m-0 text-sm text-muted-foreground">
-                          {event.actorName} ·{' '}
-                          {new Date(event.at).toLocaleString()}
-                        </p>
-                        {event.reason ? (
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                            {event.reason}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="m-0 text-sm text-muted-foreground">
-                    No activity recorded.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <aside className="space-y-5 lg:sticky lg:top-5 lg:self-start">
-            <Card>
-              <CardHeader>
-                <CardTitle>Leave balance</CardTitle>
-                <CardDescription>
-                  Balance is shown before and after this request.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border p-3">
-                  <p className="m-0 text-sm text-muted-foreground">Available</p>
-                  <p className="mb-0 mt-1 font-semibold">
-                    {formatDays(request.balance?.available)}
+                  <p className="truncate text-sm text-muted-foreground">
+                    {request.leaveType}
                   </p>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="m-0 text-sm text-muted-foreground">
-                    After approval
-                  </p>
-                  <p className="mb-0 mt-1 font-semibold">
-                    {formatDays(
-                      request.balance?.afterApproval ?? request.balanceAfter,
-                    )}
-                  </p>
+                <StatusPill status={request.status} />
+              </div>
+              <Separator />
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="col-span-2">
+                  <Fact
+                    label="Dates"
+                    value={formatRange(request.startDate, request.endDate)}
+                  />
                 </div>
-              </CardContent>
-            </Card>
+                <Fact
+                  label="Working days"
+                  value={formatDays(request.workingDays)}
+                />
+                <Fact
+                  label="Notice"
+                  value={noticeLabel(request.submittedAt, request.startDate)}
+                />
+              </dl>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Your decision</CardTitle>
-                <CardDescription>
-                  {canDecide
-                    ? 'Choose what happens next for this request.'
-                    : 'This request has already been decided.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {canDecide ? (
-                  <>
-                    <Button
-                      type="button"
-                      className="w-full"
-                      disabled={submitting}
-                      onClick={() => {
-                        setActionError(null)
-                        setApproveOpen(true)
-                      }}
-                    >
-                      Approve request
-                    </Button>
-                    <form className="space-y-3" onSubmit={handleReject}>
-                      <Field>
-                        <FieldLabel htmlFor="decline-reason">
-                          Reason for declining
-                        </FieldLabel>
-                        <Textarea
-                          id="decline-reason"
-                          name="declineReason"
-                          value={reason}
-                          onChange={(event) => setReason(event.target.value)}
-                          placeholder="Explain why this request cannot be approved."
-                          required
-                          maxLength={2000}
-                          disabled={submitting}
-                        />
-                      </Field>
+          <Card className={cardClass}>
+            <CardHeader>
+              <CardTitle>Reason</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {request.reason?.trim() ? (
+                <p className="text-sm whitespace-pre-wrap text-foreground">
+                  {request.reason}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No reason was given.
+                </p>
+              )}
+              <Separator />
+              {request.supportingFileName ? (
+                <ul>
+                  <Item variant="outline" className="flex-nowrap">
+                    <ItemMedia>
+                      <FileText
+                        className="size-5 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle className="truncate">
+                        {request.supportingFileName}
+                      </ItemTitle>
+                      <ItemDescription>Supporting document</ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
                       <Button
-                        type="submit"
-                        variant="destructive"
-                        className="w-full"
-                        disabled={!reason.trim() || submitting}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={downloading}
+                        onClick={handleDownload}
                       >
-                        {submitting ? 'Submitting…' : 'Decline request'}
+                        {downloading ? 'Downloading…' : 'Download'}
                       </Button>
-                    </form>
-                  </>
+                    </ItemActions>
+                  </Item>
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {request.documentRequired
+                    ? 'A supporting document is required, but none was attached.'
+                    : 'No supporting document attached.'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className={cardClass}>
+            <CardHeader>
+              <CardTitle>Balance</CardTitle>
+              <CardDescription>{request.leaveType} days available</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {balanceBefore !== null && balanceAfter !== null ? (
+                <p className="text-2xl font-semibold text-foreground">
+                  {formatDays(balanceBefore)}
+                  <span aria-hidden="true" className="px-2 text-muted-foreground">
+                    →
+                  </span>
+                  <span className="sr-only"> to </span>
+                  {formatDays(balanceAfter)}
+                  <span className="pl-2 text-sm font-normal text-muted-foreground">
+                    days
+                  </span>
+                </p>
+              ) : balanceAfter !== null ? (
+                <p className="text-sm text-foreground">
+                  After approval: {pluralDays(balanceAfter)}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Balance before and after isn’t available yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className={cardClass}>
+            <CardHeader>
+              <CardTitle>Also off</CardTitle>
+              <CardDescription>
+                Teammates away during these dates
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {overlaps == null ? (
+                <p className="text-sm text-muted-foreground">
+                  Team overlap isn’t available yet.
+                </p>
+              ) : overlaps.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nobody else is off in this period.
+                </p>
+              ) : (
+                <ItemGroup>
+                  {overlaps.map((overlap, index) => {
+                    const name = overlap.employeeName ?? overlap.name ?? 'Teammate'
+                    return (
+                      <Item
+                        key={overlap.id ?? `${name}-${index}`}
+                        variant="muted"
+                      >
+                        <ItemMedia>
+                          <Avatar size="sm">
+                            <AvatarFallback>{getInitials(name)}</AvatarFallback>
+                          </Avatar>
+                        </ItemMedia>
+                        <ItemContent>
+                          <ItemTitle>{name}</ItemTitle>
+                          <ItemDescription>
+                            {overlap.startDate && overlap.endDate
+                              ? formatRange(overlap.startDate, overlap.endDate)
+                              : (overlap.leaveType ?? '')}
+                          </ItemDescription>
+                        </ItemContent>
+                      </Item>
+                    )
+                  })}
+                </ItemGroup>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className={cardClass}>
+            <CardHeader>
+              <CardTitle>History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ItemGroup>
+                {historyEvents ? (
+                  historyEvents.length === 0 ? (
+                    <li className="text-sm text-muted-foreground">
+                      Nothing has happened on this request yet.
+                    </li>
+                  ) : (
+                    historyEvents.map((event, index) => {
+                      const label = humanise(
+                        event.label ?? event.action ?? event.type ?? 'Update',
+                      )
+                      const when = event.createdAt ?? event.at
+                      return (
+                        <Item
+                          key={event.id ?? `${label}-${index}`}
+                          variant="muted"
+                        >
+                          <ItemContent>
+                            <ItemTitle>{label}</ItemTitle>
+                            <ItemDescription>
+                              {[event.actorName, when ? formatDate(when) : null]
+                                .filter(Boolean)
+                                .join(' · ')}
+                              {event.note ? ` — ${event.note}` : ''}
+                            </ItemDescription>
+                          </ItemContent>
+                        </Item>
+                      )
+                    })
+                  )
                 ) : (
-                  <p className="m-0 text-sm text-muted-foreground">
-                    No further decision is needed.
-                  </p>
+                  <>
+                    <Item variant="muted">
+                      <ItemContent>
+                        <ItemTitle>Request submitted</ItemTitle>
+                        <ItemDescription>
+                          {formatDate(request.submittedAt)}
+                        </ItemDescription>
+                      </ItemContent>
+                    </Item>
+                    {request.status === 'approved' ||
+                    request.status === 'rejected' ? (
+                      <Item variant="muted">
+                        <ItemContent>
+                          <ItemTitle>
+                            {statusStyles[request.status].label}
+                          </ItemTitle>
+                          {request.decisionReason ? (
+                            <ItemDescription>
+                              {request.decisionReason}
+                            </ItemDescription>
+                          ) : null}
+                        </ItemContent>
+                      </Item>
+                    ) : null}
+                  </>
                 )}
-                <Button asChild variant="outline" className="w-full">
-                  <Link to={paths.teamQueue}>Back to approvals</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </aside>
+              </ItemGroup>
+            </CardContent>
+          </Card>
         </div>
+
+        <Card className={`${cardClass} lg:sticky lg:top-4`}>
+          <CardHeader>
+            <CardTitle>Your decision</CardTitle>
+            <CardDescription>
+              {canDecide
+                ? 'Approve this request, or decline it with a reason.'
+                : `This request has already been ${statusStyles[request.status].label.toLowerCase()}.`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {actionError && !dialogOpen ? (
+              <Alert variant="destructive">{actionError}</Alert>
+            ) : null}
+            {canDecide ? (
+              <>
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => {
+                    setActionError(null)
+                    setApproveOpen(true)
+                  }}
+                >
+                  Approve
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={submitting}
+                  onClick={() => {
+                    setActionError(null)
+                    setDeclineOpen(true)
+                  }}
+                >
+                  Decline
+                </Button>
+              </>
+            ) : null}
+            <Button asChild variant="outline">
+              <Link to={paths.teamQueue}>Back to approvals</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
-      <AlertDialog open={approveOpen} onOpenChange={setApproveOpen}>
+      <AlertDialog
+        open={approveOpen}
+        onOpenChange={(open) => {
+          if (!submitting) setApproveOpen(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Approve this leave request?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Approve {pluralDays(request.workingDays)} for {firstName}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Approving {request.workingDays} working{' '}
-              {request.workingDays === 1 ? 'day' : 'days'} for{' '}
-              {request.employeeName} will update their leave balance.
+              {request.leaveType}, {formatRange(request.startDate, request.endDate)}.
+              {` ${firstName} will be told about your decision.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {actionError ? (
-            <UiAlert variant="destructive">{actionError}</UiAlert>
-          ) : null}
+          {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={submitting}
-              >
-                Go back
-              </Button>
-            </AlertDialogCancel>
-            <Button
-              type="button"
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
               disabled={submitting}
-              onClick={() => void handleApprove()}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleApprove()
+              }}
             >
-              {submitting ? 'Approving…' : 'Confirm approval'}
-            </Button>
+              {submitting ? 'Approving…' : 'Approve'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={declineOpen}
+        onOpenChange={(open) => {
+          if (submitting) return
+          setDeclineOpen(open)
+          if (!open) setReason('')
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Decline {firstName}’s request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Give a reason. It is sent to {firstName} with your decision.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="declineReason">Reason</Label>
+            <Textarea
+              id="declineReason"
+              name="declineReason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              disabled={submitting}
+              required
+            />
+          </div>
+          {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={!reason.trim() || submitting}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDecline()
+              }}
+            >
+              {submitting ? 'Declining…' : 'Decline request'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

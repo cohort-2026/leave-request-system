@@ -32,15 +32,26 @@ import {
   createCompanyLeaveType,
   getCompanyLeaveTypes,
   updateCompanyLeaveType,
+  LEAVE_TYPE_COLOURS,
   type CompanyLeaveType,
+  type LeaveTypeColour,
   type LeaveTypeInput,
 } from '../leaveTypesApi'
 
-const DEFAULT_COLOUR = '#0f766e'
+const DEFAULT_COLOUR: LeaveTypeColour = 'teal'
+
+const COLOUR_SWATCH: Record<LeaveTypeColour, string> = {
+  violet: 'bg-violet-600',
+  rose: 'bg-rose-500',
+  amber: 'bg-amber-500',
+  sky: 'bg-sky-500',
+  slate: 'bg-slate-500',
+  teal: 'bg-teal-500',
+}
 
 type LeaveTypeForm = {
   name: string
-  color: string
+  color: LeaveTypeColour
   defaultDays: number | ''
   cycleMonths: number | ''
   hasBalance: boolean
@@ -137,7 +148,9 @@ function validateForm(form: LeaveTypeForm): string | null {
   ) {
     return 'Document days must be a non-negative whole number.'
   }
-  if (!/^#[\da-f]{6}$/i.test(form.color)) {
+  if (
+    !(LEAVE_TYPE_COLOURS as readonly string[]).includes(form.color)
+  ) {
     return 'Choose a valid colour.'
   }
   return null
@@ -236,7 +249,7 @@ export function LeaveTypesPage() {
 
     const input: LeaveTypeInput = {
       name: form.name.trim(),
-      color: form.color,
+      colour: form.color,
       defaultDays: form.hasBalance ? Number(form.defaultDays) : 0,
       cycleMonths: form.hasBalance ? Number(form.cycleMonths) : null,
       hasBalance: form.hasBalance,
@@ -341,6 +354,7 @@ export function LeaveTypesPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Colour</TableHead>
                 <TableHead>Leave type</TableHead>
                 <TableHead>Days</TableHead>
                 <TableHead>Cycle</TableHead>
@@ -365,6 +379,19 @@ export function LeaveTypesPage() {
                     onKeyDown={(event) => rowKeyDown(event, openEditor)}
                     className="cursor-pointer focus-visible:outline-2 focus-visible:outline-ring"
                   >
+                    <TableCell>
+                      {leaveType.color ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className={`size-3 rounded-full ${COLOUR_SWATCH[leaveType.color]}`}
+                            aria-hidden
+                          />
+                          <span className="capitalize">{leaveType.color}</span>
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">
                       {leaveType.name}
                     </TableCell>
@@ -459,22 +486,25 @@ export function LeaveTypesPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field>
                     <FieldLabel htmlFor="leave-type-colour">Colour</FieldLabel>
-                    <div className="flex items-center gap-3">
-                      <Input
-                        id="leave-type-colour"
-                        name="color"
-                        type="color"
-                        value={form.color}
-                        disabled={saving}
-                        className="h-10 w-14 cursor-pointer p-1"
-                        onChange={(event) =>
-                          updateForm('color', event.target.value)
-                        }
-                      />
-                      <span className="font-mono text-xs uppercase text-muted-foreground">
-                        {form.color}
-                      </span>
-                    </div>
+                    <select
+                      id="leave-type-colour"
+                      name="colour"
+                      value={form.color}
+                      disabled={saving}
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      onChange={(event) =>
+                        updateForm(
+                          'color',
+                          event.target.value as LeaveTypeColour,
+                        )
+                      }
+                    >
+                      {LEAVE_TYPE_COLOURS.map((colour) => (
+                        <option key={colour} value={colour}>
+                          {colour}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="leave-type-days">
