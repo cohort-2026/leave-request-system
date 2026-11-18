@@ -197,11 +197,34 @@ export type TeamQueueItem = {
   workingDays: number
   leaveType: string
   status: RequestStatus
+  reason?: string | null
+  decisionReason?: string | null
   supportingFileName?: string | null
   submittedAt?: string | null
   balanceAfter?: number | null
   clashCount?: number | null
   documentRequired?: boolean
+  reviewerName?: string | null
+  reviewedAt?: string | null
+  cancelledAt?: string | null
+  balance?: {
+    available: number | null
+    afterApproval: number | null
+  }
+  teamOverlaps?: Array<{
+    id: string
+    employeeName: string
+    leaveType: string
+    startDate: string
+    endDate: string
+    status: string
+  }>
+  events?: Array<{
+    type: 'submitted' | 'approved' | 'rejected' | 'cancelled'
+    at: string
+    actorName: string
+    reason?: string | null
+  }>
 }
 
 export function fetchTeamQueue(): Promise<TeamQueueItem[]> {

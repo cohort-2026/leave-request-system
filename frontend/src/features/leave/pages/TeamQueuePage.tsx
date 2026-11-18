@@ -19,7 +19,6 @@ import {
 } from '../../../shared/components'
 import { teamReviewPath } from '../../../shared/constants/paths'
 import {
-  approveTeamRequest,
   fetchTeamQueue,
   type TeamQueueItem,
 } from '../leaveApi'
@@ -66,8 +65,6 @@ export function TeamQueuePage() {
   const [queue, setQueue] = useState<TeamQueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [approvingId, setApprovingId] = useState<string | null>(null)
   const [leaveTypeFilter, setLeaveTypeFilter] = useState('all')
 
   useEffect(() => {
@@ -121,34 +118,13 @@ export function TeamQueuePage() {
     [leaveTypeFilter, queue],
   )
 
-  const handleQuickApprove = async (item: TeamQueueItem) => {
-    if (approvingId) return
-
-    setApprovingId(item.id)
-    setActionError(null)
-    try {
-      await approveTeamRequest(item.id)
-      setQueue((currentQueue) =>
-        currentQueue.filter((request) => request.id !== item.id),
-      )
-      window.dispatchEvent(new Event('team-queue-updated'))
-    } catch (approveError: unknown) {
-      setActionError(
-        getErrorMessage(approveError, 'Could not approve this request.'),
-      )
-    } finally {
-      setApprovingId(null)
-    }
-  }
-
   return (
     <PageShell title="Approvals" eyebrow="Team · company admin">
       <p className="max-w-2xl text-muted-foreground">
-        Review leave requests in the order they came in. Requests with a clash
-        or supporting document need a closer look.
+        Review each request with its reason, balance, overlapping leave and any
+        supporting document. Requests are shown in the order they came in.
       </p>
       {error ? <Alert tone="error">{error}</Alert> : null}
-      {actionError ? <Alert tone="error">{actionError}</Alert> : null}
       <Tabs defaultValue="needs-decision" className="w-full">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
           <TabsTrigger value="needs-decision">
@@ -215,10 +191,6 @@ export function TeamQueuePage() {
                 const hasDocument = Boolean(
                   item.supportingFileName || item.documentRequired,
                 )
-                const canQuickApprove =
-                  item.status === 'pending' &&
-                  item.clashCount === 0 &&
-                  !hasDocument
 
                 return (
                   <li key={item.id}>
@@ -290,25 +262,11 @@ export function TeamQueuePage() {
                           </div>
                         </Link>
                         <div className="flex items-center justify-between gap-3 sm:justify-end">
-                          {!canQuickApprove ? (
-                            <Link
-                              to={teamReviewPath(item.id)}
-                              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                            >
-                              Review details
+                          <Button asChild variant="outline">
+                            <Link to={teamReviewPath(item.id)}>
+                              Review request
                             </Link>
-                          ) : null}
-                          {canQuickApprove ? (
-                            <Button
-                              type="button"
-                              disabled={approvingId !== null}
-                              onClick={() => void handleQuickApprove(item)}
-                            >
-                              {approvingId === item.id
-                                ? 'Approving…'
-                                : 'Quick approve'}
-                            </Button>
-                          ) : null}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>

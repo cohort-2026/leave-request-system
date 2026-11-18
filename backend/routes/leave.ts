@@ -460,13 +460,7 @@ function canDownloadSupportingFile(
 ): boolean {
   if (row.employee_user_id === actor.id) return true;
   if (actor.role === "company_admin") return true;
-  if (actor.role === "manager") {
-    return (
-      row.assigned_user_ids.includes(actor.id) ||
-      row.reviewer_user_id === actor.id
-    );
-  }
-  return false;
+  return managerCanReviewRow(actor, row);
 }
 
 leaveRouter.get(
@@ -955,6 +949,8 @@ type MyLeaveRow = {
   supporting_file_key: string | null;
   status: string;
   submitted_at: Date;
+  reviewed_at: Date | null;
+  cancelled_at: Date | null;
   reviewer_user_id: number | null;
   assigned_user_ids: number[];
   decision_reason: string | null;
@@ -978,6 +974,8 @@ const MY_LEAVE_SQL = `SELECT
        lr.supporting_file_key,
        lr.status,
        lr.submitted_at,
+       lr.reviewed_at,
+       lr.cancelled_at,
        lr.reviewer_user_id,
        lr.decision_reason,
        employee.email AS employee_email,
@@ -1007,6 +1005,9 @@ function toMyLeaveItem(row: MyLeaveRow) {
     status: row.status,
     submittedAt: row.submitted_at,
     decisionReason: row.decision_reason,
+    reviewedAt: row.reviewed_at,
+    reviewerName: row.reviewer_name,
+    cancelledAt: row.cancelled_at,
   };
 }
 
@@ -1356,13 +1357,25 @@ type QueueRequestRow = {
   end_date: string;
   working_days_count: number;
   status: string;
+  reason: string | null;
+  supporting_file_name: string | null;
+  submitted_at: Date;
+  reviewed_at: Date | null;
+  cancelled_at: Date | null;
+  decision_reason: string | null;
   reviewer_user_id: number | null;
   assigned_user_ids: number[];
+  reviewer_name: string | null;
   employee_email: string;
   employee_name: string;
   employee_role: string;
   leave_type: string;
+  requires_document_after_days: number | null;
+  staff_reviewer: "manager" | "company_admin";
+  manager_reviewer: "company_admin";
   department_manager_id: number | null;
+  clash_count: number | string;
+  balance_after: number | string | null;
 };
 
 const QUEUE_REQUEST_SQL = `SELECT
@@ -1374,6 +1387,12 @@ const QUEUE_REQUEST_SQL = `SELECT
        lr.end_date::TEXT AS end_date,
        lr.working_days_count,
        lr.status,
+       lr.reason,
+       lr.supporting_file_name,
+       lr.submitted_at,
+       lr.reviewed_at,
+       lr.cancelled_at,
+       lr.decision_reason,
        lr.reviewer_user_id,
        ARRAY(
          SELECT assignee.user_id
@@ -1384,15 +1403,57 @@ const QUEUE_REQUEST_SQL = `SELECT
        COALESCE(employee.display_name, employee.email) AS employee_name,
        employee.role AS employee_role,
        leave_types.name AS leave_type,
-       department.manager_id AS department_manager_id
+       leave_types.requires_document_after_days,
+       department.manager_id AS department_manager_id,
+       COALESCE(company_rules.staff_reviewer, 'manager') AS staff_reviewer,
+       COALESCE(company_rules.manager_reviewer, 'company_admin') AS manager_reviewer,
+       COALESCE(reviewer.display_name, reviewer.email) AS reviewer_name,
+       (
+         SELECT COUNT(*)::INTEGER
+         FROM leave_requests AS overlap
+         WHERE overlap.company_id = lr.company_id
+           AND overlap.employee_user_id <> lr.employee_user_id
+           AND overlap.status IN ('pending', 'approved')
+           AND overlap.start_date <= lr.end_date
+           AND overlap.end_date >= lr.start_date
+       ) AS clash_count,
+       CASE
+         WHEN leave_types.has_balance = true
+           AND balance.id IS NOT NULL
+         THEN ROUND(
+           COALESCE(balance.entitled_days, leave_types.default_days)
+           - COALESCE(balance.days_used, 0)
+           - COALESCE(other_pending.pending_days, 0)
+           - lr.working_days_count,
+           1
+         )
+         ELSE NULL
+       END AS balance_after
      FROM leave_requests AS lr
      JOIN users AS employee
        ON employee.id = lr.employee_user_id
      JOIN leave_types
        ON leave_types.id = lr.leave_type_id
+     LEFT JOIN company_leave_rules AS company_rules
+       ON company_rules.company_id = lr.company_id
      LEFT JOIN departments AS department
        ON department.id = employee.department_id
-      AND department.company_id = lr.company_id`;
+      AND department.company_id = lr.company_id
+     LEFT JOIN users AS reviewer
+       ON reviewer.id = lr.reviewer_user_id
+     LEFT JOIN leave_balances AS balance
+       ON balance.company_id = lr.company_id
+      AND balance.user_id = lr.employee_user_id
+      AND balance.leave_type_id = lr.leave_type_id
+     LEFT JOIN LATERAL (
+       SELECT SUM(pending.working_days_count) AS pending_days
+       FROM leave_requests AS pending
+       WHERE pending.company_id = lr.company_id
+         AND pending.employee_user_id = lr.employee_user_id
+         AND pending.leave_type_id = lr.leave_type_id
+         AND pending.status = 'pending'
+         AND pending.id <> lr.id
+     ) AS other_pending ON true`;
 
 function toQueueItem(row: QueueRequestRow) {
   return {
@@ -1403,34 +1464,66 @@ function toQueueItem(row: QueueRequestRow) {
     workingDays: Number(row.working_days_count),
     leaveType: row.leave_type,
     status: row.status,
+    reason: row.reason,
+    supportingFileName: row.supporting_file_name,
+    submittedAt: row.submitted_at,
+    balanceAfter:
+      row.balance_after === null ? null : Number(row.balance_after),
+    clashCount: Number(row.clash_count),
+    documentRequired: documentIsRequired(
+      row.requires_document_after_days,
+      Number(row.working_days_count),
+    ),
   };
+}
+
+function managerCanReviewRow(actor: AuthedUser, row: QueueRequestRow) {
+  if (actor.role !== "manager") return false;
+
+  const requiredReviewer =
+    row.employee_role === "staff"
+      ? row.staff_reviewer
+      : row.manager_reviewer;
+  if (requiredReviewer !== "manager") return false;
+
+  return (
+    row.assigned_user_ids.includes(actor.id) ||
+    row.reviewer_user_id === actor.id ||
+    (row.employee_role === "staff" &&
+      row.department_manager_id === actor.id)
+  );
 }
 
 function canSeeInQueue(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (row.employee_user_id === actor.id) return false;
   if (actor.role === "company_admin") return true;
-  if (actor.role === "manager") {
-    return (
-      row.assigned_user_ids.includes(actor.id) ||
-      (row.employee_role === "staff" &&
-        row.department_manager_id === actor.id)
-    );
-  }
-  return false;
+  return managerCanReviewRow(actor, row);
 }
 
 function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
   if (row.employee_user_id === actor.id) return false;
   if (actor.role === "company_admin") return true;
-  if (actor.role === "manager") {
-    return (
-      row.assigned_user_ids.includes(actor.id) ||
-      (row.employee_role === "staff" &&
-        (row.reviewer_user_id === actor.id ||
-          row.department_manager_id === actor.id))
-    );
-  }
-  return false;
+  return managerCanReviewRow(actor, row);
+}
+
+type TeamOverlapRow = {
+  id: number;
+  employee_name: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+};
+
+type ReviewEvent = {
+  type: "submitted" | "approved" | "rejected" | "cancelled";
+  at: Date;
+  actorName: string;
+  reason?: string | null;
+};
+
+function roundBalanceDays(value: number): number {
+  return Math.round((value + Number.EPSILON) * 10) / 10;
 }
 
 async function loadQueueRequest(
@@ -1491,16 +1584,22 @@ teamRouter.get(
            $3 = 'company_admin'
            OR (
              $3 = 'manager'
+             AND CASE
+               WHEN employee.role = 'staff'
+                 THEN COALESCE(company_rules.staff_reviewer, 'manager')
+               ELSE COALESCE(company_rules.manager_reviewer, 'company_admin')
+             END = 'manager'
              AND (
-               (
-                 employee.role = 'staff'
-                 AND department.manager_id = $2
-               )
+               lr.reviewer_user_id = $2
                OR EXISTS (
                  SELECT 1
                  FROM leave_request_assignees AS assignee
                  WHERE assignee.leave_request_id = lr.id
                    AND assignee.user_id = $2
+               )
+               OR (
+                 employee.role = 'staff'
+                 AND department.manager_id = $2
                )
              )
            )
@@ -1552,7 +1651,106 @@ leaveRouter.get(
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
-    res.json({ ...toQueueItem(request), ...toMyLeaveItem(detail) });
+
+    const balance = await getBalance(
+      detail.employee_user_id,
+      companyId,
+      detail.leave_type_id,
+      pool,
+      detail.status === "pending" ? id : undefined,
+    );
+    const currentAvailable = balance?.available ?? null;
+    let available = currentAvailable;
+    let afterApproval = currentAvailable;
+    if (currentAvailable !== null) {
+      if (detail.status === "pending") {
+        afterApproval = roundBalanceDays(
+          currentAvailable - Number(detail.working_days_count),
+        );
+      } else if (detail.status === "approved") {
+        available = roundBalanceDays(
+          currentAvailable + Number(detail.working_days_count),
+        );
+      }
+    }
+
+    const overlapResult = isOwner
+      ? null
+      : await pool.query<TeamOverlapRow>(
+          `SELECT
+             overlap.id,
+             COALESCE(employee.display_name, employee.email) AS employee_name,
+             leave_types.name AS leave_type,
+             overlap.start_date::TEXT AS start_date,
+             overlap.end_date::TEXT AS end_date,
+             overlap.status
+           FROM leave_requests AS overlap
+           JOIN users AS employee
+             ON employee.id = overlap.employee_user_id
+           JOIN leave_types
+             ON leave_types.id = overlap.leave_type_id
+           WHERE overlap.company_id = $1
+             AND overlap.employee_user_id <> $2
+             AND overlap.id <> $3
+             AND overlap.status IN ('pending', 'approved')
+             AND overlap.start_date <= $5::date
+             AND overlap.end_date >= $4::date
+           ORDER BY overlap.start_date, overlap.id`,
+          [
+            companyId,
+            detail.employee_user_id,
+            id,
+            detail.start_date,
+            detail.end_date,
+          ],
+        );
+
+    const events: ReviewEvent[] = [
+      {
+        type: "submitted",
+        at: detail.submitted_at,
+        actorName: detail.employee_name,
+      },
+    ];
+    if (
+      detail.reviewed_at &&
+      (detail.status === "approved" || detail.status === "rejected")
+    ) {
+      events.push({
+        type: detail.status,
+        at: detail.reviewed_at,
+        actorName: detail.reviewer_name ?? "Reviewer",
+        reason: detail.decision_reason,
+      });
+    }
+    if (detail.cancelled_at) {
+      events.push({
+        type: "cancelled",
+        at: detail.cancelled_at,
+        actorName: detail.employee_name,
+      });
+    }
+
+    const { clashCount, ...queueItem } = toQueueItem(request);
+    res.json({
+      ...queueItem,
+      ...(!isOwner ? { clashCount } : {}),
+      ...toMyLeaveItem(detail),
+      balance: {
+        available,
+        afterApproval,
+      },
+      teamOverlaps:
+        overlapResult?.rows.map((overlap) => ({
+          id: String(overlap.id),
+          employeeName: overlap.employee_name,
+          leaveType: overlap.leave_type,
+          startDate: overlap.start_date,
+          endDate: overlap.end_date,
+          status: overlap.status,
+        })) ?? [],
+      events,
+    });
   },
 );
 
