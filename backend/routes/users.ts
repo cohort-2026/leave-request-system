@@ -309,6 +309,7 @@ async function changeCompanyUserRole(input: {
         [input.actorCompanyId, input.targetId],
       );
     }
+
     await client.query("COMMIT");
     return { ok: true, user: { ...target, role: input.nextRole } };
   } catch (err) {
@@ -318,3 +319,102 @@ async function changeCompanyUserRole(input: {
     client.release();
   }
 }
+
+usersRouter.delete(
+  "/:id",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const actor = req.user!;
+    const actorCompanyId = requireCompanyId(actor, res);
+    if (actorCompanyId === null) {
+      return;
+    }
+
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid user id" });
+      return;
+    }
+
+    if (id === actor.id) {
+      res.status(403).json({ error: "You cannot delete your own account" });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      await client.query(
+        `SELECT id
+         FROM users
+         WHERE company_id = $1 AND role = 'company_admin'
+         ORDER BY id
+         FOR UPDATE`,
+        [actorCompanyId],
+      );
+
+      const found = await client.query<Pick<UserRow, "id" | "role" | "company_id">>(
+        `SELECT id, role, company_id
+         FROM users
+         WHERE id = $1
+         LIMIT 1
+         FOR UPDATE`,
+        [id],
+      );
+      const target = found.rows[0];
+
+      if (!target) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+
+      if (target.role === "platform" || !sameCompanyId(target.company_id, actorCompanyId)) {
+        await client.query("ROLLBACK");
+        res.status(403).json({ error: NOT_ALLOWED });
+        return;
+      }
+
+      if (target.role === "company_admin") {
+        const admins = await client.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM users
+           WHERE company_id = $1 AND role = 'company_admin'`,
+          [actorCompanyId],
+        );
+        if (Number(admins.rows[0]?.count) <= 1) {
+          await client.query("ROLLBACK");
+          res.status(403).json({ error: "Cannot delete the last company admin" });
+          return;
+        }
+      }
+
+      await client.query(
+        `DELETE FROM users
+         WHERE id = $1 AND company_id = $2`,
+        [id, actorCompanyId],
+      );
+
+      await client.query("COMMIT");
+      res.status(204).send();
+    } catch (err: unknown) {
+      await client.query("ROLLBACK");
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code: string }).code === "23503"
+      ) {
+        res.status(409).json({
+          error: "Cannot delete a user who has leave requests or audit history. Deactivate the user instead.",
+        });
+        return;
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+);

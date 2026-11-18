@@ -277,7 +277,6 @@ export function TeamReviewPage() {
     setActionError(null)
     try {
       await approveTeamRequest(id)
-      window.dispatchEvent(new Event('team-queue-updated'))
       navigate(paths.teamQueue)
     } catch (err) {
       if (await wasRecorded('approved')) {
@@ -298,7 +297,6 @@ export function TeamReviewPage() {
     setActionError(null)
     try {
       await rejectTeamRequest(id, trimmedReason)
-      window.dispatchEvent(new Event('team-queue-updated'))
       navigate(paths.teamQueue)
     } catch (err) {
       if (await wasRecorded('rejected')) {
@@ -363,8 +361,10 @@ export function TeamReviewPage() {
   const canDecide = request.status === 'pending'
   const firstName = request.employeeName.trim().split(/\s+/)[0] || 'them'
   const overlaps = request.teamOverlaps
-  const balanceAfter = request.balanceAfter ?? null
-  const balanceBefore = request.balanceBefore ?? null
+  const balanceAfter =
+    request.balance?.afterApproval ?? request.balanceAfter ?? null
+  const balanceBefore =
+    request.balance?.available ?? request.balanceBefore ?? null
   const historyEvents = request.events ?? null
 
   return (
