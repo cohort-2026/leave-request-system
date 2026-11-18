@@ -7,6 +7,7 @@
 | `GET /api/health` | Anyone (no login) |
 | `POST /api/auth/register` | Anyone (no login). Always **400**; open staff signup is closed. |
 | `GET /api/billing/plans` | Anyone (no login). Public ZAR catalog. |
+| `GET /api/platform/companies` | `platform` only. Returns company status, subscription plan/status, seat limit, and count of active company users; does not return leave data. |
 | `POST /api/companies/signup` | Anyone (no login). Creates a payment checkout, not a company. |
 | `POST /api/companies/signup/mock-pay` | Anyone (no login), local only. Completes checkout and creates the company admin. No session cookie. |
 | `POST /api/auth/onboard` | Anyone (no login). Token must be an active company invite. Creates `staff` in that company only. |
