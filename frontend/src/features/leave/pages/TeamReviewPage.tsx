@@ -81,6 +81,10 @@ type ReviewRequest = TeamQueueItem & {
   reason?: string | null
   decisionReason?: string | null
   balanceBefore?: number | null
+  balance?: {
+    available?: number | null
+    afterApproval?: number | null
+  } | null
   teamOverlaps?: Overlap[] | null
   events?: HistoryEvent[] | null
 }
