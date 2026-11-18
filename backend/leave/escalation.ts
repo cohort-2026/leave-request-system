@@ -7,6 +7,7 @@ import {
   sendMail,
 } from "../mail/index.js";
 import { applyApprovedLeaveToBalance } from "./balances.js";
+import { recordEvent } from "./events.js";
 
 const AUTO_APPROVE_REASON = "Automatically approved after the company timeout";
 
@@ -181,6 +182,15 @@ async function processRequest(
       if (update.rowCount !== 1) {
         throw new Error(`Pending leave request ${id} could not be auto-approved`);
       }
+      await recordEvent(client, {
+        companyId: due.company_id,
+        leaveRequestId: id,
+        actorUserId: due.employee_user_id,
+        type: "auto_approve",
+        before: { status: "pending" },
+        after: { status: "approved", decisionReason: AUTO_APPROVE_REASON },
+        balanceDelta: -Number(due.working_days_count),
+      });
       outcome = "approved";
     } else if (
       due.escalation_due &&

@@ -1,3 +1,4 @@
+import { listLeaveRequestEvents, recordEvent } from "../leave/events.js";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
@@ -883,6 +884,21 @@ leaveRouter.post(
         if (uploadedFile) {
           await saveSupportingDocument(client, request.id, uploadedFile);
         }
+
+        await recordEvent(client, {
+          companyId,
+          leaveRequestId: request.id,
+          actorUserId: req.user!.id,
+          type: autoApprove ? "auto_approve" : "submit",
+          after: {
+            status: request.status,
+            startDate: request.start_date,
+            endDate: request.end_date,
+            workingDays: Number(request.working_days_count),
+          },
+          balanceDelta: autoApprove ? -Number(request.working_days_count) : null,
+        });
+
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");
@@ -1266,6 +1282,16 @@ leaveRouter.patch(
           throw new LeaveRequestError("Leave request not found", 404);
         }
         updated = result;
+
+          await recordEvent(client, {
+          companyId,
+          leaveRequestId: id,
+          actorUserId: req.user!.id,
+          type: "edit",
+          before: toMyLeaveItem(request),
+          after: toMyLeaveItem(updated),
+        });
+
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");
@@ -1685,31 +1711,45 @@ leaveRouter.get(
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
-    const reviewContext = !isOwner && canReview
-      ? await loadReviewContext(request)
-      : null;
-    const events = reviewContext
+    const storedEvents = await listLeaveRequestEvents(pool, companyId, id);
+    const reviewContext =
+      !isOwner && canReview ? await loadReviewContext(request) : null;
+    const fallbackEvents = reviewContext
       ? buildLeaveReviewEvents({
           ...detail,
           reviewer_name: detail.reviewer_name ?? null,
-        })
-      : null;
+        }).map((event) => ({
+          type: event.type,
+          before: null,
+          after: null,
+          balanceDelta: null,
+          createdAt: event.at,
+          at: event.at,
+          actorUserId: null,
+          actorName: event.actorName,
+          reason: event.reason,
+        }))
+      : [];
+    const events = storedEvents.length > 0 ? storedEvents : fallbackEvents;
     res.json({
       ...toQueueItem(request),
       ...toMyLeaveItem(detail),
-      ...(reviewContext ? {
-        reviewContext,
-        balance: {
-          available: reviewContext.balance.availableBefore,
-          afterApproval: reviewContext.balance.availableAfter,
-        },
-        teamOverlaps: reviewContext.alsoOff,
-        teamOverlap: reviewContext.alsoOff,
-        events,
-      } : {}),
+      events,
+      ...(reviewContext
+        ? {
+            reviewContext,
+            balance: {
+              available: reviewContext.balance.availableBefore,
+              afterApproval: reviewContext.balance.availableAfter,
+            },
+            teamOverlaps: reviewContext.alsoOff,
+            teamOverlap: reviewContext.alsoOff,
+          }
+        : {}),
     });
   },
 );
+
 
 leaveRouter.get(
   "/:id/file",
@@ -1774,6 +1814,13 @@ leaveRouter.get(
        VALUES ($1, $2, $3)`,
       [companyId, id, req.user!.id],
     );
+
+    await recordEvent(pool, {
+      companyId,
+      leaveRequestId: id,
+      actorUserId: req.user!.id,
+      type: "document_view",
+    });
 
     res.setHeader("Content-Type", mime);
     res.setHeader(
@@ -1886,6 +1933,16 @@ leaveRouter.post(
         throw new LeaveRequestError("Leave request not found", 404);
       }
       cancelled = cancelledRow;
+
+      await recordEvent(client, {
+        companyId,
+        leaveRequestId: id,
+        actorUserId: req.user!.id,
+        type: "withdraw",
+        before: { status: request.status },
+        after: { status: "cancelled" },
+      });
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1996,6 +2053,17 @@ leaveRouter.post(
         throw new LeaveRequestError("Leave request not found", 404);
       }
       decided = updated;
+
+      await recordEvent(client, {
+        companyId,
+        leaveRequestId: request.id,
+        actorUserId: req.user!.id,
+        type: "approve",
+        before: { status: "pending" },
+        after: { status: "approved" },
+        balanceDelta: -Number(request.working_days_count),
+      });
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -2084,6 +2152,16 @@ leaveRouter.post(
         throw new LeaveRequestError("Leave request not found", 404);
       }
       decided = updated;
+
+     await recordEvent(client, {
+        companyId,
+        leaveRequestId: request.id,
+        actorUserId: req.user!.id,
+        type: "decline",
+        before: { status: "pending" },
+        after: { status: "rejected", decisionReason },
+      });
+
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
