@@ -82,10 +82,6 @@ function colourFor(leaveType: string): TypeColour {
   return 'slate'
 }
 
-function isUnpaid(leaveType: string) {
-  return leaveType.toLowerCase().includes('unpaid')
-}
-
 function formatDays(days: number) {
   return String(Number(days.toFixed(2)))
 }
@@ -107,12 +103,12 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function BalanceCard({ balance }: { balance: LeaveBalance }) {
   const styles = colourStyles[colourFor(balance.leaveType)]
-  const unlimited = isUnpaid(balance.leaveType)
-  const pending = balance.pendingDays ?? null
-  const showProgress = !unlimited && balance.totalAllowance > 0
-  const committed = balance.usedDays + (pending ?? 0)
+  const unlimited = !balance.hasBalance
+  const pending = balance.pending
+  const showProgress = !unlimited && balance.entitled > 0
+  const committed = balance.taken + pending
   const progress = showProgress
-    ? (committed / balance.totalAllowance) * 100
+    ? (committed / balance.entitled) * 100
     : 0
 
   return (
@@ -135,7 +131,7 @@ function BalanceCard({ balance }: { balance: LeaveBalance }) {
           <p
             className={`text-4xl leading-none font-semibold tracking-tight ${styles.figure}`}
           >
-            {unlimited ? 'No limit' : formatDays(balance.daysRemaining)}
+            {unlimited ? 'No limit' : formatDays(balance.available ?? 0)}
           </p>
           <p className="text-xs text-muted-foreground">
             {unlimited ? 'Available' : 'Days available'}
@@ -154,13 +150,10 @@ function BalanceCard({ balance }: { balance: LeaveBalance }) {
           className={`grid gap-3 ${unlimited ? 'grid-cols-2' : 'grid-cols-3'}`}
         >
           {unlimited ? null : (
-            <Stat label="Entitled" value={formatDays(balance.totalAllowance)} />
+            <Stat label="Entitled" value={formatDays(balance.entitled)} />
           )}
-          <Stat label="Taken" value={formatDays(balance.usedDays)} />
-          <Stat
-            label="Pending"
-            value={pending === null ? '—' : formatDays(pending)}
-          />
+          <Stat label="Taken" value={formatDays(balance.taken)} />
+          <Stat label="Pending" value={formatDays(pending)} />
         </dl>
       </CardContent>
     </Card>
