@@ -4,6 +4,15 @@ import { PageShell } from '../../../app/layouts/PageShell'
 import { Alert, Button, TextField } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
+import {
+  DEFAULT_BRAND_ACCENT,
+  DEFAULT_BRAND_PRIMARY,
+} from '../../company/brandingApi'
+import { BrandPreview } from '../../company/components/BrandPreview'
+import {
+  extractBrandColor,
+  fileToBase64,
+} from '../../company/extractBrandColor'
 import { PLANS, VAT_NOTE, type Plan } from '../../marketing/plans'
 import { startCompanyCheckout, storeSignupCheckout } from '../api'
 
@@ -25,6 +34,12 @@ export function StartCompanyPage() {
   const [planCode, setPlanCode] = useState<Plan['id']>(() =>
     planFromQuery(searchParams.get('plan')),
   )
+  const [slogan, setSlogan] = useState('')
+  const [primary, setPrimary] = useState(DEFAULT_BRAND_PRIMARY)
+  const [accent, setAccent] = useState(DEFAULT_BRAND_ACCENT)
+  const [colorsManual, setColorsManual] = useState(false)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -42,12 +57,21 @@ export function StartCompanyPage() {
     setSubmitting(true)
 
     try {
+      const branding = {
+        slogan: slogan.trim() || null,
+        brandPrimary: primary,
+        brandAccent: accent,
+        brandColorsManual: colorsManual,
+        logoBase64: logoFile ? await fileToBase64(logoFile) : null,
+        logoMime: logoFile?.type ?? null,
+      }
       const checkout = await startCompanyCheckout(
         companyName,
         displayName,
         email,
         password,
         planCode,
+        branding,
       )
       storeSignupCheckout(checkout)
       navigate(paths.startCompanyPay, { replace: true, state: checkout })
@@ -69,14 +93,13 @@ export function StartCompanyPage() {
 
   return (
     <div className="company-signup-layout">
-      <PageShell title="Start your company" eyebrow="Workspace setup">
+      <PageShell title="Start your company">
         <p className="company-signup-intro">
-          Create your company workspace, choose a plan, and complete a
-          development payment to finish signup.
+          Create your company workspace, add your look, choose a plan, and
+          complete a development payment to finish signup.
         </p>
-        <p className="muted">
-          Employees are provisioned by their company (SCIM / SSO), or they use
-          an invite link if they were sent one.
+        <p className="text-muted-foreground">
+          After you pay, you can invite people with a company invite link.
         </p>
         {formError ? <Alert tone="error">{formError}</Alert> : null}
         <form className="flex flex-col gap-stack" onSubmit={handleSubmit}>
@@ -90,6 +113,68 @@ export function StartCompanyPage() {
             required
             disabled={submitting}
           />
+          <TextField
+            label="Slogan"
+            name="slogan"
+            value={slogan}
+            onChange={(event) => setSlogan(event.target.value)}
+            hint="Shown on Home for everyone in your company."
+            disabled={submitting}
+          />
+          <label className="grid gap-1 text-sm font-medium text-foreground">
+            Logo
+            <input
+              className="block w-full text-sm font-normal text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={submitting}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (!file) return
+                setLogoFile(file)
+                setLogoPreview(URL.createObjectURL(file))
+                if (!colorsManual) {
+                  void extractBrandColor(file).then((extracted) => {
+                    if (!extracted) return
+                    setPrimary(extracted)
+                    setAccent(extracted)
+                  })
+                }
+              }}
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1 text-sm font-medium text-foreground">
+              Brand colour
+              <input
+                className="h-10 w-full cursor-pointer rounded-md border border-input bg-background p-1"
+                type="color"
+                value={primary}
+                disabled={submitting}
+                onChange={(event) => {
+                  setPrimary(event.target.value)
+                  setColorsManual(true)
+                }}
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-foreground">
+              Button hover
+              <input
+                className="h-10 w-full cursor-pointer rounded-md border border-input bg-background p-1"
+                type="color"
+                value={accent}
+                disabled={submitting}
+                onChange={(event) => {
+                  setAccent(event.target.value)
+                  setColorsManual(true)
+                }}
+              />
+            </label>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Uploading a logo picks a colour from it unless you have already
+            chosen colours here.
+          </p>
           <TextField
             label="Your name"
             name="displayName"
@@ -164,11 +249,17 @@ export function StartCompanyPage() {
         </p>
       </PageShell>
       <aside className="company-signup-aside" aria-label="Workspace setup">
-        <p className="company-signup-aside-label">Built for your team</p>
-        <h2>A clear start for better leave management.</h2>
+        <p className="company-signup-aside-label">Your look</p>
+        <h2>See how your company will appear.</h2>
+        <BrandPreview
+          companyName={companyName}
+          slogan={slogan}
+          primary={primary}
+          logoUrl={logoPreview}
+        />
         <p>
-          Bring your team into one organized workspace, with the right tools for
-          managing time away.
+          Bring your team into one workspace, with your colours and logo in the
+          app.
         </p>
         <ol className="company-signup-steps">
           <li>

@@ -14,7 +14,7 @@ export function ForbiddenPage() {
       : 'your company administrator'
 
   return (
-    <PageShell title="You don&apos;t have access" eyebrow="403 · Forbidden">
+    <PageShell title="You don't have access">
       <Alert variant="destructive">
         This page is restricted to other roles, so its contents aren&apos;t shown.
         Ask {contact} to confirm whether you should have access.

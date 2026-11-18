@@ -7,27 +7,20 @@ import {
   ClipboardCheck,
   House,
   Link2,
+  Palette,
   Plus,
-  Settings2,
   UserRound,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
-import { NavLink, useLocation, useMatch } from 'react-router-dom'
-import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from '../../components/ui/sidebar'
+import { NavLink, useLocation } from 'react-router-dom'
+import { Badge } from '../../components/ui/badge'
 import { fetchTeamQueue } from '../../features/leave/leaveApi'
 import { paths } from '../constants/paths'
 import type { Role } from '../types/session'
+import { cn } from '../../lib/utils'
 
-type NavItem = {
+export type NavItem = {
   to: string
   label: string
   icon: LucideIcon
@@ -35,19 +28,17 @@ type NavItem = {
   count?: number
 }
 
-const companyNav: NavItem[] = [
+const companyPrimary: NavItem[] = [
   { to: paths.home, label: 'Home', icon: House, end: true },
   { to: paths.leave, label: 'My leave', icon: CalendarRange, end: true },
-  { to: paths.leaveNew, label: 'Book leave', icon: Plus },
   { to: paths.calendar, label: 'Calendar', icon: CalendarDays },
-  { to: paths.profile, label: 'Profile', icon: UserRound },
 ]
 
-const managerNav: NavItem[] = [
+const managerPrimary: NavItem[] = [
   { to: paths.teamQueue, label: 'Approvals', icon: ClipboardCheck, end: true },
 ]
 
-const adminNav: NavItem[] = [
+const adminPrimary: NavItem[] = [
   { to: paths.adminUsers, label: 'People', icon: UsersRound, end: true },
   { to: paths.adminDepartments, label: 'Departments', icon: Building2 },
   { to: paths.adminLeaveTypes, label: 'Leave types', icon: CalendarRange },
@@ -56,84 +47,18 @@ const adminNav: NavItem[] = [
     label: 'Week and holidays',
     icon: CalendarSync,
   },
-  { to: paths.adminRules, label: 'Company rules', icon: Settings2 },
   { to: paths.adminOnboarding, label: 'Invite link', icon: Link2 },
+  { to: paths.adminBranding, label: 'Appearance', icon: Palette },
 ]
 
-const platformNav: NavItem[] = [
+const platformPrimary: NavItem[] = [
   { to: paths.platform, label: 'Companies', icon: Building2, end: true },
   { to: paths.platformNewCompany, label: 'New company', icon: Plus },
-  { to: paths.profile, label: 'Profile', icon: UserRound },
 ]
 
-function NavGroup({
-  label,
-  items,
-  approvalCount,
-}: {
-  label: string
-  items: NavItem[]
-  approvalCount?: number | null
-}) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((item) => (
-            <NavMenuItem
-              key={item.to}
-              item={
-                item.to === paths.teamQueue && approvalCount !== undefined
-                  ? { ...item, count: approvalCount ?? undefined }
-                  : item
-              }
-            />
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  )
-}
-
-function NavMenuItem({ item }: { item: NavItem }) {
-  const isActive = useMatch({
-    path: item.to,
-    end: item.end ?? false,
-  })
-  const Icon = item.icon
-
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground"
-        isActive={Boolean(isActive)}
-        tooltip={item.label}
-      >
-        <NavLink to={item.to} end={item.end}>
-          <Icon aria-hidden="true" />
-          <span>{item.label}</span>
-        </NavLink>
-      </SidebarMenuButton>
-      {item.count !== undefined ? (
-        <SidebarMenuBadge aria-label={`${item.count} requests awaiting a decision`}>
-          {item.count}
-        </SidebarMenuBadge>
-      ) : null}
-    </SidebarMenuItem>
-  )
-}
-
-type NavProps = {
-  role: Role
-}
-
-export function Nav({ role }: NavProps) {
+export function useApprovalCount(role: Role) {
   const { pathname } = useLocation()
-  const isPlatform = role === 'platform'
   const isManager = role === 'manager' || role === 'company_admin'
-  const isAdmin = role === 'company_admin'
   const [approvalCount, setApprovalCount] = useState<number | null>(null)
 
   useEffect(() => {
@@ -158,20 +83,97 @@ export function Nav({ role }: NavProps) {
     }
   }, [isManager, pathname])
 
+  return approvalCount
+}
+
+export function getPrimaryNav(role: Role, approvalCount?: number | null): NavItem[] {
+  if (role === 'platform') return platformPrimary
+
+  const items = [...companyPrimary]
+  if (role === 'manager' || role === 'company_admin') {
+    items.push(
+      approvalCount != null
+        ? { ...managerPrimary[0], count: approvalCount }
+        : managerPrimary[0],
+    )
+  }
+  return items
+}
+
+export function getAdminNav(role: Role): NavItem[] {
+  return role === 'company_admin' ? adminPrimary : []
+}
+
+export function NavLinkItem({
+  item,
+  onNavigate,
+  className,
+}: {
+  item: NavItem
+  onNavigate?: () => void
+  className?: string
+}) {
+  const Icon = item.icon
+
   return (
-    <nav aria-label="Primary navigation" className="contents">
-      <NavGroup
-        label={isPlatform ? 'Platform' : 'Workspace'}
-        items={isPlatform ? platformNav : companyNav}
-      />
-      {isManager ? (
-        <NavGroup
-          label="Team"
-          items={managerNav}
-          approvalCount={approvalCount}
-        />
+    <NavLink
+      to={item.to}
+      end={item.end}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        cn(
+          'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+          isActive && 'bg-accent text-accent-foreground',
+          className,
+        )
+      }
+    >
+      <Icon aria-hidden="true" className="size-4 shrink-0" />
+      <span>{item.label}</span>
+      {item.count !== undefined ? (
+        <Badge
+          variant="secondary"
+          className="ml-auto h-5 min-w-5 justify-center px-1.5"
+          aria-label={`${item.count} requests awaiting a decision`}
+        >
+          {item.count}
+        </Badge>
       ) : null}
-      {isAdmin ? <NavGroup label="Administration" items={adminNav} /> : null}
+    </NavLink>
+  )
+}
+
+type NavProps = {
+  role: Role
+  onNavigate?: () => void
+  className?: string
+}
+
+export function Nav({ role, onNavigate, className }: NavProps) {
+  const approvalCount = useApprovalCount(role)
+  const primary = getPrimaryNav(role, approvalCount)
+  const admin = getAdminNav(role)
+
+  return (
+    <nav aria-label="Primary navigation" className={cn('flex flex-col gap-1', className)}>
+      {primary.map((item) => (
+        <NavLinkItem key={item.to} item={item} onNavigate={onNavigate} />
+      ))}
+      {admin.length > 0 ? (
+        <div className="mt-3 grid gap-1">
+          <p className="px-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Company
+          </p>
+          {admin.map((item) => (
+            <NavLinkItem key={item.to} item={item} onNavigate={onNavigate} />
+          ))}
+        </div>
+      ) : null}
+      <NavLinkItem
+        item={{ to: paths.profile, label: 'Profile', icon: UserRound }}
+        onNavigate={onNavigate}
+        className="md:hidden"
+      />
     </nav>
   )
 }
