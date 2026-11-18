@@ -68,6 +68,15 @@ type CompanyInsert = {
   trial_ends_at: Date | null;
 };
 
+type SignupBranding = {
+  slogan: string | null;
+  brandPrimary: string | null;
+  brandAccent: string | null;
+  brandColorsManual: boolean;
+  logo: Buffer | null;
+  logoMime: string | null;
+};
+
 type CheckoutRow = {
   id: number;
   company_name: string;
@@ -82,6 +91,12 @@ type CheckoutRow = {
   expires_at: Date;
   paid_at: Date | null;
   completed_at: Date | null;
+  slogan: string | null;
+  brand_primary: string | null;
+  brand_accent: string | null;
+  brand_colors_manual: boolean;
+  logo: Buffer | null;
+  logo_mime: string | null;
 };
 
 function pgCode(err: unknown): string {
@@ -134,6 +149,33 @@ function hashCheckoutToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+let brandingColumnsReady: boolean | null = null;
+
+async function hasBrandingColumns(): Promise<boolean> {
+  if (brandingColumnsReady !== null) {
+    return brandingColumnsReady;
+  }
+  try {
+    await pool.query(
+      `SELECT slogan, brand_primary, brand_accent, brand_colors_manual, logo_mime, logo
+       FROM companies
+       LIMIT 0`,
+    );
+    await pool.query(
+      `SELECT slogan, brand_primary, brand_accent, brand_colors_manual, logo_mime, logo
+       FROM signup_checkouts
+       LIMIT 0`,
+    );
+    brandingColumnsReady = true;
+  } catch (err) {
+    if (!isCompaniesTableMissing(err)) {
+      throw err;
+    }
+    brandingColumnsReady = false;
+  }
+  return brandingColumnsReady;
+}
+
 function newCheckoutToken(): { token: string; hash: string } {
   const token = randomBytes(32).toString("base64url");
   return { token, hash: hashCheckoutToken(token) };
@@ -179,6 +221,7 @@ export async function createSignupCheckout(input: {
   passwordHash: string;
   displayName: string;
   planCode: string;
+  branding?: SignupBranding;
 }): Promise<SignupCheckout | "bad_plan"> {
   const quote = quotePlan(input.planCode);
   if (!quote) {
@@ -187,27 +230,57 @@ export async function createSignupCheckout(input: {
 
   const { token, hash } = newCheckoutToken();
   const expiresAt = new Date(Date.now() + CHECKOUT_TTL_MS);
+  const branding = input.branding ?? {
+    slogan: null,
+    brandPrimary: null,
+    brandAccent: null,
+    brandColorsManual: false,
+    logo: null,
+    logoMime: null,
+  };
 
-  await pool.query(
-    `INSERT INTO signup_checkouts (
-       token_hash, company_name, display_name, email, password_hash,
-       plan_code, amount_cents, vat_cents, total_cents, currency, expires_at
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [
-      hash,
-      input.companyName,
-      input.displayName,
-      input.email,
-      input.passwordHash,
-      quote.code,
-      quote.amountCents,
-      quote.vatCents,
-      quote.totalCents,
-      quote.currency,
-      expiresAt,
-    ],
-  );
+  const values = [
+    hash,
+    input.companyName,
+    input.displayName,
+    input.email,
+    input.passwordHash,
+    quote.code,
+    quote.amountCents,
+    quote.vatCents,
+    quote.totalCents,
+    quote.currency,
+    expiresAt,
+  ];
+
+  if (await hasBrandingColumns()) {
+    await pool.query(
+      `INSERT INTO signup_checkouts (
+         token_hash, company_name, display_name, email, password_hash,
+         plan_code, amount_cents, vat_cents, total_cents, currency, expires_at,
+         slogan, brand_primary, brand_accent, brand_colors_manual, logo_mime, logo
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+      [
+        ...values,
+        branding.slogan,
+        branding.brandPrimary,
+        branding.brandAccent,
+        branding.brandColorsManual,
+        branding.logoMime,
+        branding.logo,
+      ],
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO signup_checkouts (
+         token_hash, company_name, display_name, email, password_hash,
+         plan_code, amount_cents, vat_cents, total_cents, currency, expires_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      values,
+    );
+  }
 
   return toCheckoutPublic(
     token,
@@ -220,19 +293,31 @@ export async function completePaidSignup(
   token: string,
 ): Promise<SignupResult | CompleteSignupFailure> {
   const hash = hashCheckoutToken(token);
+  const brandingReady = await hasBrandingColumns();
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-    const found = await client.query<CheckoutRow>(
-      `SELECT id, company_name, display_name, email, password_hash, plan_code,
-              amount_cents, vat_cents, total_cents, currency, expires_at,
-              paid_at, completed_at
-       FROM signup_checkouts
-       WHERE token_hash = $1
-       FOR UPDATE`,
-      [hash],
-    );
+    const found = brandingReady
+      ? await client.query<CheckoutRow>(
+          `SELECT id, company_name, display_name, email, password_hash, plan_code,
+                  amount_cents, vat_cents, total_cents, currency, expires_at,
+                  paid_at, completed_at, slogan, brand_primary, brand_accent,
+                  brand_colors_manual, logo, logo_mime
+           FROM signup_checkouts
+           WHERE token_hash = $1
+           FOR UPDATE`,
+          [hash],
+        )
+      : await client.query<CheckoutRow>(
+          `SELECT id, company_name, display_name, email, password_hash, plan_code,
+                  amount_cents, vat_cents, total_cents, currency, expires_at,
+                  paid_at, completed_at
+           FROM signup_checkouts
+           WHERE token_hash = $1
+           FOR UPDATE`,
+          [hash],
+        );
     const checkout = found.rows[0];
     if (!checkout) {
       await client.query("ROLLBACK");
@@ -260,12 +345,31 @@ export async function completePaidSignup(
     for (let attempt = 0; attempt < SLUG_ATTEMPTS; attempt += 1) {
       await client.query("SAVEPOINT signup_slug");
       try {
-        const inserted = await client.query<CompanyInsert>(
-          `INSERT INTO companies (name, slug, status)
-           VALUES ($1, $2, 'active')
-           RETURNING id, name, slug, trial_ends_at`,
-          [checkout.company_name, slug],
-        );
+        const inserted = brandingReady
+          ? await client.query<CompanyInsert>(
+              `INSERT INTO companies (
+                 name, slug, status, slogan, brand_primary, brand_accent,
+                 brand_colors_manual, logo_mime, logo
+               )
+               VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8)
+               RETURNING id, name, slug, trial_ends_at`,
+              [
+                checkout.company_name,
+                slug,
+                checkout.slogan ?? null,
+                checkout.brand_primary ?? null,
+                checkout.brand_accent ?? null,
+                Boolean(checkout.brand_colors_manual),
+                checkout.logo_mime ?? null,
+                checkout.logo ?? null,
+              ],
+            )
+          : await client.query<CompanyInsert>(
+              `INSERT INTO companies (name, slug, status)
+               VALUES ($1, $2, 'active')
+               RETURNING id, name, slug, trial_ends_at`,
+              [checkout.company_name, slug],
+            );
         company = inserted.rows[0];
         await client.query("RELEASE SAVEPOINT signup_slug");
         break;

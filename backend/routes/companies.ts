@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
+import multer from "multer";
 import {
   completePaidSignup,
   createSignupCheckout,
@@ -43,6 +44,136 @@ const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
 const MAX_HOLIDAY_NAME_LEN = 120;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+const MAX_SLOGAN_LEN = 120;
+const MAX_LOGO_BYTES = 1_000_000;
+const LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_LOGO_BYTES, files: 1 },
+});
+
+function asHexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return HEX_COLOR_RE.test(trimmed) ? trimmed : null;
+}
+
+function asSlogan(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MAX_SLOGAN_LEN) return undefined;
+  return trimmed;
+}
+
+function isUndefinedColumn(err: unknown): boolean {
+  return Boolean(
+    err && typeof err === "object" && "code" in err && err.code === "42703",
+  );
+}
+
+function parseLogoPayload(body: {
+  logoBase64?: unknown;
+  logoMime?: unknown;
+}): { logo: Buffer; mime: string } | null | "invalid" {
+  if (body.logoBase64 == null && body.logoMime == null) {
+    return null;
+  }
+  if (typeof body.logoBase64 !== "string" || typeof body.logoMime !== "string") {
+    return "invalid";
+  }
+  if (!LOGO_TYPES.has(body.logoMime)) {
+    return "invalid";
+  }
+  try {
+    const logo = Buffer.from(body.logoBase64, "base64");
+    if (!logo.length || logo.length > MAX_LOGO_BYTES) {
+      return "invalid";
+    }
+    return { logo, mime: body.logoMime };
+  } catch {
+    return "invalid";
+  }
+}
+
+async function fetchCompanyPublic(companyId: number) {
+  try {
+    const result = await pool.query<CompanyPublicRow>(
+      `${COMPANY_PUBLIC_SQL}
+       WHERE id = $1
+       LIMIT 1`,
+      [companyId],
+    );
+    return result.rows[0] ?? null;
+  } catch (err) {
+    if (!isUndefinedColumn(err)) {
+      throw err;
+    }
+    const result = await pool.query<
+      Omit<
+        CompanyPublicRow,
+        | "slogan"
+        | "brand_primary"
+        | "brand_accent"
+        | "brand_colors_manual"
+        | "has_logo"
+      >
+    >(
+      `SELECT id, name, slug, status, trial_ends_at
+       FROM companies
+       WHERE id = $1
+       LIMIT 1`,
+      [companyId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      ...row,
+      slogan: null,
+      brand_primary: null,
+      brand_accent: null,
+      brand_colors_manual: false,
+      has_logo: false,
+    };
+  }
+}
+
+type CompanyPublicRow = {
+  id: number;
+  name: string;
+  slug: string;
+  status: string;
+  trial_ends_at: Date | null;
+  slogan: string | null;
+  brand_primary: string | null;
+  brand_accent: string | null;
+  brand_colors_manual: boolean;
+  has_logo: boolean;
+};
+
+function toPublicCompany(row: CompanyPublicRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    status: row.status,
+    trialEndsAt: row.trial_ends_at ? row.trial_ends_at.toISOString() : null,
+    slogan: row.slogan ?? null,
+    brandPrimary: row.brand_primary ?? null,
+    brandAccent: row.brand_accent ?? null,
+    brandColorsManual: Boolean(row.brand_colors_manual),
+    hasLogo: Boolean(row.has_logo),
+    logoUrl: row.has_logo ? "/api/companies/current/logo" : null,
+  };
+}
+
+const COMPANY_PUBLIC_SQL = `SELECT id, name, slug, status, trial_ends_at,
+       slogan, brand_primary, brand_accent, brand_colors_manual,
+       (logo IS NOT NULL) AS has_logo
+     FROM companies`;
 const STAFF_REVIEWERS = ["manager", "company_admin"] as const;
 
 type StaffReviewer = (typeof STAFF_REVIEWERS)[number];
@@ -438,6 +569,33 @@ companiesRouter.post("/signup", async (req, res) => {
   }
 
   try {
+    const slogan = asSlogan(req.body?.slogan);
+    if (req.body?.slogan !== undefined && slogan === undefined) {
+      res.status(400).json({ error: "Slogan must be at most 120 characters" });
+      return;
+    }
+    const brandPrimary =
+      req.body?.brandPrimary == null
+        ? null
+        : asHexColor(req.body.brandPrimary);
+    const brandAccent =
+      req.body?.brandAccent == null
+        ? null
+        : asHexColor(req.body.brandAccent);
+    if (req.body?.brandPrimary != null && !brandPrimary) {
+      res.status(400).json({ error: "Brand colour must be a hex value such as #059669" });
+      return;
+    }
+    if (req.body?.brandAccent != null && !brandAccent) {
+      res.status(400).json({ error: "Hover colour must be a hex value such as #047857" });
+      return;
+    }
+    const logo = parseLogoPayload(req.body ?? {});
+    if (logo === "invalid") {
+      res.status(400).json({ error: "Logo must be a PNG, JPG, or WEBP under 1 MB" });
+      return;
+    }
+
     const hash = await bcrypt.hash(password, 10);
     const created = await createSignupCheckout({
       companyName,
@@ -445,6 +603,14 @@ companiesRouter.post("/signup", async (req, res) => {
       passwordHash: hash,
       displayName,
       planCode,
+      branding: {
+        slogan: slogan ?? null,
+        brandPrimary,
+        brandAccent,
+        brandColorsManual: req.body?.brandColorsManual === true,
+        logo: logo?.logo ?? null,
+        logoMime: logo?.mime ?? null,
+      },
     });
     if (created === "bad_plan") {
       res.status(400).json({ error: "Unknown plan" });
@@ -519,33 +685,169 @@ companiesRouter.get("/current", requireAuth, async (req, res) => {
     return;
   }
 
-  const result = await pool.query<{
-    id: number;
-    name: string;
-    slug: string;
-    status: string;
-    trial_ends_at: Date | null;
-  }>(
-    `SELECT id, name, slug, status, trial_ends_at
-     FROM companies
-     WHERE id = $1
-     LIMIT 1`,
-    [companyId],
-  );
-  const row = result.rows[0];
+  const row = await fetchCompanyPublic(companyId);
   if (!row) {
     res.status(403).json({ error: NOT_IN_COMPANY });
     return;
   }
 
-  res.json({
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    status: row.status,
-    trialEndsAt: row.trial_ends_at ? row.trial_ends_at.toISOString() : null,
-  });
+  res.json(toPublicCompany(row));
 });
+
+companiesRouter.patch(
+  "/current/branding",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+
+    const slogan = asSlogan(req.body?.slogan);
+    if (req.body?.slogan !== undefined && slogan === undefined) {
+      res.status(400).json({ error: "Slogan must be at most 120 characters" });
+      return;
+    }
+    const brandPrimary =
+      req.body?.brandPrimary === null
+        ? null
+        : req.body?.brandPrimary !== undefined
+          ? asHexColor(req.body.brandPrimary)
+          : undefined;
+    const brandAccent =
+      req.body?.brandAccent === null
+        ? null
+        : req.body?.brandAccent !== undefined
+          ? asHexColor(req.body.brandAccent)
+          : undefined;
+    if (req.body?.brandPrimary !== undefined && brandPrimary === undefined) {
+      res.status(400).json({ error: "Brand colour must be a hex value such as #059669" });
+      return;
+    }
+    if (req.body?.brandAccent !== undefined && brandAccent === undefined) {
+      res.status(400).json({ error: "Hover colour must be a hex value such as #047857" });
+      return;
+    }
+
+    try {
+      await pool.query(
+        `UPDATE companies
+         SET slogan = $2,
+             brand_primary = $3,
+             brand_accent = $4,
+             brand_colors_manual = $5
+         WHERE id = $1`,
+        [
+          companyId,
+          slogan === undefined ? null : slogan,
+          brandPrimary === undefined ? null : brandPrimary,
+          brandAccent === undefined ? null : brandAccent,
+          typeof req.body?.brandColorsManual === "boolean"
+            ? req.body.brandColorsManual
+            : false,
+        ],
+      );
+    } catch (err) {
+      if (isCompaniesTableMissing(err) || isUndefinedColumn(err)) {
+        res.status(503).json({ error: "Appearance is not available yet." });
+        return;
+      }
+      throw err;
+    }
+    const fresh = await fetchCompanyPublic(companyId);
+    res.json(toPublicCompany(fresh!));
+  },
+);
+
+companiesRouter.get(
+  "/current/logo",
+  requireAuth,
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+    let row: { logo: Buffer; logo_mime: string | null } | undefined;
+    try {
+      const result = await pool.query<{ logo: Buffer; logo_mime: string | null }>(
+        `SELECT logo, logo_mime FROM companies WHERE id = $1 LIMIT 1`,
+        [companyId],
+      );
+      row = result.rows[0];
+    } catch (err) {
+      if (isCompaniesTableMissing(err) || isUndefinedColumn(err)) {
+        res.status(404).json({ error: "No logo uploaded" });
+        return;
+      }
+      throw err;
+    }
+    if (!row?.logo) {
+      res.status(404).json({ error: "No logo uploaded" });
+      return;
+    }
+    res.setHeader("Content-Type", row.logo_mime || "image/png");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(row.logo);
+  },
+);
+
+companiesRouter.post(
+  "/current/logo",
+  requireAuth,
+  requireRole("company_admin"),
+  logoUpload.single("logo"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "Choose a PNG, JPG, or WEBP logo" });
+      return;
+    }
+    if (!LOGO_TYPES.has(file.mimetype)) {
+      res.status(415).json({ error: "Logo must be PNG, JPG, or WEBP" });
+      return;
+    }
+
+    try {
+      await pool.query(
+        `UPDATE companies
+         SET logo = $2, logo_mime = $3
+         WHERE id = $1`,
+        [companyId, file.buffer, file.mimetype],
+      );
+    } catch (err) {
+      if (isCompaniesTableMissing(err) || isUndefinedColumn(err)) {
+        res.status(503).json({ error: "Appearance is not available yet." });
+        return;
+      }
+      throw err;
+    }
+    const fresh = await fetchCompanyPublic(companyId);
+    res.json(toPublicCompany(fresh!));
+  },
+);
+
+companiesRouter.delete(
+  "/current/logo",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) return;
+    try {
+      await pool.query(
+        `UPDATE companies SET logo = NULL, logo_mime = NULL WHERE id = $1`,
+        [companyId],
+      );
+    } catch (err) {
+      if (isCompaniesTableMissing(err) || isUndefinedColumn(err)) {
+        res.status(503).json({ error: "Appearance is not available yet." });
+        return;
+      }
+      throw err;
+    }
+    const fresh = await fetchCompanyPublic(companyId);
+    res.json(toPublicCompany(fresh!));
+  },
+);
 
 companiesRouter.get(
   "/current/rules",
