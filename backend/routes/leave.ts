@@ -26,6 +26,7 @@ import {
   getBalance,
   listBalances,
 } from "../leave/balances.js";
+import { buildLeaveReviewEvents } from "../leave/reviewEvents.js";
 import { canReviewLeaveRequest } from "../leave/reviewerAccess.js";
 import { todayInSast } from "../leave/todayInSast.js";
 import {
@@ -949,6 +950,8 @@ type MyLeaveRow = {
   supporting_file_key: string | null;
   status: string;
   submitted_at: Date;
+  reviewed_at: Date | null;
+  cancelled_at: Date | null;
   reviewer_user_id: number | null;
   assigned_user_ids: number[];
   decision_reason: string | null;
@@ -972,6 +975,8 @@ const MY_LEAVE_SQL = `SELECT
        lr.supporting_file_key,
        lr.status,
        lr.submitted_at,
+       lr.reviewed_at,
+       lr.cancelled_at,
        lr.reviewer_user_id,
        lr.decision_reason,
        employee.email AS employee_email,
@@ -1683,13 +1688,24 @@ leaveRouter.get(
     const reviewContext = !isOwner && canReview
       ? await loadReviewContext(request)
       : null;
+    const events = reviewContext
+      ? buildLeaveReviewEvents({
+          ...detail,
+          reviewer_name: detail.reviewer_name ?? null,
+        })
+      : null;
     res.json({
       ...toQueueItem(request),
       ...toMyLeaveItem(detail),
       ...(reviewContext ? {
         reviewContext,
-        balance: reviewContext.balance,
+        balance: {
+          available: reviewContext.balance.availableBefore,
+          afterApproval: reviewContext.balance.availableAfter,
+        },
+        teamOverlaps: reviewContext.alsoOff,
         teamOverlap: reviewContext.alsoOff,
+        events,
       } : {}),
     });
   },
