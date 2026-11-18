@@ -125,7 +125,7 @@ Body: `{ "email", "password" }`, optionally with `accountId` after choosing a co
 
 Wrong password and unknown email both return **401** `{ "error": "Invalid email or password" }`.
 
-Correct password on an unverified account (`pending_verification`) returns **403** `{ "error": "Email not verified. Check your inbox (Mailpit in local dev) or request a new link." }` and does **not** set a cookie.
+Correct password on an unverified account (`pending_verification`) returns **403** `{ "error": "Email not verified. Check your inbox or request a new link." }` and does **not** set a cookie. Local development appends `(Mailpit in local dev)` to that message; production never mentions Mailpit.
 
 If the email/password matches at least one membership and the email has multiple company accounts, the response is **200** `{ "accountSelectionRequired": true, "accounts": [{ "id", "companyName", "role" }] }`. Submit the chosen account's `id` as `accountId` with the same email/password. If that account has a different password, sign-in asks for that account's password. A single membership keeps the existing sign-in flow. The company-specific authenticator challenge and session are bound to the selected membership.
 
@@ -218,7 +218,7 @@ Body: `{ "currentPassword", "newPassword" }`. Length rules match register (8–1
 
 No body. Emails a one-time link to the account address (`/reset-authenticator?token=...`). Cooldown is one minute per user. Does **not** wipe TOTP until the link is consumed. Uses `totp_reset_tokens` (hashed, 1 hour TTL). Does **not** reuse `password_reset_tokens` or `email_verification_tokens`.
 
-- 200 `{ "ok": true, "message": "Check your inbox (Mailpit in local dev) for a link to reset your authenticator." }`
+- 200 `{ "ok": true, "message": "Check your inbox for a link to reset your authenticator." }` (local development appends `(Mailpit in local dev)`; production never mentions Mailpit)
 - 401 `{ "error": "Not signed in" }`
 - 500 `{ "error": "Could not send authenticator reset email" }`
 

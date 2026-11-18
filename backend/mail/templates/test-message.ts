@@ -5,11 +5,11 @@ export function testMessage(): MailContent {
     subject: "Leave Request System mailer test",
     text: [
       "This is a test message from the Leave Request System mailer.",
-      "If you can read this in Mailpit, SMTP is wired correctly.",
+      "If you can read this, SMTP is wired correctly.",
     ].join("\n"),
     html: [
       "<p>This is a test message from the Leave Request System mailer.</p>",
-      "<p>If you can read this in Mailpit, SMTP is wired correctly.</p>",
+      "<p>If you can read this, SMTP is wired correctly.</p>",
     ].join(""),
   };
 }
