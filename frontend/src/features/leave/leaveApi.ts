@@ -42,12 +42,14 @@ export type LeavePreviewResponse = {
   workingDaysCount: number
   excludedDates?: string[]
   holidays?: LeavePreviewHoliday[]
+  availableAfter?: number | null
   approverName?: string | null
   reviewerName?: string | null
   documentRequired?: boolean
   documentRule?: string | null
   noticeWarning?: string | null
   noticeWarnings?: string[]
+  warnings?: string[]
 }
 
 export type LeaveRequestInput = {

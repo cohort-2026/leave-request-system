@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  Ban,
   Building2,
   CalendarDays,
   CalendarRange,
   CalendarSync,
   ClipboardCheck,
-  FileUp,
   House,
   Link2,
   Plus,
   Settings2,
-  ShieldCheck,
   UserRound,
   UsersRound,
   type LucideIcon,
@@ -52,7 +49,6 @@ const managerNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { to: paths.adminUsers, label: 'People', icon: UsersRound, end: true },
-  { to: paths.adminImport, label: 'Import', icon: FileUp },
   { to: paths.adminDepartments, label: 'Departments', icon: Building2 },
   { to: paths.adminLeaveTypes, label: 'Leave types', icon: CalendarRange },
   {
@@ -60,10 +56,8 @@ const adminNav: NavItem[] = [
     label: 'Week and holidays',
     icon: CalendarSync,
   },
-  { to: paths.adminBlocks, label: 'Blocked dates', icon: Ban },
   { to: paths.adminRules, label: 'Company rules', icon: Settings2 },
   { to: paths.adminOnboarding, label: 'Invite link', icon: Link2 },
-  { to: paths.adminSso, label: 'Company SSO', icon: ShieldCheck },
 ]
 
 const platformNav: NavItem[] = [
