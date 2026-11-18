@@ -116,6 +116,17 @@ function noticeWarningsFrom(preview: LeavePreviewResponse) {
   return warnings.filter(Boolean)
 }
 
+function formatBalanceDays(days: number) {
+  return String(Number(days.toFixed(2)))
+}
+
+function remainingLabel(balance: LeaveBalance | null, loading: boolean) {
+  if (loading) return '…'
+  if (!balance) return 'No balance'
+  if (!balance.hasBalance) return 'No limit'
+  return `${formatBalanceDays(balance.available ?? 0)} days available`
+}
+
 type PreviewState = {
   key: string
   data?: LeavePreviewResponse
@@ -235,10 +246,14 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     previewKey && preview?.key === previewKey ? preview : null
   const loadingPreview = Boolean(previewKey && !currentPreview)
   const workingDays = currentPreview?.data?.workingDaysCount
-  const remainingDays = currentBalance?.daysRemaining
+  const unlimitedType = currentBalance !== null && !currentBalance.hasBalance
+  const remainingDays = unlimitedType
+    ? null
+    : (currentBalance?.available ?? null)
   const overBalance =
+    !unlimitedType &&
+    remainingDays !== null &&
     workingDays !== undefined &&
-    remainingDays !== undefined &&
     workingDays > remainingDays
   const zeroDays = workingDays === 0
   const needsReason = selectedType
@@ -326,9 +341,13 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
         ? 'A supporting file is required.'
         : `A supporting file is required after ${documentRequiredAfter} working days.`)
   const balanceAfter =
-    remainingDays !== undefined && workingDays !== undefined
-      ? remainingDays - workingDays
-      : null
+    currentPreview?.data && 'availableAfter' in currentPreview.data
+      ? currentPreview.data.availableAfter
+      : unlimitedType
+        ? null
+        : remainingDays !== null && workingDays !== undefined
+          ? remainingDays - workingDays
+          : null
 
   const selectedRange = {
     from: start ? fromIsoDate(start) : undefined,
@@ -459,11 +478,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
               >
                 {leaveTypes.map((type) => {
                   const balance = matchBalance(balancesWithIds, type)
-                  const remaining = loadingBalances
-                    ? '…'
-                    : balance
-                      ? `${balance.daysRemaining} days available`
-                      : 'No balance'
+                  const remaining = remainingLabel(balance, loadingBalances)
                   const selected = selectedTypeId === String(type.id)
                   return (
                     <FieldLabel
@@ -695,9 +710,11 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
             <div>
               <p className="font-medium">Balance after</p>
               <p className="text-muted-foreground">
-                {balanceAfter == null
-                  ? 'Select a type with a balance to see remaining days after this request.'
-                  : `${balanceAfter} days remaining`}
+                {unlimitedType
+                  ? 'No limit'
+                  : balanceAfter == null
+                    ? 'Select a type with a balance to see remaining days after this request.'
+                    : `${formatBalanceDays(balanceAfter)} days remaining`}
               </p>
               {overBalance ? (
                 <p className="text-destructive">

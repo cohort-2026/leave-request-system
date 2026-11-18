@@ -26,7 +26,9 @@ psql "$DATABASE_URL" -f sql/020_company_memberships.sql
 psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
 psql "$DATABASE_URL" -f sql/022_half_days.sql
 psql "$DATABASE_URL" -f sql/023_document_access.sql
+psql "$DATABASE_URL" -f sql/025_events.sql
 psql "$DATABASE_URL" -f sql/026_policy_holidays.sql
+psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -81,7 +83,11 @@ psql "$DATABASE_URL" -f sql/026_policy_holidays.sql
 
 `023_document_access.sql` (issue 253) stores sick notes in `leave_documents.file` as BYTEA (filename, mime, size_bytes) and logs authorised downloads in `leave_document_access`. The file bytes are the source of truth; do not store a filesystem path.
 
+`025_events.sql` (issue 254) creates append-only `leave_request_events` (company, request, actor, action, from/to status, JSONB details) and changes `leave_requests.employee_user_id` to `ON DELETE RESTRICT` so deleting a user who has leave fails with a foreign-key error. Actions: submitted, edited, approved, declined, withdrawn, cancelled, auto_approved, document_viewed.
+
 `026_policy_holidays.sql` adds the leave-type `colour` token and seeds colours for existing starter types (Annual: violet, Sick: rose, Family responsibility: amber, Unpaid: slate, Study: sky). It also adds `public_holidays.source` (default `custom`; ZA-seeded holidays use `za`) and nullable `public_holidays.actual_date` for observed dates.
+
+`027_s1_balances.sql` (issues 251 and 256) adds leave-type balance and cycle settings, backfills each balance's entitlement, stores half-day amounts at one decimal place, and seeds missing balances for active company members. Pending leave is calculated from pending requests rather than stored in the balance row.
 
 ## Demo password
 

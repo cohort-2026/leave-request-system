@@ -14,6 +14,10 @@ import { PageShell } from '../../../app/layouts/PageShell'
 import { Alert, Select } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError, apiRequest } from '../../../services/api'
+import {
+  mapLeaveBalance,
+  type LeaveBalance,
+} from '../../leave/balancesApi'
 import { roleLabel } from '../../../shared/types/session'
 import {
   listDepartments,
@@ -29,90 +33,19 @@ import {
   type PublicUser,
 } from './usersApi'
 
-type PersonBalance = {
-  leaveType: string
-  entitledDays: number
-  takenDays: number
-  pendingDays: number | null
-  availableDays: number
-}
-
-type BalancePayload = {
-  leaveType?: unknown
-  totalAllowance?: unknown
-  entitledDays?: unknown
-  entitled?: unknown
-  total?: unknown
-  usedDays?: unknown
-  takenDays?: unknown
-  taken?: unknown
-  pendingDays?: unknown
-  daysPending?: unknown
-  pending?: unknown
-  daysRemaining?: unknown
-  availableDays?: unknown
-  available?: unknown
-  remainingDays?: unknown
-  remaining?: unknown
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function requiredBalanceNumber(label: string, ...values: unknown[]): number {
-  const value = values.find(
-    (candidate) => candidate !== undefined && candidate !== null,
-  )
-  if (value === undefined || (typeof value === 'string' && !value.trim())) {
-    throw new Error(`Balance response is missing ${label}.`)
-  }
-
-  const number = Number(value)
-  if (!Number.isFinite(number)) {
-    throw new Error(`Balance response has an invalid ${label}.`)
-  }
-  return number
-}
-
-function mapPersonBalance(value: unknown): PersonBalance {
+function mapPersonBalance(value: unknown): LeaveBalance {
   if (!isRecord(value)) {
     throw new Error('Balance response contains an invalid row.')
   }
-
-  const row = value as BalancePayload
-  const leaveType = typeof row.leaveType === 'string' ? row.leaveType.trim() : ''
-  if (!leaveType) throw new Error('Balance response is missing a leave type.')
-
-  const pendingValue = row.pendingDays ?? row.daysPending ?? row.pending
-  return {
-    leaveType,
-    entitledDays: requiredBalanceNumber(
-      'entitlement',
-      row.totalAllowance,
-      row.entitledDays,
-      row.entitled,
-      row.total,
-    ),
-    takenDays: requiredBalanceNumber(
-      'taken days',
-      row.usedDays,
-      row.takenDays,
-      row.taken,
-    ),
-    pendingDays:
-      pendingValue === undefined || pendingValue === null
-        ? null
-        : requiredBalanceNumber('pending days', pendingValue),
-    availableDays: requiredBalanceNumber(
-      'available days',
-      row.daysRemaining,
-      row.availableDays,
-      row.available,
-      row.remainingDays,
-      row.remaining,
-    ),
+  const mapped = mapLeaveBalance(value)
+  if (!mapped.leaveType) {
+    throw new Error('Balance response is missing a leave type.')
   }
+  return mapped
 }
 
 function getInitials(name: string): string {
@@ -144,7 +77,7 @@ export function UserDetailPage() {
   const [person, setPerson] = useState<PublicUser | null>(null)
   const [balanceResult, setBalanceResult] = useState<{
     userId: number
-    balances: PersonBalance[]
+    balances: LeaveBalance[]
     error: string | null
   } | null>(null)
   const balances = balanceResult?.userId === id ? balanceResult.balances : []
@@ -400,56 +333,60 @@ export function UserDetailPage() {
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {balances.map((balance) => {
                     const usedPercent =
-                      balance.entitledDays > 0
+                      balance.hasBalance && balance.entitled > 0
                         ? Math.min(
                             100,
                             Math.max(
                               0,
-                              (balance.takenDays / balance.entitledDays) * 100,
+                              ((balance.taken + balance.pending) /
+                                balance.entitled) *
+                                100,
                             ),
                           )
                         : 0
 
                     return (
-                      <Card key={balance.leaveType}>
+                      <Card key={balance.leaveTypeId ?? balance.leaveType}>
                         <CardHeader>
                           <CardTitle>{balance.leaveType}</CardTitle>
                         </CardHeader>
                         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3">
                           <BalanceMetric
                             label="Entitled"
-                            value={formatDays(balance.entitledDays)}
+                            value={
+                              balance.hasBalance
+                                ? formatDays(balance.entitled)
+                                : 'No limit'
+                            }
                           />
                           <BalanceMetric
                             label="Taken"
-                            value={formatDays(balance.takenDays)}
+                            value={formatDays(balance.taken)}
                           />
                           <BalanceMetric
                             label="Pending"
-                            value={
-                              balance.pendingDays === null
-                                ? 'Not reported'
-                                : formatDays(balance.pendingDays)
-                            }
-                            detail={
-                              balance.pendingDays === null
-                                ? 'Not included in response'
-                                : undefined
-                            }
+                            value={formatDays(balance.pending)}
                           />
                           <BalanceMetric
                             label="Available"
-                            value={formatDays(balance.availableDays)}
+                            value={
+                              balance.hasBalance
+                                ? formatDays(balance.available ?? 0)
+                                : 'No limit'
+                            }
                           />
-                          <div className="col-span-2 space-y-2 pt-1">
-                            <Progress
-                              value={usedPercent}
-                              aria-label={`${balance.leaveType} entitlement used`}
-                            />
-                            <p className="m-0 text-xs text-muted-foreground">
-                              {formatDays(usedPercent)}% of entitlement taken
-                            </p>
-                          </div>
+                          {balance.hasBalance ? (
+                            <div className="col-span-2 space-y-2 pt-1">
+                              <Progress
+                                value={usedPercent}
+                                aria-label={`${balance.leaveType} entitlement used`}
+                              />
+                              <p className="m-0 text-xs text-muted-foreground">
+                                {formatDays(usedPercent)}% of entitlement taken
+                                or pending
+                              </p>
+                            </div>
+                          ) : null}
                         </CardContent>
                       </Card>
                     )

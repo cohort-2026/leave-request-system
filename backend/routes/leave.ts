@@ -1,4 +1,4 @@
-import { recordEvent } from "../leave/events.js";
+import { listLeaveRequestEvents, recordEvent } from "../leave/events.js";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
@@ -24,8 +24,11 @@ import {
 import type { AuthedUser } from "../middleware/auth.js";
 import {
   applyApprovedLeaveToBalance,
+  getBalance,
   listBalances,
 } from "../leave/balances.js";
+import { buildLeaveReviewEvents } from "../leave/reviewEvents.js";
+import { canReviewLeaveRequest } from "../leave/reviewerAccess.js";
 import { todayInSast } from "../leave/todayInSast.js";
 import {
   countWorkingDaysPreview,
@@ -111,6 +114,14 @@ class LeaveRequestError extends Error {
     super(message);
     this.name = "LeaveRequestError";
   }
+}
+
+function formatBalanceDays(days: number): string {
+  return String(Math.round((days + Number.EPSILON) * 10) / 10);
+}
+
+function insufficientBalanceMessage(available: number, pending: number): string {
+  return `You have ${formatBalanceDays(available)} days available (${formatBalanceDays(pending)} pending)`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -451,14 +462,7 @@ function canDownloadSupportingFile(
   row: QueueRequestRow,
 ): boolean {
   if (row.employee_user_id === actor.id) return true;
-  if (actor.role === "company_admin") return true;
-  if (actor.role === "manager") {
-    return (
-      row.assigned_user_ids.includes(actor.id) ||
-      row.reviewer_user_id === actor.id
-    );
-  }
-  return false;
+  return canReviewLeaveRequest(actor, row);
 }
 
 leaveRouter.get(
@@ -557,23 +561,31 @@ leaveRouter.get(
       );
     }
 
-    const balanceResult = await pool.query<{ days_remaining: number }>(
-      `SELECT days_remaining
-       FROM leave_balances
-       WHERE company_id = $1
-         AND user_id = $2
-         AND leave_type_id = $3
-       LIMIT 1`,
-      [companyId, req.user!.id, leaveTypeId],
+    const balance = await getBalance(
+      req.user!.id,
+      companyId,
+      leaveTypeId,
+      pool,
     );
-    const remaining = balanceResult.rows[0]
-      ? Number(balanceResult.rows[0].days_remaining)
-      : null;
+    const remaining =
+      balance?.hasBalance && balance.hasBalanceRow
+        ? balance.available
+        : null;
     const availableAfter =
       remaining === null ? null : remaining - workingDaysCount;
-    if (remaining !== null && workingDaysCount > remaining) {
+    if (workingDaysCount <= 0) {
+      warnings.push("Your dates contain no working days");
+    }
+    if (balance?.hasBalance && !balance.hasBalanceRow) {
+      warnings.push("No balance exists for this leave type");
+    }
+    if (
+      balance?.hasBalance &&
+      balance.available !== null &&
+      workingDaysCount > balance.available
+    ) {
       warnings.push(
-        `This request exceeds your remaining balance of ${remaining} days`,
+        insufficientBalanceMessage(balance.available, balance.pending),
       );
     }
 
@@ -703,6 +715,9 @@ leaveRouter.post(
           startHalf,
           endHalf,
         ).workingDays;
+        if (workingDaysCount <= 0) {
+          throw new LeaveRequestError("Your dates contain no working days");
+        }
 
         if (
           documentIsRequired(
@@ -736,27 +751,31 @@ leaveRouter.post(
           );
         }
 
-        const balanceResult = await client.query<{
-          days_remaining: number;
-        }>(
-          `SELECT days_remaining
-           FROM leave_balances
-           WHERE company_id = $1
-             AND user_id = $2
-             AND leave_type_id = $3
-           LIMIT 1`,
-          [companyId, req.user!.id, leaveTypeId],
+        const balance = await getBalance(
+          req.user!.id,
+          companyId,
+          leaveTypeId,
+          client,
         );
-        const balance = balanceResult.rows[0];
         if (!balance) {
           throw new LeaveRequestError(
             "No balance exists for this leave type",
             400,
           );
         }
-        if (workingDaysCount > Number(balance.days_remaining)) {
+        if (balance.hasBalance && !balance.hasBalanceRow) {
           throw new LeaveRequestError(
-            `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+            "No balance exists for this leave type",
+            400,
+          );
+        }
+        if (
+          balance.hasBalance &&
+          balance.available !== null &&
+          workingDaysCount > balance.available
+        ) {
+          throw new LeaveRequestError(
+            insufficientBalanceMessage(balance.available, balance.pending),
           );
         }
 
@@ -855,14 +874,17 @@ leaveRouter.post(
           );
           if (!applied) {
             throw new LeaveRequestError(
-              `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+              insufficientBalanceMessage(
+                balance.available ?? 0,
+                balance.pending,
+              ),
             );
           }
         }
         if (uploadedFile) {
           await saveSupportingDocument(client, request.id, uploadedFile);
         }
-       
+
         await recordEvent(client, {
           companyId,
           leaveRequestId: request.id,
@@ -944,6 +966,8 @@ type MyLeaveRow = {
   supporting_file_key: string | null;
   status: string;
   submitted_at: Date;
+  reviewed_at: Date | null;
+  cancelled_at: Date | null;
   reviewer_user_id: number | null;
   assigned_user_ids: number[];
   decision_reason: string | null;
@@ -967,6 +991,8 @@ const MY_LEAVE_SQL = `SELECT
        lr.supporting_file_key,
        lr.status,
        lr.submitted_at,
+       lr.reviewed_at,
+       lr.cancelled_at,
        lr.reviewer_user_id,
        lr.decision_reason,
        employee.email AS employee_email,
@@ -977,6 +1003,7 @@ const MY_LEAVE_SQL = `SELECT
      FROM leave_requests AS lr
      JOIN users AS employee
        ON employee.id = lr.employee_user_id
+      AND employee.company_id = lr.company_id
      JOIN leave_types
        ON leave_types.id = lr.leave_type_id
      LEFT JOIN users AS reviewer
@@ -1123,6 +1150,9 @@ leaveRouter.patch(
           startHalf,
           endHalf,
         ).workingDays;
+        if (workingDaysCount <= 0) {
+          throw new LeaveRequestError("Your dates contain no working days");
+        }
         const removeFile = removeFileValue === "true" && !uploadedFile;
         const storedFile =
           !removeFile &&
@@ -1159,22 +1189,26 @@ leaveRouter.patch(
           );
         }
 
-        const balanceResult = await client.query<{ days_remaining: number }>(
-          `SELECT days_remaining
-           FROM leave_balances
-           WHERE company_id = $1
-             AND user_id = $2
-             AND leave_type_id = $3
-           LIMIT 1`,
-          [companyId, req.user!.id, leaveTypeId],
+        const balance = await getBalance(
+          req.user!.id,
+          companyId,
+          leaveTypeId,
+          client,
+          id,
         );
-        const balance = balanceResult.rows[0];
         if (!balance) {
           throw new LeaveRequestError("No balance exists for this leave type");
         }
-        if (workingDaysCount > Number(balance.days_remaining)) {
+        if (balance.hasBalance && !balance.hasBalanceRow) {
+          throw new LeaveRequestError("No balance exists for this leave type");
+        }
+        if (
+          balance.hasBalance &&
+          balance.available !== null &&
+          workingDaysCount > balance.available
+        ) {
           throw new LeaveRequestError(
-            `This request exceeds your remaining balance of ${balance.days_remaining} days`,
+            insufficientBalanceMessage(balance.available, balance.pending),
           );
         }
         if (
@@ -1348,8 +1382,12 @@ type QueueRequestRow = {
   end_date: string;
   working_days_count: number;
   status: string;
+  submitted_at: Date;
+  supporting_file_name: string | null;
   reviewer_user_id: number | null;
-  assigned_user_ids: number[];
+  staff_reviewer: "manager" | "company_admin";
+  manager_reviewer?: "manager" | "company_admin";
+  escalation_user_ids: number[];
   employee_email: string;
   employee_name: string;
   employee_role: string;
@@ -1366,12 +1404,17 @@ const QUEUE_REQUEST_SQL = `SELECT
        lr.end_date::TEXT AS end_date,
        lr.working_days_count,
        lr.status,
+       lr.submitted_at,
+       lr.supporting_file_name,
        lr.reviewer_user_id,
+       COALESCE(rules.staff_reviewer, 'manager') AS staff_reviewer,
+       COALESCE(rules.manager_reviewer, 'company_admin') AS manager_reviewer,
        ARRAY(
          SELECT assignee.user_id
          FROM leave_request_assignees AS assignee
          WHERE assignee.leave_request_id = lr.id
-       ) AS assigned_user_ids,
+           AND assignee.assignment_type = 'escalation'
+       ) AS escalation_user_ids,
        employee.email AS employee_email,
        COALESCE(employee.display_name, employee.email) AS employee_name,
        employee.role AS employee_role,
@@ -1382,6 +1425,9 @@ const QUEUE_REQUEST_SQL = `SELECT
        ON employee.id = lr.employee_user_id
      JOIN leave_types
        ON leave_types.id = lr.leave_type_id
+      AND leave_types.company_id = lr.company_id
+     LEFT JOIN company_leave_rules AS rules
+       ON rules.company_id = lr.company_id
      LEFT JOIN departments AS department
        ON department.id = employee.department_id
       AND department.company_id = lr.company_id`;
@@ -1395,34 +1441,125 @@ function toQueueItem(row: QueueRequestRow) {
     workingDays: Number(row.working_days_count),
     leaveType: row.leave_type,
     status: row.status,
+    submittedAt: row.submitted_at ?? null,
+    supportingFileName: row.supporting_file_name ?? null,
   };
 }
 
 function canSeeInQueue(actor: AuthedUser, row: QueueRequestRow): boolean {
-  if (row.employee_user_id === actor.id) return false;
-  if (actor.role === "company_admin") return true;
-  if (actor.role === "manager") {
-    return (
-      row.assigned_user_ids.includes(actor.id) ||
-      (row.employee_role === "staff" &&
-        row.department_manager_id === actor.id)
-    );
-  }
-  return false;
+  return canReviewLeaveRequest(actor, row);
 }
 
 function canDecide(actor: AuthedUser, row: QueueRequestRow): boolean {
-  if (row.employee_user_id === actor.id) return false;
-  if (actor.role === "company_admin") return true;
-  if (actor.role === "manager") {
-    return (
-      row.assigned_user_ids.includes(actor.id) ||
-      (row.employee_role === "staff" &&
-        (row.reviewer_user_id === actor.id ||
-          row.department_manager_id === actor.id))
-    );
+  return canReviewLeaveRequest(actor, row);
+}
+
+type ReviewContext = {
+  balance: {
+    hasBalance: boolean;
+    availableBefore: number | null;
+    availableAfter: number | null;
+  };
+  alsoOff: Array<{
+    employeeName: string;
+    startDate: string;
+    endDate: string;
+    status: string;
+  }>;
+};
+
+async function countDepartmentClashes(
+  row: QueueRequestRow,
+  executor: Queryable = pool,
+): Promise<number> {
+  const result = await executor.query<{ count: string }>(
+    `SELECT COUNT(*)::INT AS count
+     FROM leave_requests AS current_request
+     JOIN users AS requester
+       ON requester.id = current_request.employee_user_id
+      AND requester.company_id = current_request.company_id
+     JOIN leave_requests AS other_request
+       ON other_request.company_id = current_request.company_id
+      AND other_request.employee_user_id <> current_request.employee_user_id
+      AND other_request.status IN ('pending', 'approved')
+      AND other_request.start_date <= current_request.end_date
+      AND other_request.end_date >= current_request.start_date
+     JOIN users AS employee
+       ON employee.id = other_request.employee_user_id
+      AND employee.company_id = other_request.company_id
+      AND employee.department_id = requester.department_id
+     WHERE current_request.id = $1
+       AND requester.department_id IS NOT NULL`,
+    [row.id],
+  );
+
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+async function loadReviewContext(
+  row: QueueRequestRow,
+): Promise<ReviewContext> {
+  const balance = await getBalance(
+    row.employee_user_id,
+    row.company_id,
+    row.leave_type_id,
+    pool,
+    row.id,
+  );
+  if (!balance) {
+    throw new Error(`Could not load balance for leave request ${row.id}`);
   }
-  return false;
+
+  const alsoOff = await pool.query<{
+    employee_name: string;
+    start_date: string;
+    end_date: string;
+    status: string;
+  }>(
+    `SELECT
+       COALESCE(employee.display_name, employee.email) AS employee_name,
+       GREATEST(other_request.start_date, current_request.start_date)::TEXT AS start_date,
+       LEAST(other_request.end_date, current_request.end_date)::TEXT AS end_date,
+       other_request.status
+     FROM leave_requests AS current_request
+     JOIN users AS requester
+       ON requester.id = current_request.employee_user_id
+      AND requester.company_id = current_request.company_id
+     JOIN leave_requests AS other_request
+       ON other_request.company_id = current_request.company_id
+      AND other_request.employee_user_id <> current_request.employee_user_id
+      AND other_request.status IN ('pending', 'approved')
+      AND other_request.start_date <= current_request.end_date
+      AND other_request.end_date >= current_request.start_date
+     JOIN users AS employee
+       ON employee.id = other_request.employee_user_id
+      AND employee.company_id = other_request.company_id
+      AND employee.department_id = requester.department_id
+     WHERE current_request.id = $1
+       AND requester.department_id IS NOT NULL
+     ORDER BY other_request.start_date, other_request.end_date, employee_name`,
+    [row.id],
+  );
+
+  const availableBefore = balance.hasBalance ? balance.available : null;
+  const availableAfter =
+    availableBefore === null
+      ? null
+      : Number(formatBalanceDays(availableBefore - Number(row.working_days_count)));
+
+  return {
+    balance: {
+      hasBalance: balance.hasBalance,
+      availableBefore,
+      availableAfter,
+    },
+    alsoOff: alsoOff.rows.map((item) => ({
+      employeeName: item.employee_name,
+      startDate: item.start_date,
+      endDate: item.end_date,
+      status: item.status,
+    })),
+  };
 }
 
 async function loadQueueRequest(
@@ -1486,13 +1623,23 @@ teamRouter.get(
              AND (
                (
                  employee.role = 'staff'
-                 AND department.manager_id = $2
+                 AND COALESCE(rules.staff_reviewer, 'manager') = 'manager'
+                 AND (
+                   lr.reviewer_user_id = $2
+                   OR department.manager_id = $2
+                 )
+               )
+               OR (
+                 employee.role = 'manager'
+                 AND COALESCE(rules.manager_reviewer, 'company_admin') = 'manager'
+                 AND lr.reviewer_user_id = $2
                )
                OR EXISTS (
                  SELECT 1
                  FROM leave_request_assignees AS assignee
                  WHERE assignee.leave_request_id = lr.id
                    AND assignee.user_id = $2
+                   AND assignee.assignment_type = 'escalation'
                )
              )
            )
@@ -1500,7 +1647,30 @@ teamRouter.get(
        ORDER BY lr.submitted_at, lr.id`,
       [companyId, actor.id, actor.role],
     );
-    res.json(result.rows.map(toQueueItem));
+
+    const queue = await Promise.all(
+      result.rows.map(async (row) => {
+        const balance = await getBalance(
+          row.employee_user_id,
+          row.company_id,
+          row.leave_type_id,
+          pool,
+          row.id,
+        );
+        const balanceAfter = balance?.hasBalance && balance.available !== null
+          ? Number(formatBalanceDays(balance.available - Number(row.working_days_count)))
+          : null;
+        const clashCount = await countDepartmentClashes(row, pool);
+
+        return {
+          ...toQueueItem(row),
+          balanceAfter,
+          clashCount,
+        };
+      }),
+    );
+
+    res.json(queue);
   },
 );
 
@@ -1524,11 +1694,8 @@ leaveRouter.get(
       return;
     }
     const isOwner = request.employee_user_id === req.user!.id;
-    if (
-      !isOwner &&
-      !canSeeInQueue(req.user!, request) &&
-      !canDecide(req.user!, request)
-    ) {
+    const canReview = canSeeInQueue(req.user!, request);
+    if (!isOwner && !canReview) {
       res.status(403).json({ error: "You are not allowed to do that" });
       return;
     }
@@ -1544,46 +1711,41 @@ leaveRouter.get(
       res.status(404).json({ error: "Leave request not found" });
       return;
     }
-    const eventsResult = await pool.query<{
-      id: number;
-      type: string;
-      before: Record<string, unknown> | null;
-      after: Record<string, unknown> | null;
-      balance_delta: string | null;
-      created_at: Date;
-      actor_user_id: number;
-      actor_name: string;
-    }>(
-      `SELECT
-         e.id,
-         e.event_type AS type,
-         e.before_state AS before,
-         e.after_state AS after,
-         e.balance_delta,
-         e.created_at,
-         e.actor_user_id,
-         COALESCE(u.display_name, u.email) AS actor_name
-       FROM leave_events e
-       JOIN users u ON u.id = e.actor_user_id
-       WHERE e.company_id = $1
-         AND e.leave_request_id = $2
-       ORDER BY e.created_at ASC, e.id ASC`,
-      [companyId, id],
-    );
-
+    const storedEvents = await listLeaveRequestEvents(pool, companyId, id);
+    const reviewContext =
+      !isOwner && canReview ? await loadReviewContext(request) : null;
+    const fallbackEvents = reviewContext
+      ? buildLeaveReviewEvents({
+          ...detail,
+          reviewer_name: detail.reviewer_name ?? null,
+        }).map((event) => ({
+          type: event.type,
+          before: null,
+          after: null,
+          balanceDelta: null,
+          createdAt: event.at,
+          at: event.at,
+          actorUserId: null,
+          actorName: event.actorName,
+          reason: event.reason,
+        }))
+      : [];
+    const events = storedEvents.length > 0 ? storedEvents : fallbackEvents;
     res.json({
       ...toQueueItem(request),
       ...toMyLeaveItem(detail),
-      events: eventsResult.rows.map((ev) => ({
-        id: String(ev.id),
-        type: ev.type,
-        before: ev.before,
-        after: ev.after,
-        balanceDelta: ev.balance_delta === null ? null : Number(ev.balance_delta),
-        createdAt: ev.created_at,
-        actorUserId: ev.actor_user_id,
-        actorName: ev.actor_name,
-      })),
+      events,
+      ...(reviewContext
+        ? {
+            reviewContext,
+            balance: {
+              available: reviewContext.balance.availableBefore,
+              afterApproval: reviewContext.balance.availableAfter,
+            },
+            teamOverlaps: reviewContext.alsoOff,
+            teamOverlap: reviewContext.alsoOff,
+          }
+        : {}),
     });
   },
 );
@@ -1659,7 +1821,6 @@ leaveRouter.get(
       actorUserId: req.user!.id,
       type: "document_view",
     });
-
 
     res.setHeader("Content-Type", mime);
     res.setHeader(
