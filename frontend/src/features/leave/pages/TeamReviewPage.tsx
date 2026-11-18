@@ -361,8 +361,10 @@ export function TeamReviewPage() {
   const canDecide = request.status === 'pending'
   const firstName = request.employeeName.trim().split(/\s+/)[0] || 'them'
   const overlaps = request.teamOverlaps
-  const balanceAfter = request.balanceAfter ?? null
-  const balanceBefore = request.balanceBefore ?? null
+  const balanceAfter =
+    request.balance?.afterApproval ?? request.balanceAfter ?? null
+  const balanceBefore =
+    request.balance?.available ?? request.balanceBefore ?? null
   const historyEvents = request.events ?? null
 
   return (
