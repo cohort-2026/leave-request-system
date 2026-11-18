@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PageShell } from '../../../app/layouts/PageShell'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../../components/ui/alert-dialog'
+import { Button } from '../../../components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../../../components/ui/card'
+import { Alert } from '../../../shared/components'
+import { StatusBadge } from '../../../shared/components/StatusBadge'
+import { leaveEditPath, paths } from '../../../shared/constants/paths'
+import { leaveTypeColour, leaveTypeDotClass } from '../../../shared/leaveTypeColour'
 import { ApiError } from '../../../services/api'
-import {
-  Alert,
-  Button,
-  Modal,
-  StatusBadge,
-} from '../../../shared/components'
-import {
-  leaveEditPath,
-  paths,
-} from '../../../shared/constants/paths'
 import {
   cancelMyLeaveRequest,
   downloadSupportingFile,
@@ -83,7 +94,7 @@ export function LeaveDetailPage() {
       setCancelOpen(false)
     } catch (err) {
       setActionError(
-        getErrorMessage(err, 'Could not cancel this leave request.'),
+        getErrorMessage(err, 'Could not withdraw this leave request.'),
       )
     } finally {
       setCancelling(false)
@@ -94,7 +105,9 @@ export function LeaveDetailPage() {
     return (
       <PageShell title="Leave request">
         <Alert tone="error">A leave request ID is required.</Alert>
-        <Link to={paths.leave}>Back to my leave</Link>
+        <Button asChild variant="outline">
+          <Link to={paths.leave}>Back to my leave</Link>
+        </Button>
       </PageShell>
     )
   }
@@ -111,128 +124,147 @@ export function LeaveDetailPage() {
     return (
       <PageShell title="Leave request">
         <Alert tone="error">{error ?? 'Leave request not found.'}</Alert>
-        <Link to={paths.leave}>Back to my leave</Link>
+        <Button asChild variant="outline">
+          <Link to={paths.leave}>Back to my leave</Link>
+        </Button>
       </PageShell>
     )
   }
 
   const canChange = request.status === 'pending'
+  const colour = leaveTypeColour(request.leaveType)
 
   return (
-    <PageShell title="Leave request" eyebrow="Mine">
-      {actionError && !cancelOpen ? (
-        <Alert tone="error">{actionError}</Alert>
-      ) : null}
-      <dl className="stack">
-        <div>
-          <dt className="text-muted-foreground">Status</dt>
-          <dd>
-            <StatusBadge status={request.status} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Leave type</dt>
-          <dd>{request.leaveType}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Dates</dt>
-          <dd>
-            {request.startDate} – {request.endDate}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Working days</dt>
-          <dd>{request.workingDays}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Reason</dt>
-          <dd>{request.reason || 'No reason provided.'}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Supporting file</dt>
-          <dd>
-            {request.supportingFileName ? (
-              <span className="actions">
-                <span>{request.supportingFileName}</span>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  disabled={downloading}
-                  onClick={() => void handleDownload()}
-                >
-                  {downloading ? 'Downloading…' : 'Download'}
-                </Button>
-              </span>
-            ) : (
-              'None'
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Submitted</dt>
-          <dd>{new Date(request.submittedAt).toLocaleString()}</dd>
-        </div>
-        {request.decisionReason ? (
-          <div>
-            <dt className="text-muted-foreground">Decision reason</dt>
-            <dd>{request.decisionReason}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <div className="actions">
-        {canChange ? (
-          <>
+    <PageShell
+      title={request.leaveType}
+      action={
+        canChange ? (
+          <div className="flex flex-wrap gap-2">
             <Button
-              variant="primary"
+              variant="outline"
               type="button"
               onClick={() => navigate(leaveEditPath(request.id))}
             >
               Change request
             </Button>
             <Button
-              variant="danger"
+              variant="destructive"
               type="button"
               onClick={() => setCancelOpen(true)}
             >
               Withdraw
             </Button>
-          </>
-        ) : null}
-        <Link to={paths.leave}>Back to my leave</Link>
-      </div>
-      <Modal
-        open={cancelOpen}
-        title="Cancel leave request?"
-        onClose={() => {
-          if (!cancelling) setCancelOpen(false)
-        }}
-      >
-        <div className="stack">
-          <p>
-            The assigned reviewer will be notified. You cannot undo this
-            cancellation.
-          </p>
-          {actionError ? <Alert tone="error">{actionError}</Alert> : null}
-          <div className="actions">
-            <Button
-              variant="danger"
-              type="button"
-              disabled={cancelling}
-              onClick={handleCancel}
-            >
-              {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              disabled={cancelling}
-              onClick={() => setCancelOpen(false)}
-            >
-              Keep request
-            </Button>
           </div>
-        </div>
-      </Modal>
+        ) : undefined
+      }
+    >
+      {actionError && !cancelOpen ? (
+        <Alert tone="error">{actionError}</Alert>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span
+          aria-hidden="true"
+          className={`size-3 rounded-[3px] ${leaveTypeDotClass[colour]}`}
+        />
+        <StatusBadge status={request.status} />
+        <p className="text-sm text-muted-foreground">
+          {request.startDate} – {request.endDate}
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            <div>
+              <p className="text-muted-foreground">Working days</p>
+              <p className="font-medium">{request.workingDays}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Reason</p>
+              <p className="font-medium">
+                {request.reason || 'No reason provided.'}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Submitted</p>
+              <p className="font-medium">
+                {new Date(request.submittedAt).toLocaleString()}
+              </p>
+            </div>
+            {request.approverName || request.reviewerName ? (
+              <div>
+                <p className="text-muted-foreground">Approver</p>
+                <p className="font-medium">
+                  {request.approverName ?? request.reviewerName}
+                </p>
+              </div>
+            ) : null}
+            {request.decisionReason ? (
+              <div>
+                <p className="text-muted-foreground">Decision reason</p>
+                <p className="font-medium">{request.decisionReason}</p>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Supporting file</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {request.supportingFileName ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm">{request.supportingFileName}</p>
+                <Button
+                  variant="outline"
+                  type="button"
+                  disabled={downloading}
+                  onClick={() => void handleDownload()}
+                >
+                  {downloading ? 'Opening…' : 'View file'}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No supporting file was attached.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Button asChild variant="ghost">
+        <Link to={paths.leave}>Back to my leave</Link>
+      </Button>
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Withdraw this request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The reviewer will be notified. You cannot undo this.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {actionError ? <Alert tone="error">{actionError}</Alert> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>Keep request</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelling}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleCancel()
+              }}
+            >
+              {cancelling ? 'Withdrawing…' : 'Withdraw'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageShell>
   )
 }

@@ -1,6 +1,6 @@
 # Shared components
 
-Plain controls with props and variants. No data fetching. Colour, type, and spacing come from `../styles/theme.css`. Do not put raw hex on a page if a token exists.
+Plain controls with props and variants. No data fetching. Colour, type, and spacing come from `src/index.css`. Do not put raw hex on a page if a token exists.
 
 ## shadcn/ui primitives
 
@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 ```
 
-From `frontend/`, add more primitives with `npx shadcn@latest add <component>`. Keep the generated files in `src/components/ui` and use the shared tokens in `src/shared/styles/theme.css`.
+From `frontend/`, add more primitives with `npx shadcn@latest add <component>`. Keep the generated files in `src/components/ui` and use the shared tokens in `src/index.css`.
 
 ## Button
 
@@ -72,7 +72,7 @@ import { Button } from '../shared/components'
 
 ## StatusBadge
 
-Chip colours come from `--color-badge-*` in `theme.css`. The class paints the
+Chip colours come from `--color-badge-*` in `src/index.css`. The class paints the
 badge, not the table row.
 
 ```tsx

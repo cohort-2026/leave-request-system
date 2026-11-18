@@ -114,6 +114,11 @@ const statusStyles: Record<
     pill: 'bg-badge-waiting! text-slate-700!',
     dot: 'bg-slate-500',
   },
+  pending_hr: {
+    label: 'Awaiting HR',
+    pill: 'bg-badge-pending-hr! text-sky-800!',
+    dot: 'bg-sky-600',
+  },
 }
 
 const cardClass = 'shadow-sm [--card-spacing:--spacing(5)]'

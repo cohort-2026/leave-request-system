@@ -9,13 +9,15 @@ export type RequestStatus =
   | 'rejected'
   | 'cancelled'
   | 'waiting'
+  | 'pending_hr'
 
 const labels: Record<RequestStatus, string> = {
   pending: 'Pending',
   approved: 'Approved',
-  rejected: 'Rejected',
+  rejected: 'Declined',
   cancelled: 'Cancelled',
   waiting: 'Waiting',
+  pending_hr: 'Awaiting HR',
 }
 
 type StatusBadgeProps = {
@@ -28,7 +30,8 @@ export function StatusBadge({
   className = '',
   ...rest
 }: StatusBadgeProps) {
-  const classes = ['status-badge', `status-badge-${status}`, className]
+  const tone = status === 'pending_hr' ? 'pending_hr' : status
+  const classes = ['status-badge', `status-badge-${tone}`, className]
     .filter(Boolean)
     .join(' ')
 
