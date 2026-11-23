@@ -27,6 +27,12 @@ import {
   type TotpEnrollmentChallenge,
 } from '../api'
 
+const IS_DEV = import.meta.env.DEV
+
+const TOTP_RESET_FALLBACK = IS_DEV
+  ? 'Check your inbox (Mailpit in local dev) for a link to reset your authenticator.'
+  : 'Check your inbox for a link to reset your authenticator.'
+
 const statusLabel = {
   active: 'Active',
   pending_verification: 'Pending verification',
@@ -191,10 +197,7 @@ export function ProfilePage() {
     setTotpBusy(true)
     try {
       const result = await requestTotpReset()
-      setTotpMessage(
-        result.message ??
-          'Check your inbox (Mailpit in local dev) for a link to reset your authenticator.',
-      )
+      setTotpMessage(result.message ?? TOTP_RESET_FALLBACK)
     } catch (error) {
       setTotpError(
         error instanceof ApiError
@@ -437,10 +440,12 @@ export function ProfilePage() {
                       {totpBusy ? 'Sending…' : 'Email authenticator reset link'}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Open <a href="http://localhost:8025">Mailpit</a> to read the
-                    link in local development.
-                  </p>
+                  {IS_DEV ? (
+                    <p className="text-xs text-muted-foreground">
+                      Open <a href="http://localhost:8025">Mailpit</a> to read
+                      the link in local development.
+                    </p>
+                  ) : null}
                 </>
               ) : null}
             </CardContent>

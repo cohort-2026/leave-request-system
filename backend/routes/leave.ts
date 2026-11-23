@@ -960,6 +960,8 @@ type MyLeaveRow = {
   leave_type_id: number;
   start_date: string;
   end_date: string;
+  start_half?: string;
+  end_half?: string;
   working_days_count: number;
   reason: string | null;
   supporting_file_name: string | null;
@@ -985,6 +987,8 @@ const MY_LEAVE_SQL = `SELECT
        lr.leave_type_id,
        lr.start_date::TEXT AS start_date,
        lr.end_date::TEXT AS end_date,
+       lr.start_half,
+       lr.end_half,
        lr.working_days_count,
        lr.reason,
        lr.supporting_file_name,
@@ -1017,12 +1021,16 @@ function toMyLeaveItem(row: MyLeaveRow) {
     leaveType: row.leave_type,
     startDate: row.start_date,
     endDate: row.end_date,
+    startHalf: row.start_half ?? 'full',
+    endHalf: row.end_half ?? 'full',
     workingDays: Number(row.working_days_count),
     reason: row.reason,
     supportingFileName: row.supporting_file_name,
     status: row.status,
     submittedAt: row.submitted_at,
     decisionReason: row.decision_reason,
+    reviewerName: row.reviewer_name ?? null,
+    approverName: row.reviewer_name ?? null,
   };
 }
 

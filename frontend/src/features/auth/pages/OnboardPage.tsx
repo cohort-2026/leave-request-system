@@ -68,11 +68,11 @@ export function OnboardPage() {
   }
 
   return (
-    <PageShell title="Join your company" eyebrow="Public">
-      <Alert tone="info">
-        Use the invite from your company admin. This is the fallback when SCIM
-        or SSO is off.
-      </Alert>
+    <PageShell title="Join your company">
+      <p className="text-muted-foreground">
+        Use the invite from your company. Enter your details to create your
+        account.
+      </p>
       {formError ? <Alert tone="error">{formError}</Alert> : null}
       <form
         className="auth-form"

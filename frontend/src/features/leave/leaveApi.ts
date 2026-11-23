@@ -11,6 +11,8 @@ export type LeaveType = {
   requiresDocumentAfterDays: number | null
 }
 
+export type LeaveHalf = 'full' | 'am' | 'pm' | 'morning' | 'afternoon'
+
 export type MyLeaveRequest = {
   id: string
   employeeName: string
@@ -18,12 +20,16 @@ export type MyLeaveRequest = {
   leaveType: string
   startDate: string
   endDate: string
+  startHalf?: LeaveHalf | null
+  endHalf?: LeaveHalf | null
   workingDays: number
   reason: string | null
   supportingFileName: string | null
   status: RequestStatus
   submittedAt: string
   decisionReason: string | null
+  reviewerName?: string | null
+  approverName?: string | null
 }
 
 type LeaveTypesResponse = {
@@ -148,8 +154,11 @@ export function updateLeaveRequest(
   })
 }
 
-export function fetchMyLeaveRequests(): Promise<MyLeaveRequest[]> {
-  return apiRequest<MyLeaveRequest[]>('/api/leave')
+export async function fetchMyLeaveRequests(): Promise<MyLeaveRequest[]> {
+  const response = await apiRequest<MyLeaveRequest[] | { requests?: MyLeaveRequest[] }>(
+    '/api/leave',
+  )
+  return Array.isArray(response) ? response : response.requests ?? []
 }
 
 export function fetchMyLeaveRequest(id: string): Promise<MyLeaveRequest> {

@@ -32,6 +32,7 @@ export const paths = {
   adminCalendarSettings: '/admin/calendar-settings',
   adminBlocks: '/admin/blocks',
   adminOnboarding: '/admin/onboarding',
+  adminBranding: '/admin/branding',
   adminSso: '/admin/sso',
   platform: '/platform',
   platformNewCompany: '/platform/companies/new',

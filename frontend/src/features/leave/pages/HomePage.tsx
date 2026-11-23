@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { CalendarX } from 'lucide-react'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { useAuth } from '../../../app/providers/useAuth'
+import { useCompanyBrand } from '../../../app/providers/CompanyBrandProvider'
 import { Alert } from '../../../components/ui/alert'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent } from '../../../components/ui/card'
@@ -193,6 +194,7 @@ function BalanceSkeletons() {
 
 export function HomePage() {
   const { session } = useAuth()
+  const { branding } = useCompanyBrand()
 
   const [balances, setBalances] = useState<LeaveBalance[]>([])
   const [loading, setLoading] = useState(true)
@@ -232,16 +234,29 @@ export function HomePage() {
   }
 
   const firstName = session.displayName.trim().split(/\s+/)[0] || 'there'
+  const company = branding?.name?.trim() || session.companyName?.trim()
+  const slogan = branding?.slogan?.trim()
 
   return (
     <PageShell
-      title={`Hi, ${firstName}`}
+      title={`Welcome back, ${firstName}`}
       action={
         <Button asChild>
           <Link to={paths.leaveNew}>Request leave</Link>
         </Button>
       }
     >
+      <div className="grid max-w-2xl gap-1">
+        {slogan ? (
+          <p className="font-medium text-foreground">{slogan}</p>
+        ) : null}
+        <p className="text-muted-foreground">
+          Welcome to the leave request app
+          {company ? ` at ${company}` : ''}. Check your balances below, then
+          request time off when you need it. Available days already keep pending
+          requests aside.
+        </p>
+      </div>
       {loading ? <BalanceSkeletons /> : null}
 
       {!loading && error ? (

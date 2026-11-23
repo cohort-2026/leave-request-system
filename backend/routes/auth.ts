@@ -41,9 +41,11 @@ import {
 
 export const authRouter = Router();
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const INVALID_LOGIN = "Invalid email or password";
-const EMAIL_NOT_VERIFIED =
-  "Email not verified. Check your inbox (Mailpit in local dev) or request a new link.";
+const EMAIL_NOT_VERIFIED = IS_PRODUCTION
+  ? "Email not verified. Check your inbox or request a new link."
+  : "Email not verified. Check your inbox (Mailpit in local dev) or request a new link.";
 const LOGIN_TOTP_BAD = "This authenticator code is invalid or has expired.";
 const VERIFY_LINK_BAD = "This verification link is invalid or has expired.";
 const RESEND_OK =
@@ -53,8 +55,9 @@ const FORGOT_OK =
   "If that email is registered, we sent a reset link.";
 const TOTP_RESET_LINK_BAD =
   "This authenticator reset link is invalid or has expired.";
-const TOTP_RESET_REQUEST_OK =
-  "Check your inbox (Mailpit in local dev) for a link to reset your authenticator.";
+const TOTP_RESET_REQUEST_OK = IS_PRODUCTION
+  ? "Check your inbox for a link to reset your authenticator."
+  : "Check your inbox (Mailpit in local dev) for a link to reset your authenticator.";
 const CHANGE_PASSWORD_BAD = "Current password is incorrect";
 const REGISTER_CLOSED =
   "Open registration is closed. Start a company at /start-company, use company SSO, or open an invite link from your admin.";
@@ -74,6 +77,47 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 1024;
 const MIN_PASSWORD_LEN = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const DEV_PREVIEW_USERS: Record<string, string> = {
+  staff: "staff@leave.local",
+  manager: "manager@leave.local",
+  admin: "admin@leave.local",
+  platform: "platform@leave.local",
+};
+
+// Local preview only. Login otherwise requires TOTP. Do not ship.
+authRouter.get("/dev-login", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const key = String(req.query.as ?? "admin").trim().toLowerCase();
+  const email = DEV_PREVIEW_USERS[key];
+  if (!email) {
+    res.status(400).json({
+      error: "Unknown preview role. Use as=staff, manager, admin, or platform.",
+    });
+    return;
+  }
+
+  const result = await pool.query<UserRow>(
+    `SELECT id, email, password_hash, role, display_name, status, company_name, company_id
+     FROM users
+     WHERE lower(email) = $1
+     LIMIT 1`,
+    [email],
+  );
+  const user = result.rows[0];
+  if (!user) {
+    res.status(404).json({ error: `No seed user for ${email}` });
+    return;
+  }
+
+  const token = signSessionToken(user.id);
+  res.cookie(SESSION_COOKIE, token, { ...sessionCookieOptions, secure: false });
+  res.redirect(303, "http://localhost:5173/");
+});
 
 authRouter.post("/register", (_req, res) => {
   res.status(400).json({ error: REGISTER_CLOSED });
