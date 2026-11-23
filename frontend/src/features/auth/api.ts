@@ -164,12 +164,22 @@ export function clearSignupCheckout() {
   sessionStorage.removeItem(SIGNUP_CHECKOUT_KEY)
 }
 
+export type SignupBrandingInput = {
+  slogan?: string | null
+  brandPrimary?: string | null
+  brandAccent?: string | null
+  brandColorsManual?: boolean
+  logoBase64?: string | null
+  logoMime?: string | null
+}
+
 export function startCompanyCheckout(
   companyName: string,
   displayName: string,
   email: string,
   password: string,
   planCode: string,
+  branding?: SignupBrandingInput,
 ) {
   return apiRequest<SignupCheckout>('/api/companies/signup', {
     method: 'POST',
@@ -179,6 +189,12 @@ export function startCompanyCheckout(
       email,
       password,
       planCode,
+      slogan: branding?.slogan ?? null,
+      brandPrimary: branding?.brandPrimary ?? null,
+      brandAccent: branding?.brandAccent ?? null,
+      brandColorsManual: branding?.brandColorsManual ?? false,
+      logoBase64: branding?.logoBase64 ?? null,
+      logoMime: branding?.logoMime ?? null,
     }),
   })
 }

@@ -66,10 +66,10 @@ export function OnboardingLinkPage() {
       await navigator.clipboard.writeText(url)
       setError(null)
       setCopied(true)
-      setNotice('Invite URL copied.')
+      setNotice('Invite link copied.')
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
-      setError('Could not copy the invite URL.')
+      setError('Could not copy the invite link.')
     }
   }
 
@@ -83,19 +83,19 @@ export function OnboardingLinkPage() {
       setCreatedAt(null)
       setUrl(null)
       setCopied(false)
-      setNotice('Invite link disabled.')
+      setNotice('Invite link turned off.')
     } catch (err: unknown) {
       setError(
         err instanceof ApiError
           ? err.message
-          : 'Could not disable the invite link.',
+          : 'Could not turn off the invite link.',
       )
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleReplace() {
+  async function mintLink(replaced: boolean) {
     setBusy(true)
     setError(null)
     setNotice(null)
@@ -106,13 +106,17 @@ export function OnboardingLinkPage() {
       setUrl(created.url)
       setCopied(false)
       setNotice(
-        'Copy this URL now. It is only shown when you create or replace the link.',
+        replaced
+          ? 'New invite link created. Copy it now — the previous link no longer works.'
+          : 'Invite link created. Copy it now. You will not see this URL again after you leave this page.',
       )
     } catch (err: unknown) {
       setError(
         err instanceof ApiError
           ? err.message
-          : 'Could not create the invite link.',
+          : replaced
+            ? 'Could not replace the invite link.'
+            : 'Could not create the invite link.',
       )
     } finally {
       setBusy(false)
@@ -121,17 +125,18 @@ export function OnboardingLinkPage() {
 
   const statusText = active
     ? createdAt
-      ? `An invite link is active (created ${formatCreatedAt(createdAt)}). The URL is only shown when you create or replace it.`
-      : 'An invite link is active. The URL is only shown when you create or replace it.'
-    : 'No active invite link.'
+      ? `People can join with the current invite link (created ${formatCreatedAt(createdAt)}).`
+      : 'People can join with the current invite link.'
+    : 'There is no invite link yet. Create one to let people join your company.'
 
   return (
-    <PageShell title="Invite link" eyebrow="Company admin">
+    <PageShell title="Invite link">
       <div className="grid max-w-3xl gap-4">
-        <Alert tone="info">
-          This link is the fallback when SCIM or SSO is off. The URL is only
-          revealed when you create or replace it.
-        </Alert>
+        <p className="text-muted-foreground">
+          Share this link with people who should join your company. After you
+          create or replace it, copy the URL straight away — it is shown only
+          once.
+        </p>
         {error ? <Alert tone="error">{error}</Alert> : null}
         {notice ? <Alert tone="success">{notice}</Alert> : null}
 
@@ -141,11 +146,11 @@ export function OnboardingLinkPage() {
               <div className="grid gap-1">
                 <CardTitle>Company invite link</CardTitle>
                 <CardDescription>
-                  Manage the link employees use to join your company.
+                  One active link at a time. Replacing it turns the old one off.
                 </CardDescription>
               </div>
               <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                {loading ? 'Loading' : active ? 'Active' : 'Disabled'}
+                {loading ? 'Loading' : active ? 'Active' : 'No link'}
               </span>
             </div>
           </CardHeader>
@@ -171,8 +176,8 @@ export function OnboardingLinkPage() {
                     value={url ?? ''}
                     placeholder={
                       active
-                        ? 'Create or replace the link to see the URL'
-                        : 'No active invite link'
+                        ? 'Create a new link to see the URL again'
+                        : 'Create a link to see the URL'
                     }
                     readOnly
                   />
@@ -180,6 +185,22 @@ export function OnboardingLinkPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
+                    onClick={() => void mintLink(false)}
+                    disabled={busy || active}
+                  >
+                    Create link
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void mintLink(true)}
+                    disabled={busy || !active}
+                  >
+                    Replace link
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={handleCopy}
                     disabled={!url || busy}
                   >
@@ -191,15 +212,7 @@ export function OnboardingLinkPage() {
                     onClick={handleDisable}
                     disabled={!active || busy}
                   >
-                    Disable link
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    type="button"
-                    onClick={handleReplace}
-                    disabled={busy}
-                  >
-                    {active ? 'Replace link' : 'Create invite link'}
+                    Turn off
                   </Button>
                 </div>
               </>
