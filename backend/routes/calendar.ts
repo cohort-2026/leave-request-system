@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { ensureZaHolidaysForCompany } from "../leave/seedZaHolidays.js";
 import { requireCompanyId } from "../tenancy.js";
 
 export const calendarRouter = Router();
@@ -15,8 +16,13 @@ type HolidayMark = {
 };
 
 type LeaveMark = {
+  id: number;
+  personId: number;
   date: string;
   label: string;
+  name: string;
+  type: string;
+  status: string;
 };
 
 function parseDate(value: unknown): string | null {
@@ -90,6 +96,7 @@ calendarRouter.get(
 
     const actor = req.user!;
     const role = actor.role as "staff" | "manager" | "company_admin";
+    await ensureZaHolidaysForCompany(companyId);
     const holidaysResult = await pool.query<HolidayMark>(
       `SELECT holiday_date::TEXT AS date, name AS label, name
        FROM public_holidays
@@ -111,8 +118,13 @@ calendarRouter.get(
 
     const leaveResult = await pool.query<LeaveMark>(
       `SELECT
+         leave_requests.id,
+         leave_requests.employee_user_id AS "personId",
          day.ts::date::TEXT AS date,
-         ${leaveLabelSql} AS label
+         ${leaveLabelSql} AS label,
+         COALESCE(NULLIF(BTRIM(employees.display_name), ''), employees.email) AS name,
+         leave_types.name AS type,
+         leave_requests.status
        FROM leave_requests
        JOIN users AS employees
          ON employees.id = leave_requests.employee_user_id

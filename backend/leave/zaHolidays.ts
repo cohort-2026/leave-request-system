@@ -75,6 +75,17 @@ export function isZaHolidayYear(value: number): value is ZaHolidayYear {
   return (ZA_HOLIDAY_YEARS as readonly number[]).includes(value);
 }
 
+export function zaHolidayYearsToSeed(
+  existingZaYears: Iterable<number>,
+): ZaHolidayYear[] {
+  const have = new Set(existingZaYears);
+  return ZA_HOLIDAY_YEARS.filter((year) => !have.has(year));
+}
+
+export function allZaPublicHolidays(): ZaHoliday[] {
+  return ZA_HOLIDAY_YEARS.flatMap((year) => zaPublicHolidays(year));
+}
+
 export function zaPublicHolidays(year: ZaHolidayYear): ZaHoliday[] {
   const goodFriday = GOOD_FRIDAY_BY_YEAR[year];
   const familyDay = addDays(goodFriday, 3);

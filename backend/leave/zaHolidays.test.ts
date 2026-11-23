@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { countWorkingDays, type WorkingDayFlags } from "./workingDays.js";
-import { zaPublicHolidays } from "./zaHolidays.js";
+import {
+  ZA_HOLIDAY_YEARS,
+  zaHolidayYearsToSeed,
+  zaPublicHolidays,
+} from "./zaHolidays.js";
 
 const weekdays: WorkingDayFlags = {
   mondayIsWorking: true,
@@ -63,6 +67,16 @@ describe("zaPublicHolidays", () => {
       date: "2027-12-27",
       actualDate: "2027-12-26",
     });
+  });
+});
+
+describe("zaHolidayYearsToSeed", () => {
+  it("seeds every supported year when none are stored", () => {
+    assert.deepEqual(zaHolidayYearsToSeed([]), [...ZA_HOLIDAY_YEARS]);
+  });
+
+  it("skips years that already have SA holidays", () => {
+    assert.deepEqual(zaHolidayYearsToSeed([2026, 2028]), [2027, 2029, 2030]);
   });
 });
 

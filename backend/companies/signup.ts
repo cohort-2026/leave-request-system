@@ -3,6 +3,7 @@ import { quotePlan, VAT_RATE_BP, type PlanQuote } from "../billing/catalog.js";
 import { pool } from "../db.js";
 import { grantDefaultBalances } from "../leave/balances.js";
 import { seedDefaultLeaveTypes } from "../leave/seedTypes.js";
+import { ensureZaHolidaysForCompany } from "../leave/seedZaHolidays.js";
 import type { UserRow } from "../session.js";
 
 export type SignupCompany = {
@@ -388,6 +389,7 @@ export async function completePaidSignup(
     }
 
     await seedDefaultLeaveTypes(company.id, client);
+    await ensureZaHolidaysForCompany(company.id, client);
 
     const insertedUser = await client.query<UserRow>(
       `INSERT INTO users (
