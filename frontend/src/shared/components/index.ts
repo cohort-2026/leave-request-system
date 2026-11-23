@@ -14,6 +14,7 @@ export { LeaveRequestRow } from './LeaveRequestRow'
 export type { LeaveRequestSummary } from './LeaveRequestRow'
 export { CalendarGrid } from './CalendarGrid'
 export type {
+  CalendarLegendItem,
   CalendarMark,
   CalendarMarkKind,
   CalendarView,

@@ -36,6 +36,7 @@ import {
   type WorkingDayFlags,
 } from "../leave/workingDays.js";
 import { hasOverlappingLeaveRequest } from "../leave/overlap.js";
+import { ensureZaHolidaysForCompany } from "../leave/seedZaHolidays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId, sameCompanyId } from "../tenancy.js";
 
@@ -228,6 +229,7 @@ async function getCalendarForRange(
     throw new LeaveRequestError("Company calendar not found", 404);
   }
 
+  await ensureZaHolidaysForCompany(companyId, executor);
   const holidaysResult = await executor.query<{ date: string; name: string }>(
     `SELECT holiday_date::date::TEXT AS date, name
      FROM public_holidays
