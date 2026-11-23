@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -137,7 +138,7 @@ export function UsersPage() {
           <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
             Loading people…
           </div>
-        ) : filteredPeople.length === 0 ? (
+        ) : error && people.length === 0 ? null : filteredPeople.length === 0 ? (
           <Empty className="rounded-xl border border-border bg-card py-12">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -153,9 +154,11 @@ export function UsersPage() {
               </EmptyDescription>
             </EmptyHeader>
             {searchQuery ? (
-              <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
-                Clear search
-              </Button>
+              <EmptyContent>
+                <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+                  Clear search
+                </Button>
+              </EmptyContent>
             ) : null}
           </Empty>
         ) : (
@@ -163,11 +166,15 @@ export function UsersPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-4">Member</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="pr-4 text-right">Actions</TableHead>
+                  <TableHead scope="col" className="pl-4">
+                    Member
+                  </TableHead>
+                  <TableHead scope="col">Department</TableHead>
+                  <TableHead scope="col">Role</TableHead>
+                  <TableHead scope="col">Status</TableHead>
+                  <TableHead scope="col" className="pr-4 text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -191,7 +198,7 @@ export function UsersPage() {
                               to={adminUserPath(String(person.id))}
                               className="block truncate font-medium text-foreground hover:underline"
                             >
-                              {person.displayName}
+                              {person.displayName.trim() || person.email}
                             </Link>
                             <span className="block truncate text-xs text-muted-foreground">
                               {person.email}
@@ -213,7 +220,7 @@ export function UsersPage() {
                             onChange={(e) =>
                               void handleRoleChange(person, e.target.value)
                             }
-                            className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-foreground shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-foreground shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {ASSIGNABLE_ROLES.map((roleOption) => (
                               <option key={roleOption} value={roleOption}>
@@ -235,7 +242,7 @@ export function UsersPage() {
                           }
                           className={
                             person.status === 'active'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              ? 'border-primary/20 bg-primary/10 text-primary'
                               : ''
                           }
                         >
