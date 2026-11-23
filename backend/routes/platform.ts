@@ -30,7 +30,7 @@ platformRouter.get(
          plan.name AS plan_name,
          plan.seat_limit,
          COUNT(company_user.id) FILTER (
-           WHERE company_user.status = 'active'
+           WHERE company_user.status IN ('active', 'pending_verification')
              AND company_user.role <> 'platform'
          )::INTEGER AS seats_used
        FROM companies AS company

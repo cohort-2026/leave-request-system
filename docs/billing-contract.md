@@ -26,7 +26,7 @@ Public catalog.
 
 ### `GET /api/platform/companies` — `platform` only
 
-Returns `{ companies: [{ id, name, slug, status, subscriptionStatus, planName, seatLimit, seatsUsed }] }`, ordered by company name. `seatsUsed` counts active non-platform users assigned to that company. `planName`, `subscriptionStatus`, and `seatLimit` are `null` when the company has no matching subscription plan. The response is a platform-level company summary and contains no leave data.
+Returns `{ companies: [{ id, name, slug, status, subscriptionStatus, planName, seatLimit, seatsUsed }] }`, ordered by company name. `seatsUsed` counts active and pending_verification non-platform users assigned to that company. `planName`, `subscriptionStatus`, and `seatLimit` are `null` when the company has no matching subscription plan. The response is a platform-level company summary and contains no leave data.
 
 ### `POST /api/companies/signup` — anyone
 

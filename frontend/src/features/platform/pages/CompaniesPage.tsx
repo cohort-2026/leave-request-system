@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Building2 } from 'lucide-react'
 import { PageShell } from '../../../app/layouts/PageShell'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../components/ui/card'
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '../../../components/ui/empty'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../../components/ui/table'
 import { ApiError } from '../../../services/api'
-import { Alert, DataTable, EmptyState } from '../../../shared/components'
+import { Alert } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import {
   fetchPlatformCompanies,
@@ -50,54 +59,6 @@ export function CompaniesPage() {
     }
   }, [])
 
-  const columns = [
-    {
-      key: 'company',
-      header: 'Company',
-      render: (company: PlatformCompany) => (
-        <div className="grid gap-1">
-          <span className="font-medium text-foreground">{company.name}</span>
-          <span className="text-xs text-muted-foreground">{company.slug}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'plan',
-      header: 'Plan',
-      render: (company: PlatformCompany) => (
-        <div className="grid gap-1">
-          <span>{company.planName ?? 'No plan'}</span>
-          {company.subscriptionStatus ? (
-            <span className="text-xs capitalize text-muted-foreground">
-              {company.subscriptionStatus.replaceAll('_', ' ')}
-            </span>
-          ) : null}
-        </div>
-      ),
-    },
-    {
-      key: 'seats',
-      header: 'Seats used',
-      render: (company: PlatformCompany) => (
-        <span className="font-medium tabular-nums">
-          {company.seatsUsed} / {company.seatLimit ?? '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Company status',
-      render: (company: PlatformCompany) => (
-        <Badge
-          variant={company.status === 'active' ? 'secondary' : 'outline'}
-          className="capitalize"
-        >
-          {company.status}
-        </Badge>
-      ),
-    },
-  ]
-
   return (
     <PageShell
       title="Companies"
@@ -108,45 +69,82 @@ export function CompaniesPage() {
         </Button>
       }
     >
-      <p className="max-w-2xl text-muted-foreground">
-        View company status, subscription plan, and active seats. Platform
-        access does not open a company’s leave data.
+      <p className="max-w-2xl text-sm text-muted-foreground">
+        Company status, subscription plan, and seats used against each plan
+        limit. Platform access does not open a company’s leave data.
       </p>
-      <Card>
-        <CardHeader>
-          <CardTitle>Company directory</CardTitle>
-          <CardDescription>
-            Active users counted against each plan’s seat limit.
-          </CardDescription>
-        </CardHeader>
-        {error ? (
-          <CardContent>
-            <Alert tone="error">{error}</Alert>
-          </CardContent>
-        ) : loading ? (
-          <CardContent>
-            <p className="text-sm text-muted-foreground" role="status">
-              Loading companies…
-            </p>
-          </CardContent>
-        ) : companies.length === 0 ? (
-          <CardContent>
-            <EmptyState
-              title="No companies yet"
-              description="New companies will appear here after they are created."
-            />
-          </CardContent>
-        ) : (
-          <CardContent>
-            <DataTable
-              data={companies}
-              keyExtractor={(company) => String(company.id)}
-              columns={columns}
-              emptyTitle="No companies yet"
-            />
-          </CardContent>
-        )}
-      </Card>
+
+      {error ? <Alert tone="error">{error}</Alert> : null}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Loading companies…
+        </p>
+      ) : error ? null : companies.length === 0 ? (
+        <Empty className="rounded-xl border border-border bg-card py-12">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Building2 className="size-5" />
+            </EmptyMedia>
+            <EmptyTitle>No companies yet</EmptyTitle>
+            <EmptyDescription>
+              New companies will appear here after they are created.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead scope="col">Company</TableHead>
+                <TableHead scope="col">Plan</TableHead>
+                <TableHead scope="col">Seats used</TableHead>
+                <TableHead scope="col">Company status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {companies.map((company) => (
+                <TableRow key={company.id}>
+                  <TableCell>
+                    <div className="grid gap-1">
+                      <span className="font-medium text-foreground">
+                        {company.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {company.slug}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="grid gap-1">
+                      <span>{company.planName ?? 'No plan'}</span>
+                      {company.subscriptionStatus ? (
+                        <span className="text-xs capitalize text-muted-foreground">
+                          {company.subscriptionStatus.replaceAll('_', ' ')}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium tabular-nums">
+                    {company.seatsUsed} / {company.seatLimit ?? '—'}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        company.status === 'active' ? 'secondary' : 'outline'
+                      }
+                      className="capitalize"
+                    >
+                      {company.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </PageShell>
   )
 }
