@@ -30,6 +30,7 @@ psql "$DATABASE_URL" -f sql/025_events.sql
 psql "$DATABASE_URL" -f sql/026_policy_holidays.sql
 psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 psql "$DATABASE_URL" -f sql/028_company_branding.sql
+psql "$DATABASE_URL" -f sql/029_company_date_blocks.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -91,6 +92,8 @@ psql "$DATABASE_URL" -f sql/028_company_branding.sql
 `027_s1_balances.sql` (issues 251 and 256) adds leave-type balance and cycle settings, backfills each balance's entitlement, stores half-day amounts at one decimal place, and seeds missing balances for active company members. Pending leave is calculated from pending requests rather than stored in the balance row.
 
 `028_company_branding.sql` adds company slogan, brand colours, a manual-colour flag, and a BYTEA logo (plus the same fields on `signup_checkouts` so appearance chosen at signup is applied when the company is created). The product default stays emerald when these columns are null.
+
+`029_company_date_blocks.sql` adds company- and department-scoped date periods with `block` or `warn` mode and a required reason.
 
 ## Demo password
 
