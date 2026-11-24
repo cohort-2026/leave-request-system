@@ -10,10 +10,8 @@ import {
 } from "../companies/signup.js";
 import { pool } from "../db.js";
 import type { WorkingDayFlags } from "../leave/workingDays.js";
-import {
-  isZaHolidayYear,
-  zaPublicHolidays,
-} from "../leave/zaHolidays.js";
+import { ensureZaHolidaysForCompany, insertZaHolidays } from "../leave/seedZaHolidays.js";
+import { isZaHolidayYear, zaPublicHolidays } from "../leave/zaHolidays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   disableOnboardingLink,
@@ -401,6 +399,7 @@ function isUniqueViolation(err: unknown): boolean {
 async function readCompanyCalendar(
   companyId: number,
 ): Promise<(CalendarSettingsRow & { holidays: HolidayRow[] }) | null> {
+  await ensureZaHolidaysForCompany(companyId);
   const settingsResult = await pool.query<CalendarSettingsRow>(
     `SELECT
        monday_is_working AS "mondayIsWorking",
@@ -1446,31 +1445,7 @@ companiesRouter.post(
     }
 
     const holidays = zaPublicHolidays(year);
-    const result = await pool.query<HolidayRow>(
-      `INSERT INTO public_holidays (
-         company_id, holiday_date, name, source, actual_date
-       )
-       SELECT
-         $1,
-         seeded.holiday_date,
-         seeded.name,
-         'za',
-         seeded.actual_date
-       FROM UNNEST($2::date[], $3::text[], $4::date[])
-         AS seeded(holiday_date, name, actual_date)
-       ON CONFLICT (company_id, holiday_date) DO NOTHING
-       RETURNING id,
-                 holiday_date::TEXT AS date,
-                 name,
-                 COALESCE(source, 'custom') AS source,
-                 actual_date::TEXT AS "actualDate"`,
-      [
-        companyId,
-        holidays.map((holiday) => holiday.date),
-        holidays.map((holiday) => holiday.name),
-        holidays.map((holiday) => holiday.actualDate),
-      ],
-    );
+    const added = await insertZaHolidays(companyId, year);
 
     const calendar = await readCompanyCalendar(companyId);
     if (!calendar) {
@@ -1480,7 +1455,7 @@ companiesRouter.post(
 
     res.json({
       year,
-      added: result.rowCount ?? 0,
+      added,
       holidays: calendar.holidays,
       observed: holidays
         .filter((holiday) => holiday.actualDate !== null)

@@ -40,6 +40,13 @@ const WEEKDAYS: {
 
 const HOLIDAY_YEARS = [2026, 2027, 2028, 2029, 2030] as const
 
+function defaultHolidayYear(): number {
+  const current = new Date().getFullYear()
+  return (HOLIDAY_YEARS as readonly number[]).includes(current)
+    ? current
+    : HOLIDAY_YEARS[0]
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
 }
@@ -76,7 +83,7 @@ function seedToastMessage(
 
 export function CalendarSettingsPage() {
   const [calendar, setCalendar] = useState<CalendarSettings | null>(null)
-  const [year, setYear] = useState<number>(2026)
+  const [year, setYear] = useState<number>(defaultHolidayYear)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -303,18 +310,19 @@ export function CalendarSettingsPage() {
                   Public holidays
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Holidays are excluded from the day count; they are not blocked
-                  dates.
+                  South African public holidays load automatically. They are
+                  excluded from the day count; they are not blocked dates.
                 </p>
               </div>
               <Button
                 type="button"
+                variant="outline"
                 onClick={() => void handleSeedZa()}
                 disabled={seeding}
               >
                 {seeding
-                  ? 'Loading…'
-                  : `Load SA public holidays ${year}`}
+                  ? 'Restoring…'
+                  : `Restore missing SA holidays ${year}`}
               </Button>
             </div>
 
@@ -340,7 +348,7 @@ export function CalendarSettingsPage() {
                   No public holidays in {year}
                 </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Load South Africa’s public holidays or add a company date.
+                  Restore the South African set or add a company date.
                 </p>
               </div>
             ) : (

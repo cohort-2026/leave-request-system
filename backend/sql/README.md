@@ -30,7 +30,7 @@ psql "$DATABASE_URL" -f sql/025_events.sql
 psql "$DATABASE_URL" -f sql/026_policy_holidays.sql
 psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 psql "$DATABASE_URL" -f sql/028_company_branding.sql
-psql "$DATABASE_URL" -f sql/029_company_date_blocks.sql
+psql "$DATABASE_URL" -f sql/029_za_public_holidays.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -93,7 +93,7 @@ psql "$DATABASE_URL" -f sql/029_company_date_blocks.sql
 
 `028_company_branding.sql` adds company slogan, brand colours, a manual-colour flag, and a BYTEA logo (plus the same fields on `signup_checkouts` so appearance chosen at signup is applied when the company is created). The product default stays emerald when these columns are null.
 
-`029_company_date_blocks.sql` adds company- and department-scoped date periods with `block` or `warn` mode and a required reason.
+`029_za_public_holidays.sql` inserts South African public holidays for 2026–2030 on every company (`source=za`). Sunday holidays are stored on the following Monday with `actual_date` set to the Sunday. Existing dates are left unchanged (`ON CONFLICT DO NOTHING`). New companies also receive these rows at signup.
 
 ## Demo password
 
