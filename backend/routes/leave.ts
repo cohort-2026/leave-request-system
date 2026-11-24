@@ -36,6 +36,11 @@ import {
   type WorkingDayFlags,
 } from "../leave/workingDays.js";
 import { hasOverlappingLeaveRequest } from "../leave/overlap.js";
+import {
+  firstBlockWarning,
+  loadLeavePolicyWarnings,
+  type LeaveWarning,
+} from "../leave/blocks.js";
 import { ensureZaHolidaysForCompany } from "../leave/seedZaHolidays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId, sameCompanyId } from "../tenancy.js";
@@ -111,9 +116,17 @@ class LeaveRequestError extends Error {
   constructor(
     message: string,
     readonly status = 400,
+    readonly body: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "LeaveRequestError";
+  }
+}
+
+function refuseBlockedLeave(warnings: LeaveWarning[]): void {
+  const blocked = firstBlockWarning(warnings);
+  if (blocked) {
+    throw new LeaveRequestError(blocked.message, 400, { warnings });
   }
 }
 
@@ -498,7 +511,7 @@ leaveRouter.get(
       leaveType = await getLeaveType(companyId, leaveTypeId, pool);
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -527,7 +540,7 @@ leaveRouter.get(
       );
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -549,16 +562,16 @@ leaveRouter.get(
       [companyId],
     );
     const minNoticeDays = Number(rulesResult.rows[0]?.min_notice_days ?? 0);
-    const warnings: string[] = [];
+    const noticeWarnings: string[] = [];
     if (!leaveType.allow_backdate && startDate < today) {
-      warnings.push("This leave type does not allow backdated requests");
+      noticeWarnings.push("This leave type does not allow backdated requests");
     }
     if (
       !leaveType.allow_backdate &&
       minNoticeDays > 0 &&
       wholeDaysBetween(today, startDate) < minNoticeDays
     ) {
-      warnings.push(
+      noticeWarnings.push(
         `This request must be submitted at least ${minNoticeDays} days in advance`,
       );
     }
@@ -576,20 +589,28 @@ leaveRouter.get(
     const availableAfter =
       remaining === null ? null : remaining - workingDaysCount;
     if (workingDaysCount <= 0) {
-      warnings.push("Your dates contain no working days");
+      noticeWarnings.push("Your dates contain no working days");
     }
     if (balance?.hasBalance && !balance.hasBalanceRow) {
-      warnings.push("No balance exists for this leave type");
+      noticeWarnings.push("No balance exists for this leave type");
     }
     if (
       balance?.hasBalance &&
       balance.available !== null &&
       workingDaysCount > balance.available
     ) {
-      warnings.push(
+      noticeWarnings.push(
         insufficientBalanceMessage(balance.available, balance.pending),
       );
     }
+
+    const warnings = await loadLeavePolicyWarnings(pool, {
+      companyId,
+      userId: req.user!.id,
+      leaveTypeId,
+      startDate,
+      endDate,
+    });
 
     const documentRequired = documentIsRequired(
       leaveType.requires_document_after_days,
@@ -628,7 +649,7 @@ leaveRouter.get(
       approverName,
       reviewerName: reviewer?.name ?? null,
       warnings,
-      noticeWarnings: warnings,
+      noticeWarnings,
     });
   },
 );
@@ -681,6 +702,7 @@ leaveRouter.post(
       let request: LeaveRequestRow;
       let leaveTypeName: string;
       let workingDaysCount: number;
+      let policyWarnings: LeaveWarning[] = [];
       let reviewer: { id: number; email: string; name: string } | null =
         null;
 
@@ -794,6 +816,15 @@ leaveRouter.post(
             "These dates overlap an existing pending or approved leave request",
           );
         }
+
+        policyWarnings = await loadLeavePolicyWarnings(client, {
+          companyId,
+          userId: req.user!.id,
+          leaveTypeId,
+          startDate,
+          endDate,
+        });
+        refuseBlockedLeave(policyWarnings);
 
         reviewer = await findReviewer(
           companyId,
@@ -944,10 +975,11 @@ leaveRouter.post(
           workingDaysCount: request.working_days_count,
           submittedAt: request.submitted_at,
         },
+        warnings: policyWarnings,
       });
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -1109,6 +1141,7 @@ leaveRouter.patch(
 
       const client = await pool.connect();
       let updated: MyLeaveRow;
+      let policyWarnings: LeaveWarning[] = [];
       try {
         await client.query("BEGIN");
         const requestResult = await client.query<MyLeaveRow>(
@@ -1236,6 +1269,16 @@ leaveRouter.patch(
           );
         }
 
+        policyWarnings = await loadLeavePolicyWarnings(client, {
+          companyId,
+          userId: req.user!.id,
+          leaveTypeId,
+          startDate,
+          endDate,
+          excludeRequestId: id,
+        });
+        refuseBlockedLeave(policyWarnings);
+
         const nextFileName =
           uploadedFile?.originalname ??
           (removeFile ? null : request.supporting_file_name);
@@ -1310,10 +1353,10 @@ leaveRouter.patch(
         client.release();
       }
 
-      res.json(toMyLeaveItem(updated));
+      res.json({ ...toMyLeaveItem(updated), warnings: policyWarnings });
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -1671,11 +1714,20 @@ teamRouter.get(
           ? Number(formatBalanceDays(balance.available - Number(row.working_days_count)))
           : null;
         const clashCount = await countDepartmentClashes(row, pool);
+        const warnings = await loadLeavePolicyWarnings(pool, {
+          companyId: row.company_id,
+          userId: row.employee_user_id,
+          leaveTypeId: row.leave_type_id,
+          startDate: row.start_date,
+          endDate: row.end_date,
+          excludeRequestId: row.id,
+        });
 
         return {
           ...toQueueItem(row),
           balanceAfter,
           clashCount,
+          warnings,
         };
       }),
     );
@@ -1741,10 +1793,19 @@ leaveRouter.get(
         }))
       : [];
     const events = storedEvents.length > 0 ? storedEvents : fallbackEvents;
+    const warnings = await loadLeavePolicyWarnings(pool, {
+      companyId,
+      userId: request.employee_user_id,
+      leaveTypeId: request.leave_type_id,
+      startDate: request.start_date,
+      endDate: request.end_date,
+      excludeRequestId: request.id,
+    });
     res.json({
       ...toQueueItem(request),
       ...toMyLeaveItem(detail),
       events,
+      warnings,
       ...(reviewContext
         ? {
             reviewContext,
@@ -1957,7 +2018,7 @@ leaveRouter.post(
     } catch (error) {
       await client.query("ROLLBACK");
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -2078,7 +2139,7 @@ leaveRouter.post(
     } catch (error) {
       await client.query("ROLLBACK");
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -2176,7 +2237,7 @@ leaveRouter.post(
     } catch (error) {
       await client.query("ROLLBACK");
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
