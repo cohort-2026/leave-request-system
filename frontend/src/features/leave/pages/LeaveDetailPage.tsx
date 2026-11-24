@@ -18,17 +18,23 @@ import {
   CardHeader,
   CardTitle,
 } from '../../../components/ui/card'
+import { Textarea } from '../../../components/ui/textarea'
 import { Alert } from '../../../shared/components'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { leaveEditPath, paths } from '../../../shared/constants/paths'
 import { leaveTypeColour, leaveTypeDotClass } from '../../../shared/leaveTypeColour'
-import { ApiError } from '../../../services/api'
+import { ApiError, apiRequest } from '../../../services/api'
 import {
   cancelMyLeaveRequest,
   downloadSupportingFile,
   fetchMyLeaveRequest,
   type MyLeaveRequest,
 } from '../leaveApi'
+
+type LeaveBalanceItem = {
+  leaveType: string
+  daysRemaining: number
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
@@ -38,6 +44,8 @@ export function LeaveDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [request, setRequest] = useState<MyLeaveRequest | null>(null)
+  const [balances, setBalances] = useState<LeaveBalanceItem[]>([])
+  const [cancelReason, setCancelReason] = useState('')
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -49,10 +57,16 @@ export function LeaveDetailPage() {
     let active = true
     if (!id) return
 
-    fetchMyLeaveRequest(id)
-      .then((data) => {
+   Promise.all([
+      fetchMyLeaveRequest(id),
+      apiRequest<{ balances?: LeaveBalanceItem[] }>('/api/leave/balances').catch(
+        () => ({ balances: [] }),
+      ),
+    ])
+      .then(([data, balanceRes]) => {
         if (active) {
           setRequest(data)
+          setBalances(balanceRes.balances ?? [])
           setError(null)
           setLoadedId(id)
         }
@@ -85,16 +99,25 @@ export function LeaveDetailPage() {
   }
 
   async function handleCancel() {
-    if (!id || cancelling) return
+if (!id || !request || cancelling) return
     setCancelling(true)
     setActionError(null)
     try {
-      const updated = await cancelMyLeaveRequest(id)
+       const updated = await cancelMyLeaveRequest(
+        id,
+        request.status === 'approved' ? cancelReason : undefined,
+      )
       setRequest(updated)
       setCancelOpen(false)
+      setCancelReason('')
     } catch (err) {
       setActionError(
-        getErrorMessage(err, 'Could not withdraw this leave request.'),
+        getErrorMessage(
+          err,
+          request.status === 'approved'
+            ? 'Could not cancel this leave request.'
+            : 'Could not withdraw this leave request.',
+        ),
       )
     } finally {
       setCancelling(false)
@@ -132,28 +155,55 @@ export function LeaveDetailPage() {
   }
 
   const canChange = request.status === 'pending'
+   const canWithdraw = request.canWithdraw ?? request.status === 'pending'
+  const canCancelApproved = request.canCancel === true
+  const isApprovedStarted =
+    request.status === 'approved' && request.canCancel === false
   const colour = leaveTypeColour(request.leaveType)
+
+  const matchingBalance = balances.find(
+    (b) => b.leaveType.toLowerCase() === request.leaveType.toLowerCase(),
+  )
+  const currentRemaining = matchingBalance?.daysRemaining ?? null
+  const nextRemaining =
+    currentRemaining !== null
+      ? Number((currentRemaining + request.workingDays).toFixed(2))
+      : null
+  const dayWord = request.workingDays === 1 ? 'day' : 'days'
 
   return (
     <PageShell
       title={request.leaveType}
       action={
-        canChange ? (
+  canChange || canWithdraw || canCancelApproved ? (
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => navigate(leaveEditPath(request.id))}
-            >
-              Change request
-            </Button>
-            <Button
-              variant="destructive"
-              type="button"
-              onClick={() => setCancelOpen(true)}
-            >
-              Withdraw
-            </Button>
+            {canChange ? (
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => navigate(leaveEditPath(request.id))}
+              >
+                Change request
+              </Button>
+            ) : null}
+            {canWithdraw ? (
+              <Button
+                variant="destructive"
+                type="button"
+                onClick={() => setCancelOpen(true)}
+              >
+                Withdraw
+              </Button>
+            ) : null}
+            {canCancelApproved ? (
+              <Button
+                variant="destructive"
+                type="button"
+                onClick={() => setCancelOpen(true)}
+              >
+                Cancel leave
+              </Button>
+            ) : null}
           </div>
         ) : undefined
       }
@@ -161,6 +211,13 @@ export function LeaveDetailPage() {
       {actionError && !cancelOpen ? (
         <Alert tone="error">{actionError}</Alert>
       ) : null}
+
+        {isApprovedStarted ? (
+        <p className="text-sm text-muted-foreground">
+          Ask HR to shorten this leave
+        </p>
+      ) : null}
+
 
       <div className="flex flex-wrap items-center gap-3">
         <span
@@ -242,17 +299,54 @@ export function LeaveDetailPage() {
         <Link to={paths.leave}>Back to my leave</Link>
       </Button>
 
-      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+         <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Withdraw this request?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {canCancelApproved
+                ? 'Cancel approved leave?'
+                : 'Withdraw this request?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              The reviewer will be notified. You cannot undo this.
+              {canCancelApproved ? (
+                <>
+                  {request.workingDays} {dayWord} will return to your{' '}
+                  {request.leaveType} balance
+                  {currentRemaining !== null && nextRemaining !== null
+                    ? ` (${currentRemaining} → ${nextRemaining})`
+                    : ''}
+                  .
+                </>
+              ) : (
+                'The reviewer will be notified. You cannot undo this.'
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {canCancelApproved ? (
+            <div className="grid gap-2 py-2">
+              <label
+                htmlFor="cancel-reason"
+                className="text-sm font-medium text-foreground"
+              >
+                Reason (optional)
+              </label>
+              <Textarea
+                id="cancel-reason"
+                placeholder="Optional note for HR or your manager..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          ) : null}
+
           {actionError ? <Alert tone="error">{actionError}</Alert> : null}
+
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={cancelling}>Keep request</AlertDialogCancel>
+            <AlertDialogCancel disabled={cancelling}>
+              {canCancelApproved ? 'Keep leave' : 'Keep request'}
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={cancelling}
               onClick={(event) => {
@@ -260,7 +354,13 @@ export function LeaveDetailPage() {
                 void handleCancel()
               }}
             >
-              {cancelling ? 'Withdrawing…' : 'Withdraw'}
+              {cancelling
+                ? canCancelApproved
+                  ? 'Cancelling…'
+                  : 'Withdrawing…'
+                : canCancelApproved
+                  ? 'Cancel leave'
+                  : 'Withdraw'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
