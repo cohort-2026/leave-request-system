@@ -32,6 +32,7 @@ type LeaveTypeRow = {
   is_active: boolean;
   allow_backdate: boolean;
   requires_document_after_days: number | null;
+  ignores_blocks: boolean;
 };
 
 type LeaveTypeFields = {
@@ -43,6 +44,7 @@ type LeaveTypeFields = {
   isActive?: boolean;
   allowBackdate?: boolean;
   requiresDocumentAfterDays?: number | null;
+  ignoresBlocks?: boolean;
 };
 
 function toPublicLeaveType(row: LeaveTypeRow) {
@@ -57,6 +59,7 @@ function toPublicLeaveType(row: LeaveTypeRow) {
     isActive: row.is_active,
     allowBackdate: row.allow_backdate,
     requiresDocumentAfterDays: row.requires_document_after_days,
+    ignoresBlocks: row.ignores_blocks,
   };
 }
 
@@ -65,7 +68,8 @@ const LEAVE_TYPE_SELECT = `id, name, default_days, has_balance, cycle_months,
        COALESCE(allowance_period, 'annual') AS allowance_period,
        COALESCE(is_active, true) AS is_active,
        allow_backdate,
-       requires_document_after_days`;
+       requires_document_after_days,
+       COALESCE(ignores_blocks, false) AS ignores_blocks`;
 
 function isLeaveTypeColour(value: unknown): value is LeaveTypeColour {
   return (
@@ -204,6 +208,13 @@ function parseLeaveTypeBody(
     }
   }
 
+  if (hasOwn(values, "ignoresBlocks")) {
+    if (typeof values.ignoresBlocks !== "boolean") {
+      return { ok: false, error: "Ignore-blocks flag must be a boolean" };
+    }
+    fields.ignoresBlocks = values.ignoresBlocks;
+  }
+
   if (mode === "create") {
     if (fields.name === undefined) {
       return { ok: false, error: "Leave type name required" };
@@ -222,7 +233,8 @@ function parseLeaveTypeBody(
     fields.colour === undefined &&
     fields.isActive === undefined &&
     fields.allowBackdate === undefined &&
-    fields.requiresDocumentAfterDays === undefined
+    fields.requiresDocumentAfterDays === undefined &&
+    fields.ignoresBlocks === undefined
   ) {
     return { ok: false, error: "Provide at least one leave type field" };
   }
@@ -319,6 +331,10 @@ adminLeaveTypesRouter.post(
     const allowBackdate = parsed.value.allowBackdate ?? false;
     const requiresDocumentAfterDays =
       parsed.value.requiresDocumentAfterDays ?? null;
+    const lowerName = name.toLocaleLowerCase();
+    const ignoresBlocks =
+      parsed.value.ignoresBlocks ??
+      (lowerName === "sick" || lowerName === "family responsibility");
 
     const client = await pool.connect();
     try {
@@ -327,9 +343,9 @@ adminLeaveTypesRouter.post(
         `INSERT INTO leave_types (
            company_id, name, default_days, has_balance, cycle_months,
            colour, allowance_period, is_active, allow_backdate,
-           requires_document_after_days
+           requires_document_after_days, ignores_blocks
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'annual', $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, 'annual', $7, $8, $9, $10)
          RETURNING ${LEAVE_TYPE_SELECT}`,
         [
           companyId,
@@ -341,6 +357,7 @@ adminLeaveTypesRouter.post(
           isActive,
           allowBackdate,
           requiresDocumentAfterDays,
+          ignoresBlocks,
         ],
       );
       const row = result.rows[0];
@@ -442,6 +459,10 @@ adminLeaveTypesRouter.patch(
       assignments.push(
         `requires_document_after_days = $${parameters.length}`,
       );
+    }
+    if (fields.ignoresBlocks !== undefined) {
+      parameters.push(fields.ignoresBlocks);
+      assignments.push(`ignores_blocks = $${parameters.length}`);
     }
 
     const client = await pool.connect();

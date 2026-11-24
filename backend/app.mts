@@ -15,6 +15,7 @@ import {
   leaveTypesRouter,
 } from "./routes/leave-types.js";
 import { calendarRouter } from "./routes/calendar.js";
+import { departmentsRouter } from "./routes/departments.js";
 import { pingRouter } from "./routes/ping.js";
 import { usersRouter } from "./routes/users.js";
 import { authSsoRouter, companySsoRouter } from "./routes/sso.js";
@@ -46,6 +47,7 @@ app.use("/api/leave", leaveRouter);
 app.use("/api/team", teamRouter);
 app.use("/api/leave-types", leaveTypesRouter);
 app.use("/api/calendar", calendarRouter);
+app.use("/api/departments", departmentsRouter);
 app.use("/api/admin/leave-types", adminLeaveTypesRouter);
 app.use("/api/ping", pingRouter);
 app.use("/api/users", userBalancesRouter);

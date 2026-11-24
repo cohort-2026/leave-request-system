@@ -25,6 +25,16 @@ type LeaveMark = {
   status: string;
 };
 
+type DateBlockMark = {
+  id: number;
+  startDate: string;
+  endDate: string;
+  departmentId: number | null;
+  departmentName: string | null;
+  mode: "block" | "warn";
+  reason: string;
+};
+
 function parseDate(value: unknown): string | null {
   if (
     typeof value !== "string" ||
@@ -116,6 +126,41 @@ calendarRouter.get(
         ? "leave_types.name"
         : "COALESCE(NULLIF(BTRIM(employees.display_name), ''), employees.email)";
 
+    const actorDepartment =
+      role === "company_admin"
+        ? null
+        : await pool.query<{ department_id: number | null }>(
+            `SELECT department_id
+             FROM users
+             WHERE id = $1 AND company_id = $2
+             LIMIT 1`,
+            [actor.id, companyId],
+          );
+    const departmentId = actorDepartment?.rows[0]?.department_id ?? null;
+    const blocksResult = await pool.query<DateBlockMark>(
+      `SELECT date_blocks.id,
+              date_blocks.starts_on::TEXT AS "startDate",
+              date_blocks.ends_on::TEXT AS "endDate",
+              date_blocks.department_id AS "departmentId",
+              departments.name AS "departmentName",
+              date_blocks.mode,
+              date_blocks.reason
+       FROM date_blocks
+       LEFT JOIN departments
+         ON departments.id = date_blocks.department_id
+        AND departments.company_id = date_blocks.company_id
+       WHERE date_blocks.company_id = $1
+         AND date_blocks.starts_on <= $3::date
+         AND date_blocks.ends_on >= $2::date
+         AND (
+           $4 = 'company_admin'
+           OR date_blocks.department_id IS NULL
+           OR date_blocks.department_id = $5
+         )
+       ORDER BY date_blocks.starts_on, date_blocks.id`,
+      [companyId, from, to, role, departmentId],
+    );
+
     const leaveResult = await pool.query<LeaveMark>(
       `SELECT
          leave_requests.id,
@@ -147,6 +192,7 @@ calendarRouter.get(
     res.json({
       holidays: holidaysResult.rows,
       leave: leaveResult.rows,
+      blocks: blocksResult.rows,
     });
   },
 );
