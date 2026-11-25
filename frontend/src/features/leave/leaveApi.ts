@@ -9,6 +9,7 @@ export type LeaveType = {
   isActive: boolean
   allowBackdate: boolean
   requiresDocumentAfterDays: number | null
+  ignoresBlocks?: boolean
 }
 
 export type LeaveHalf = 'full' | 'am' | 'pm' | 'morning' | 'afternoon'
@@ -53,18 +54,32 @@ export type LeavePreviewHoliday = {
   name?: string
 }
 
+export type LeaveWarningKind = 'block' | 'warn' | 'clash'
+
+export type LeavePolicyWarning = {
+  kind: LeaveWarningKind
+  message: string
+}
+
+export type LeaveApprovalStep = {
+  name: string
+  reason?: string | null
+}
+
 export type LeavePreviewResponse = {
   workingDaysCount: number
   excludedDates?: string[]
   holidays?: LeavePreviewHoliday[]
   availableAfter?: number | null
+  approver?: string | null
   approverName?: string | null
   reviewerName?: string | null
+  approvalSteps?: LeaveApprovalStep[]
   documentRequired?: boolean
   documentRule?: string | null
   noticeWarning?: string | null
   noticeWarnings?: string[]
-  warnings?: string[]
+  warnings?: Array<LeavePolicyWarning | string>
 }
 
 export type LeaveRequestInput = {
