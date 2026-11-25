@@ -4,10 +4,27 @@ import type { DateRange } from 'react-day-picker'
 import { CalendarDays, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageShell } from '../../../app/layouts/PageShell'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Sheet,
   SheetContent,
@@ -16,7 +33,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Select } from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -96,6 +112,7 @@ export function BlocksPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [blockToDelete, setBlockToDelete] = useState<DateBlock | null>(null)
 
   const visibleBlocks = useMemo(() => {
     const firstDay = `${year}-01-01`
@@ -213,15 +230,14 @@ export function BlocksPage() {
     }
   }
 
-  async function handleDelete(block: DateBlock) {
-    if (!window.confirm(`Remove the blocked period for “${block.reason}”?`)) {
-      return
-    }
-
+  async function handleDelete() {
+    if (!blockToDelete) return
+    const block = blockToDelete
     setDeletingId(block.id)
     try {
       await deleteDateBlock(block.id)
       setBlocks((current) => current.filter((item) => item.id !== block.id))
+      setBlockToDelete(null)
       toast.success('Blocked dates removed.')
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'Could not remove these blocked dates.'))
@@ -248,20 +264,21 @@ export function BlocksPage() {
             Prevent or warn about leave requests during important periods.
           </p>
         </div>
-        <label className="grid gap-1 text-sm font-medium">
+        <div className="grid gap-1 text-sm font-medium">
           <span>Year</span>
-          <Select
-            aria-label="Filter blocked dates by year"
-            value={year}
-            onChange={(event) => setYear(event.target.value)}
-          >
-            {blockYears(blocks).map((optionYear) => (
-              <option key={optionYear} value={optionYear}>
-                {optionYear}
-              </option>
-            ))}
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger aria-label="Filter blocked dates by year" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {blockYears(blocks).map((optionYear) => (
+                <SelectItem key={optionYear} value={String(optionYear)}>
+                  {optionYear}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
-        </label>
+        </div>
       </div>
 
       {loadError ? (
@@ -334,7 +351,7 @@ export function BlocksPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => void handleDelete(block)}
+                      onClick={() => setBlockToDelete(block)}
                       aria-label={`Remove ${block.reason}`}
                       disabled={deletingId !== null}
                     >
@@ -391,44 +408,51 @@ export function BlocksPage() {
                 </p>
               </div>
 
-              <label className="grid gap-1.5 text-sm font-medium">
-                Applies to
+              <div className="grid gap-1.5 text-sm font-medium">
+                <span>Applies to</span>
                 <Select
-                  value={form.departmentId}
-                  onChange={(event) =>
+                  value={form.departmentId || 'company'}
+                  onValueChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      departmentId: event.target.value,
+                      departmentId: value === 'company' ? '' : value,
                     }))
                   }
                   disabled={saving}
                 >
-                  <option value="">Whole company</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
+                  <SelectTrigger aria-label="Applies to">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="company">Whole company</SelectItem>
+                    {departments.map((department) => (
+                      <SelectItem key={department.id} value={String(department.id)}>
+                        {department.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
-              </label>
+              </div>
 
-              <label className="grid gap-1.5 text-sm font-medium">
-                Mode
+              <div className="grid gap-1.5 text-sm font-medium">
+                <span>Mode</span>
                 <Select
                   value={form.mode}
-                  onChange={(event) =>
-                    setForm((current) => {
-                      const value = event.target.value
-                      if (value !== 'block' && value !== 'warn') return current
-                      return { ...current, mode: value }
-                    })
-                  }
+                  onValueChange={(value) => {
+                    if (value !== 'block' && value !== 'warn') return
+                    setForm((current) => ({ ...current, mode: value }))
+                  }}
                   disabled={saving}
                 >
-                  <option value="block">Block requests</option>
-                  <option value="warn">Warn for review</option>
+                  <SelectTrigger aria-label="Block mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="block">Block requests</SelectItem>
+                    <SelectItem value="warn">Warn for review</SelectItem>
+                  </SelectContent>
                 </Select>
-              </label>
+              </div>
 
               <label className="grid gap-1.5 text-sm font-medium">
                 Reason
@@ -466,6 +490,36 @@ export function BlocksPage() {
           </form>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog
+        open={blockToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && deletingId === null) setBlockToDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove blocked dates?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {blockToDelete
+                ? `Remove the blocked period for “${blockToDelete.reason}”?`
+                : 'Remove this blocked period?'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingId !== null}>Keep dates</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingId !== null}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
+            >
+              {deletingId !== null ? 'Removing…' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageShell>
   )
 }
