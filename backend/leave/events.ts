@@ -8,6 +8,7 @@ export type LeaveEventType =
   | "approve"
   | "decline"
   | "withdraw"
+  | "cancel"
   | "auto_approve"
   | "document_view";
 
@@ -17,6 +18,7 @@ export const ACTION_BY_TYPE: Record<LeaveEventType, string> = {
   approve: "approved",
   decline: "declined",
   withdraw: "withdrawn",
+  cancel: "cancelled",
   auto_approve: "auto_approved",
   document_view: "document_viewed",
 };
@@ -27,7 +29,7 @@ export const TYPE_BY_ACTION: Record<string, LeaveEventType> = {
   approved: "approve",
   declined: "decline",
   withdrawn: "withdraw",
-  cancelled: "withdraw",
+  cancelled: "cancel",
   auto_approved: "auto_approve",
   document_viewed: "document_view",
 };

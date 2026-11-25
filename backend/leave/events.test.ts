@@ -15,6 +15,7 @@ describe("leave request event mapping", () => {
       approve: "approved",
       decline: "declined",
       withdraw: "withdrawn",
+      cancel: "cancelled",
       auto_approve: "auto_approved",
       document_view: "document_viewed",
     };
@@ -23,6 +24,7 @@ describe("leave request event mapping", () => {
 
   it("maps stored actions back to helper types", () => {
     assert.equal(TYPE_BY_ACTION.submitted, "submit");
+    assert.equal(TYPE_BY_ACTION.cancelled, "cancel");
     assert.equal(TYPE_BY_ACTION.auto_approved, "auto_approve");
     assert.equal(TYPE_BY_ACTION.document_viewed, "document_view");
   });

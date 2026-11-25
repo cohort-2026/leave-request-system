@@ -31,6 +31,15 @@ export type MyLeaveRequest = {
   decisionReason: string | null
   reviewerName?: string | null
   approverName?: string | null
+  isOwner?: boolean
+  hasStarted?: boolean
+  canWithdraw?: boolean
+  canCancel?: boolean
+  cancelBalance?: {
+    hasBalance: boolean
+    before: number | null
+    after: number | null
+  } | null
 }
 
 type LeaveTypesResponse = {
@@ -209,9 +218,14 @@ export async function downloadSupportingFile(
   URL.revokeObjectURL(url)
 }
 
-export function cancelMyLeaveRequest(id: string): Promise<MyLeaveRequest> {
+export function cancelMyLeaveRequest(
+  id: string,
+  reason?: string,
+): Promise<MyLeaveRequest> {
+  const trimmedReason = reason?.trim()
   return apiRequest<MyLeaveRequest>(`/api/leave/${id}/cancel`, {
     method: 'POST',
+    ...(trimmedReason ? { body: JSON.stringify({ reason: trimmedReason }) } : {}),
   })
 }
 

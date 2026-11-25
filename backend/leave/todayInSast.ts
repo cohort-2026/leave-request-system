@@ -10,3 +10,10 @@ const sastDateFormatter = new Intl.DateTimeFormat("en-CA", {
 export function todayInSast(now: Date = new Date()): string {
   return sastDateFormatter.format(now);
 }
+
+export function leaveHasStartedInSast(
+  startDate: string,
+  now: Date = new Date(),
+): boolean {
+  return startDate <= todayInSast(now);
+}
