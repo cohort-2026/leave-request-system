@@ -26,10 +26,14 @@ import {
   applyApprovedLeaveToBalance,
   getBalance,
   listBalances,
+  restoreApprovedLeaveBalance,
 } from "../leave/balances.js";
 import { buildLeaveReviewEvents } from "../leave/reviewEvents.js";
 import { canReviewLeaveRequest } from "../leave/reviewerAccess.js";
-import { todayInSast } from "../leave/todayInSast.js";
+import {
+  leaveHasStartedInSast,
+  todayInSast,
+} from "../leave/todayInSast.js";
 import {
   countWorkingDaysPreview,
   type DayHalf,
@@ -1793,6 +1797,19 @@ leaveRouter.get(
         }))
       : [];
     const events = storedEvents.length > 0 ? storedEvents : fallbackEvents;
+    const hasStarted = leaveHasStartedInSast(request.start_date);
+    const canWithdraw =
+      isOwner && request.status === "pending" && !hasStarted;
+    const canCancel =
+      isOwner && request.status === "approved" && !hasStarted;
+    const cancellationBalance = canCancel
+      ? await getBalance(
+          request.employee_user_id,
+          request.company_id,
+          request.leave_type_id,
+          pool,
+        )
+      : null;
     const warnings = await loadLeavePolicyWarnings(pool, {
       companyId,
       userId: request.employee_user_id,
@@ -1806,6 +1823,25 @@ leaveRouter.get(
       ...toMyLeaveItem(detail),
       events,
       warnings,
+      isOwner,
+      hasStarted,
+      canWithdraw,
+      canCancel,
+      cancelBalance: cancellationBalance
+        ? {
+            hasBalance: cancellationBalance.hasBalance,
+            before: cancellationBalance.available,
+            after:
+              cancellationBalance.available === null
+                ? null
+                : Number(
+                    formatBalanceDays(
+                      cancellationBalance.available +
+                        Number(request.working_days_count),
+                    ),
+                  ),
+          }
+        : null,
       ...(reviewContext
         ? {
             reviewContext,
@@ -1957,8 +1993,35 @@ leaveRouter.post(
       return;
     }
 
+    const body: unknown = req.body;
+    if (
+      body !== undefined &&
+      (typeof body !== "object" || body === null || Array.isArray(body))
+    ) {
+      res.status(400).json({ error: "Invalid cancellation reason" });
+      return;
+    }
+    const reasonValue =
+      typeof body === "object" && body !== null && "reason" in body
+        ? body.reason
+        : undefined;
+    if (reasonValue !== undefined && typeof reasonValue !== "string") {
+      res.status(400).json({ error: "Cancellation reason must be text" });
+      return;
+    }
+    const cancelReason =
+      typeof reasonValue === "string" ? reasonValue.trim() || null : null;
+    if (cancelReason && cancelReason.length > 500) {
+      res.status(400).json({
+        error: "Cancellation reason must be 500 characters or fewer",
+      });
+      return;
+    }
+
     const client = await pool.connect();
     let cancelled: MyLeaveRow;
+    let cancelledWasApproved = false;
+    let balanceDelta: number | null = null;
     try {
       await client.query("BEGIN");
       const result = await client.query<MyLeaveRow>(
@@ -1976,21 +2039,52 @@ leaveRouter.post(
       ) {
         throw new LeaveRequestError("Leave request not found", 404);
       }
-      if (request.status !== "pending") {
-        throw new LeaveRequestError("Only pending requests can be cancelled");
+      if (leaveHasStartedInSast(request.start_date)) {
+        throw new LeaveRequestError("Leave has already started");
+      }
+      if (request.status !== "pending" && request.status !== "approved") {
+        throw new LeaveRequestError(
+          "Only pending or approved future leave can be cancelled",
+        );
+      }
+
+      const workingDaysCount = Number(request.working_days_count);
+      cancelledWasApproved = request.status === "approved";
+      if (request.status === "approved") {
+        await client.query("SELECT pg_advisory_xact_lock($1, $2)", [
+          companyId,
+          request.employee_user_id,
+        ]);
+        const restored = await restoreApprovedLeaveBalance(
+          request.employee_user_id,
+          companyId,
+          request.leave_type_id,
+          workingDaysCount,
+          client,
+        );
+        if (!restored) {
+          throw new LeaveRequestError(
+            "Could not restore the leave balance for this request",
+          );
+        }
+        if (restored === "restored") balanceDelta = workingDaysCount;
       }
 
       const update = await client.query(
         `UPDATE leave_requests
          SET status = 'cancelled',
-             cancelled_at = NOW()
+             cancelled_at = NOW(),
+             cancelled_by_user_id = $2,
+             cancel_reason = $3
          WHERE id = $1
            AND employee_user_id = $2
-           AND status = 'pending'`,
-        [id, req.user!.id],
+           AND status = $4`,
+        [id, req.user!.id, cancelReason, request.status],
       );
       if (update.rowCount !== 1) {
-        throw new LeaveRequestError("Only pending requests can be cancelled");
+        throw new LeaveRequestError(
+          "This leave request can no longer be cancelled",
+        );
       }
 
       const cancelledResult = await client.query<MyLeaveRow>(
@@ -2009,9 +2103,10 @@ leaveRouter.post(
         companyId,
         leaveRequestId: id,
         actorUserId: req.user!.id,
-        type: "withdraw",
+        type: request.status === "pending" ? "withdraw" : "cancel",
         before: { status: request.status },
-        after: { status: "cancelled" },
+        after: { status: "cancelled", reason: cancelReason },
+        balanceDelta,
       });
 
       await client.query("COMMIT");
@@ -2037,6 +2132,8 @@ leaveRouter.post(
             leaveTypeName: cancelled.leave_type,
             startDate: cancelled.start_date,
             endDate: cancelled.end_date,
+            wasApproved: cancelledWasApproved,
+            reason: cancelReason,
             actionUrl: new URL(
               `/team/queue/${cancelled.id}`,
               appOrigin(),

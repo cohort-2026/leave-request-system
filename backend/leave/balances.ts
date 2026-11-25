@@ -158,6 +158,36 @@ export async function applyApprovedLeaveToBalance(
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function restoreApprovedLeaveBalance(
+  userId: number,
+  companyId: number,
+  leaveTypeId: number,
+  workingDaysCount: number,
+  executor: Queryable,
+): Promise<"restored" | "unlimited" | false> {
+  const leaveType = await executor.query<{ has_balance: boolean }>(
+    `SELECT has_balance
+     FROM leave_types
+     WHERE id = $1
+       AND company_id = $2`,
+    [leaveTypeId, companyId],
+  );
+  if (!leaveType.rows[0]) return false;
+  if (!leaveType.rows[0].has_balance) return "unlimited";
+
+  const result = await executor.query(
+    `UPDATE leave_balances
+     SET days_used = days_used - $4,
+         days_remaining = days_remaining + $4
+     WHERE company_id = $1
+       AND user_id = $2
+       AND leave_type_id = $3
+       AND days_used >= $4`,
+    [companyId, userId, leaveTypeId, workingDaysCount],
+  );
+  return (result.rowCount ?? 0) > 0 ? "restored" : false;
+}
+
 export async function grantLeaveTypeBalances(
   companyId: number,
   leaveTypeId: number,
