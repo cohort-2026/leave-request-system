@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { PageShell } from '../../../app/layouts/PageShell'
+import { Avatar, AvatarFallback } from '../../../components/ui/avatar'
 import { Button } from '../../../components/ui/button'
 import { Calendar } from '../../../components/ui/calendar'
 import {
@@ -42,6 +43,13 @@ import {
   type LeaveType,
   type MyLeaveRequest,
 } from '../leaveApi'
+import { RequestPolicyAlerts } from '../components/RequestPolicyAlerts'
+import {
+  approvalStepsFrom,
+  approvalStepsSentence,
+  firstBlockWarning,
+  parsePolicyWarnings,
+} from '../policyWarnings'
 import { ApiError } from '../../../services/api'
 import { cn } from '../../../lib/utils'
 
@@ -125,6 +133,17 @@ function remainingLabel(balance: LeaveBalance | null, loading: boolean) {
   if (!balance) return 'No balance'
   if (!balance.hasBalance) return 'No limit'
   return `${formatBalanceDays(balance.available ?? 0)} days available`
+}
+
+function initialsFromName(name: string) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? '')
+    .join('')
+    .toUpperCase()
+  return initials || '?'
 }
 
 type PreviewState = {
@@ -268,6 +287,15 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
   const missingReason = needsReason && reason.trim().length === 0
   const missingFile =
     documentRequired && !file && !(editMode && editRequest?.supportingFileName && !removeFile)
+  const policyWarnings = useMemo(
+    () =>
+      currentPreview?.data
+        ? parsePolicyWarnings(currentPreview.data.warnings)
+        : [],
+    [currentPreview],
+  )
+  const blockedWarning = firstBlockWarning(policyWarnings)
+  const isBlocked = Boolean(blockedWarning)
   const submitDisabled =
     loadingTypes ||
     Boolean(typesError) ||
@@ -283,7 +311,8 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     zeroDays ||
     overBalance ||
     missingReason ||
-    missingFile
+    missingFile ||
+    isBlocked
 
   useEffect(() => {
     if (!previewKey) return
@@ -329,10 +358,11 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     () => (currentPreview?.data ? noticeWarningsFrom(currentPreview.data) : []),
     [currentPreview],
   )
-  const approverName =
-    currentPreview?.data?.approverName ??
-    currentPreview?.data?.reviewerName ??
-    null
+  const approvalSteps = useMemo(
+    () => approvalStepsFrom(currentPreview?.data),
+    [currentPreview],
+  )
+  const approvalSentence = approvalStepsSentence(approvalSteps)
   const documentRule =
     currentPreview?.data?.documentRule ??
     (documentRequiredAfter == null
@@ -667,12 +697,27 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
               Cancel
             </Button>
           </div>
+          {isBlocked ? (
+            <p className="text-destructive text-sm">
+              Submit is disabled for this blocked period.
+              {blockedWarning ? ` ${blockedWarning.message}` : ''}
+            </p>
+          ) : null}
         </FieldGroup>
 
-        <Card size="sm" className="h-fit">
+        <Card
+          size="sm"
+          className={cn(
+            'h-fit',
+            isBlocked && 'bg-rose-50 text-rose-950 ring-rose-300',
+            !isBlocked &&
+              policyWarnings.length > 0 &&
+              'bg-amber-50 ring-amber-300',
+          )}
+        >
           <CardHeader>
             <CardTitle>Summary</CardTitle>
-            <CardDescription>
+            <CardDescription className={isBlocked ? 'text-rose-800' : undefined}>
               Live preview of this request.
             </CardDescription>
           </CardHeader>
@@ -680,6 +725,10 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
             {currentPreview?.error ? (
               <Alert tone="error">{currentPreview.error}</Alert>
             ) : null}
+            <RequestPolicyAlerts
+              warnings={policyWarnings}
+              leaveTypes={leaveTypes}
+            />
             {invalidDateRange ? null : loadingPreview ? (
               <p className="text-muted-foreground" role="status">
                 Calculating working days…
@@ -729,9 +778,22 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
             </div>
             <div>
               <p className="font-medium">Approver</p>
-              <p className="text-muted-foreground">
-                {approverName ?? 'Shown here once the preview API returns an approver.'}
-              </p>
+              {approvalSteps.length > 0 ? (
+                <div className="mt-1 flex items-start gap-2">
+                  <div className="flex -space-x-2">
+                    {approvalSteps.map((step) => (
+                      <Avatar key={step.name} size="sm">
+                        <AvatarFallback>{initialsFromName(step.name)}</AvatarFallback>
+                      </Avatar>
+                    ))}
+                  </div>
+                  <p className="text-muted-foreground">{approvalSentence}</p>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">
+                  Shown here once the preview API returns an approver.
+                </p>
+              )}
             </div>
             <div>
               <p className="font-medium">Document rule</p>
