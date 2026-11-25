@@ -26,11 +26,13 @@ psql "$DATABASE_URL" -f sql/020_company_memberships.sql
 psql "$DATABASE_URL" -f sql/021_leave_escalation.sql
 psql "$DATABASE_URL" -f sql/022_half_days.sql
 psql "$DATABASE_URL" -f sql/023_document_access.sql
+psql "$DATABASE_URL" -f sql/024_cancel.sql
 psql "$DATABASE_URL" -f sql/025_events.sql
 psql "$DATABASE_URL" -f sql/026_policy_holidays.sql
 psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 psql "$DATABASE_URL" -f sql/028_company_branding.sql
 psql "$DATABASE_URL" -f sql/029_za_public_holidays.sql
+psql "$DATABASE_URL" -f sql/030_blocks.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -85,6 +87,8 @@ psql "$DATABASE_URL" -f sql/029_za_public_holidays.sql
 
 `023_document_access.sql` (issue 253) stores sick notes in `leave_documents.file` as BYTEA (filename, mime, size_bytes) and logs authorised downloads in `leave_document_access`. The file bytes are the source of truth; do not store a filesystem path.
 
+`024_cancel.sql` adds the cancelling user and optional reason to leave requests. The existing `cancelled_at` column is unchanged.
+
 `025_events.sql` (issue 254) creates append-only `leave_request_events` (company, request, actor, action, from/to status, JSONB details) and changes `leave_requests.employee_user_id` to `ON DELETE RESTRICT` so deleting a user who has leave fails with a foreign-key error. Actions: submitted, edited, approved, declined, withdrawn, cancelled, auto_approved, document_viewed.
 
 `026_policy_holidays.sql` adds the leave-type `colour` token and seeds colours for existing starter types (Annual: violet, Sick: rose, Family responsibility: amber, Unpaid: slate, Study: sky). It also adds `public_holidays.source` (default `custom`; ZA-seeded holidays use `za`) and nullable `public_holidays.actual_date` for observed dates.
@@ -94,6 +98,8 @@ psql "$DATABASE_URL" -f sql/029_za_public_holidays.sql
 `028_company_branding.sql` adds company slogan, brand colours, a manual-colour flag, and a BYTEA logo (plus the same fields on `signup_checkouts` so appearance chosen at signup is applied when the company is created). The product default stays emerald when these columns are null.
 
 `029_za_public_holidays.sql` inserts South African public holidays for 2026–2030 on every company (`source=za`). Sunday holidays are stored on the following Monday with `actual_date` set to the Sunday. Existing dates are left unchanged (`ON CONFLICT DO NOTHING`). New companies also receive these rows at signup.
+
+`030_blocks.sql` (issue #274; ticket file name `028_blocks.sql`) adds `date_blocks` (company-wide when `department_id` is null, otherwise one department; `starts_on`/`ends_on`; mode `block` or `warn`; required reason), `departments.max_off`, and `leave_types.ignores_blocks`. Existing Sick and Family responsibility types ignore blocks.
 
 ## Demo password
 

@@ -9,6 +9,7 @@ export type LeaveType = {
   isActive: boolean
   allowBackdate: boolean
   requiresDocumentAfterDays: number | null
+  ignoresBlocks?: boolean
 }
 
 export type LeaveHalf = 'full' | 'am' | 'pm' | 'morning' | 'afternoon'
@@ -30,8 +31,15 @@ export type MyLeaveRequest = {
   decisionReason: string | null
   reviewerName?: string | null
   approverName?: string | null
-  canCancel?: boolean
+  isOwner?: boolean
+  hasStarted?: boolean
   canWithdraw?: boolean
+  canCancel?: boolean
+  cancelBalance?: {
+    hasBalance: boolean
+    before: number | null
+    after: number | null
+  } | null
 }
 
 type LeaveTypesResponse = {
@@ -46,18 +54,32 @@ export type LeavePreviewHoliday = {
   name?: string
 }
 
+export type LeaveWarningKind = 'block' | 'warn' | 'clash'
+
+export type LeavePolicyWarning = {
+  kind: LeaveWarningKind
+  message: string
+}
+
+export type LeaveApprovalStep = {
+  name: string
+  reason?: string | null
+}
+
 export type LeavePreviewResponse = {
   workingDaysCount: number
   excludedDates?: string[]
   holidays?: LeavePreviewHoliday[]
   availableAfter?: number | null
+  approver?: string | null
   approverName?: string | null
   reviewerName?: string | null
+  approvalSteps?: LeaveApprovalStep[]
   documentRequired?: boolean
   documentRule?: string | null
   noticeWarning?: string | null
   noticeWarnings?: string[]
-  warnings?: string[]
+  warnings?: Array<LeavePolicyWarning | string>
 }
 
 export type LeaveRequestInput = {
@@ -196,7 +218,6 @@ export async function downloadSupportingFile(
   URL.revokeObjectURL(url)
 }
 
-
 export function cancelMyLeaveRequest(
   id: string,
   reason?: string,
@@ -204,9 +225,7 @@ export function cancelMyLeaveRequest(
   const trimmedReason = reason?.trim()
   return apiRequest<MyLeaveRequest>(`/api/leave/${id}/cancel`, {
     method: 'POST',
-    ...(trimmedReason
-      ? { body: JSON.stringify({ reason: trimmedReason }) }
-      : {}),
+    ...(trimmedReason ? { body: JSON.stringify({ reason: trimmedReason }) } : {}),
   })
 }
 

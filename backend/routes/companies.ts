@@ -217,6 +217,7 @@ type DepartmentRow = {
   name: string;
   manager_id: number | null;
   manager_name: string | null;
+  max_off: number | null;
 };
 
 type CompanyUserRow = Pick<
@@ -241,6 +242,7 @@ function toPublicDepartment(row: DepartmentRow) {
     name: row.name,
     managerId: row.manager_id,
     managerName: row.manager_name,
+    maxOff: row.max_off,
   };
 }
 
@@ -276,6 +278,111 @@ type HolidayRow = {
   source: string;
   actualDate: string | null;
 };
+
+type DateBlockInput = {
+  startDate: string;
+  endDate: string;
+  departmentId: number | null;
+  mode: "block" | "warn";
+  reason: string;
+};
+
+type DateBlockRow = {
+  id: number;
+  startDate: string;
+  endDate: string;
+  departmentId: number | null;
+  departmentName: string | null;
+  mode: "block" | "warn";
+  reason: string;
+};
+
+function parseOptionalDepartmentId(
+  value: unknown,
+): number | null | undefined {
+  if (value === undefined) return null;
+  if (value === null || value === "") return null;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && /^\d+$/.test(value)) {
+    const parsed = Number(value);
+    return parsed > 0 ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function parseDateBlockInput(value: unknown): DateBlockInput | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const body = value as Record<string, unknown>;
+  const reason = asNonEmptyString(body.reason);
+  const departmentId = parseOptionalDepartmentId(body.departmentId);
+  const startDate = isCalendarDate(body.startDate)
+    ? body.startDate
+    : isCalendarDate(body.startsOn)
+      ? body.startsOn
+      : null;
+  const endDate = isCalendarDate(body.endDate)
+    ? body.endDate
+    : isCalendarDate(body.endsOn)
+      ? body.endsOn
+      : null;
+
+  if (
+    !startDate ||
+    !endDate ||
+    startDate > endDate ||
+    departmentId === undefined ||
+    (body.mode !== "block" && body.mode !== "warn") ||
+    !reason ||
+    reason.length > 500
+  ) {
+    return null;
+  }
+
+  return {
+    startDate,
+    endDate,
+    departmentId,
+    mode: body.mode,
+    reason,
+  };
+}
+
+async function readCompanyDateBlocks(companyId: number, id?: number) {
+  const result = await pool.query<DateBlockRow>(
+    `SELECT date_blocks.id,
+            date_blocks.starts_on::TEXT AS "startDate",
+            date_blocks.ends_on::TEXT AS "endDate",
+            date_blocks.department_id AS "departmentId",
+            departments.name AS "departmentName",
+            date_blocks.mode,
+            date_blocks.reason
+     FROM date_blocks
+     LEFT JOIN departments
+       ON departments.id = date_blocks.department_id
+      AND departments.company_id = date_blocks.company_id
+     WHERE date_blocks.company_id = $1
+       AND ($2::INTEGER IS NULL OR date_blocks.id = $2)
+     ORDER BY date_blocks.starts_on, date_blocks.id`,
+    [companyId, id ?? null],
+  );
+  return result.rows;
+}
+
+async function isCompanyDepartment(
+  companyId: number,
+  departmentId: number | null,
+): Promise<boolean> {
+  if (departmentId === null) return true;
+  const result = await pool.query(
+    "SELECT 1 FROM departments WHERE id = $1 AND company_id = $2",
+    [departmentId, companyId],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
 
 function isWorkingDaySettings(value: unknown): value is WorkingDaySettings {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -379,7 +486,8 @@ companiesRouter.get(
 
     const result = await pool.query<DepartmentRow>(
       `SELECT departments.id, departments.name, departments.manager_id,
-              COALESCE(users.display_name, users.email) AS manager_name
+              COALESCE(users.display_name, users.email) AS manager_name,
+              departments.max_off
        FROM departments
        LEFT JOIN users
          ON users.id = departments.manager_id
@@ -419,7 +527,7 @@ companiesRouter.post(
       const result = await pool.query<DepartmentRow>(
         `INSERT INTO departments (company_id, name)
          VALUES ($1, $2)
-         RETURNING id, name, manager_id, NULL::text AS manager_name`,
+         RETURNING id, name, manager_id, NULL::text AS manager_name, max_off`,
         [companyId, name],
       );
       res.status(201).json(toPublicDepartment(result.rows[0]));
@@ -489,7 +597,8 @@ companiesRouter.patch(
              FROM users
              WHERE users.id = departments.manager_id
                AND users.company_id = departments.company_id
-           ) AS manager_name`,
+           ) AS manager_name,
+           max_off`,
         [managerId, departmentId, companyId],
       );
       if (updated.rowCount === 0) {
@@ -506,6 +615,154 @@ companiesRouter.patch(
     } finally {
       client.release();
     }
+  },
+);
+
+companiesRouter.get(
+  "/current/date-blocks",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+
+    res.json({ dateBlocks: await readCompanyDateBlocks(companyId) });
+  },
+);
+
+companiesRouter.post(
+  "/current/date-blocks",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+    const input = parseDateBlockInput(req.body);
+    if (!input) {
+      res.status(400).json({
+        error:
+          "Provide a valid date period, scope, mode, and reason (up to 500 characters)",
+      });
+      return;
+    }
+    if (!(await isCompanyDepartment(companyId, input.departmentId))) {
+      res.status(400).json({ error: "Department must belong to your company" });
+      return;
+    }
+
+    const result = await pool.query<{ id: number }>(
+      `INSERT INTO date_blocks (
+         company_id, starts_on, ends_on, department_id, mode, reason
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [
+        companyId,
+        input.startDate,
+        input.endDate,
+        input.departmentId,
+        input.mode,
+        input.reason,
+      ],
+    );
+    const block = (await readCompanyDateBlocks(companyId, result.rows[0].id))[0];
+    if (!block) {
+      throw new Error("Date block was not available after insert");
+    }
+
+    res.status(201).json(block);
+  },
+);
+
+companiesRouter.patch(
+  "/current/date-blocks/:id",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!isPositiveInteger(id)) {
+      res.status(400).json({ error: "Invalid date block id" });
+      return;
+    }
+    const input = parseDateBlockInput(req.body);
+    if (!input) {
+      res.status(400).json({
+        error:
+          "Provide a valid date period, scope, mode, and reason (up to 500 characters)",
+      });
+      return;
+    }
+    if (!(await isCompanyDepartment(companyId, input.departmentId))) {
+      res.status(400).json({ error: "Department must belong to your company" });
+      return;
+    }
+
+    const result = await pool.query<{ id: number }>(
+      `UPDATE date_blocks
+       SET starts_on = $1,
+           ends_on = $2,
+           department_id = $3,
+           mode = $4,
+           reason = $5
+       WHERE id = $6 AND company_id = $7
+       RETURNING id`,
+      [
+        input.startDate,
+        input.endDate,
+        input.departmentId,
+        input.mode,
+        input.reason,
+        id,
+        companyId,
+      ],
+    );
+    if (!result.rows[0]) {
+      res.status(404).json({ error: "Date block not found" });
+      return;
+    }
+    const block = (await readCompanyDateBlocks(companyId, id))[0];
+    if (!block) {
+      throw new Error("Date block was not available after update");
+    }
+
+    res.json(block);
+  },
+);
+
+companiesRouter.delete(
+  "/current/date-blocks/:id",
+  requireAuth,
+  requireRole("company_admin"),
+  async (req, res) => {
+    const companyId = requireCompanyId(req.user, res);
+    if (companyId === null) {
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!isPositiveInteger(id)) {
+      res.status(400).json({ error: "Invalid date block id" });
+      return;
+    }
+
+    const result = await pool.query(
+      `DELETE FROM date_blocks
+       WHERE id = $1 AND company_id = $2`,
+      [id, companyId],
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Date block not found" });
+      return;
+    }
+
+    res.json({ ok: true });
   },
 );
 

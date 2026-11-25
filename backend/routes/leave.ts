@@ -26,16 +26,25 @@ import {
   applyApprovedLeaveToBalance,
   getBalance,
   listBalances,
+  restoreApprovedLeaveBalance,
 } from "../leave/balances.js";
 import { buildLeaveReviewEvents } from "../leave/reviewEvents.js";
 import { canReviewLeaveRequest } from "../leave/reviewerAccess.js";
-import { todayInSast } from "../leave/todayInSast.js";
+import {
+  leaveHasStartedInSast,
+  todayInSast,
+} from "../leave/todayInSast.js";
 import {
   countWorkingDaysPreview,
   type DayHalf,
   type WorkingDayFlags,
 } from "../leave/workingDays.js";
 import { hasOverlappingLeaveRequest } from "../leave/overlap.js";
+import {
+  firstBlockWarning,
+  loadLeavePolicyWarnings,
+  type LeaveWarning,
+} from "../leave/blocks.js";
 import { ensureZaHolidaysForCompany } from "../leave/seedZaHolidays.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requireCompanyId, sameCompanyId } from "../tenancy.js";
@@ -111,9 +120,17 @@ class LeaveRequestError extends Error {
   constructor(
     message: string,
     readonly status = 400,
+    readonly body: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "LeaveRequestError";
+  }
+}
+
+function refuseBlockedLeave(warnings: LeaveWarning[]): void {
+  const blocked = firstBlockWarning(warnings);
+  if (blocked) {
+    throw new LeaveRequestError(blocked.message, 400, { warnings });
   }
 }
 
@@ -498,7 +515,7 @@ leaveRouter.get(
       leaveType = await getLeaveType(companyId, leaveTypeId, pool);
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -527,7 +544,7 @@ leaveRouter.get(
       );
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -549,16 +566,16 @@ leaveRouter.get(
       [companyId],
     );
     const minNoticeDays = Number(rulesResult.rows[0]?.min_notice_days ?? 0);
-    const warnings: string[] = [];
+    const noticeWarnings: string[] = [];
     if (!leaveType.allow_backdate && startDate < today) {
-      warnings.push("This leave type does not allow backdated requests");
+      noticeWarnings.push("This leave type does not allow backdated requests");
     }
     if (
       !leaveType.allow_backdate &&
       minNoticeDays > 0 &&
       wholeDaysBetween(today, startDate) < minNoticeDays
     ) {
-      warnings.push(
+      noticeWarnings.push(
         `This request must be submitted at least ${minNoticeDays} days in advance`,
       );
     }
@@ -576,20 +593,28 @@ leaveRouter.get(
     const availableAfter =
       remaining === null ? null : remaining - workingDaysCount;
     if (workingDaysCount <= 0) {
-      warnings.push("Your dates contain no working days");
+      noticeWarnings.push("Your dates contain no working days");
     }
     if (balance?.hasBalance && !balance.hasBalanceRow) {
-      warnings.push("No balance exists for this leave type");
+      noticeWarnings.push("No balance exists for this leave type");
     }
     if (
       balance?.hasBalance &&
       balance.available !== null &&
       workingDaysCount > balance.available
     ) {
-      warnings.push(
+      noticeWarnings.push(
         insufficientBalanceMessage(balance.available, balance.pending),
       );
     }
+
+    const warnings = await loadLeavePolicyWarnings(pool, {
+      companyId,
+      userId: req.user!.id,
+      leaveTypeId,
+      startDate,
+      endDate,
+    });
 
     const documentRequired = documentIsRequired(
       leaveType.requires_document_after_days,
@@ -628,7 +653,7 @@ leaveRouter.get(
       approverName,
       reviewerName: reviewer?.name ?? null,
       warnings,
-      noticeWarnings: warnings,
+      noticeWarnings,
     });
   },
 );
@@ -681,6 +706,7 @@ leaveRouter.post(
       let request: LeaveRequestRow;
       let leaveTypeName: string;
       let workingDaysCount: number;
+      let policyWarnings: LeaveWarning[] = [];
       let reviewer: { id: number; email: string; name: string } | null =
         null;
 
@@ -794,6 +820,15 @@ leaveRouter.post(
             "These dates overlap an existing pending or approved leave request",
           );
         }
+
+        policyWarnings = await loadLeavePolicyWarnings(client, {
+          companyId,
+          userId: req.user!.id,
+          leaveTypeId,
+          startDate,
+          endDate,
+        });
+        refuseBlockedLeave(policyWarnings);
 
         reviewer = await findReviewer(
           companyId,
@@ -944,10 +979,11 @@ leaveRouter.post(
           workingDaysCount: request.working_days_count,
           submittedAt: request.submitted_at,
         },
+        warnings: policyWarnings,
       });
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -1109,6 +1145,7 @@ leaveRouter.patch(
 
       const client = await pool.connect();
       let updated: MyLeaveRow;
+      let policyWarnings: LeaveWarning[] = [];
       try {
         await client.query("BEGIN");
         const requestResult = await client.query<MyLeaveRow>(
@@ -1236,6 +1273,16 @@ leaveRouter.patch(
           );
         }
 
+        policyWarnings = await loadLeavePolicyWarnings(client, {
+          companyId,
+          userId: req.user!.id,
+          leaveTypeId,
+          startDate,
+          endDate,
+          excludeRequestId: id,
+        });
+        refuseBlockedLeave(policyWarnings);
+
         const nextFileName =
           uploadedFile?.originalname ??
           (removeFile ? null : request.supporting_file_name);
@@ -1310,10 +1357,10 @@ leaveRouter.patch(
         client.release();
       }
 
-      res.json(toMyLeaveItem(updated));
+      res.json({ ...toMyLeaveItem(updated), warnings: policyWarnings });
     } catch (error) {
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -1671,11 +1718,20 @@ teamRouter.get(
           ? Number(formatBalanceDays(balance.available - Number(row.working_days_count)))
           : null;
         const clashCount = await countDepartmentClashes(row, pool);
+        const warnings = await loadLeavePolicyWarnings(pool, {
+          companyId: row.company_id,
+          userId: row.employee_user_id,
+          leaveTypeId: row.leave_type_id,
+          startDate: row.start_date,
+          endDate: row.end_date,
+          excludeRequestId: row.id,
+        });
 
         return {
           ...toQueueItem(row),
           balanceAfter,
           clashCount,
+          warnings,
         };
       }),
     );
@@ -1741,10 +1797,51 @@ leaveRouter.get(
         }))
       : [];
     const events = storedEvents.length > 0 ? storedEvents : fallbackEvents;
+    const hasStarted = leaveHasStartedInSast(request.start_date);
+    const canWithdraw =
+      isOwner && request.status === "pending" && !hasStarted;
+    const canCancel =
+      isOwner && request.status === "approved" && !hasStarted;
+    const cancellationBalance = canCancel
+      ? await getBalance(
+          request.employee_user_id,
+          request.company_id,
+          request.leave_type_id,
+          pool,
+        )
+      : null;
+    const warnings = await loadLeavePolicyWarnings(pool, {
+      companyId,
+      userId: request.employee_user_id,
+      leaveTypeId: request.leave_type_id,
+      startDate: request.start_date,
+      endDate: request.end_date,
+      excludeRequestId: request.id,
+    });
     res.json({
       ...toQueueItem(request),
       ...toMyLeaveItem(detail),
       events,
+      warnings,
+      isOwner,
+      hasStarted,
+      canWithdraw,
+      canCancel,
+      cancelBalance: cancellationBalance
+        ? {
+            hasBalance: cancellationBalance.hasBalance,
+            before: cancellationBalance.available,
+            after:
+              cancellationBalance.available === null
+                ? null
+                : Number(
+                    formatBalanceDays(
+                      cancellationBalance.available +
+                        Number(request.working_days_count),
+                    ),
+                  ),
+          }
+        : null,
       ...(reviewContext
         ? {
             reviewContext,
@@ -1896,8 +1993,35 @@ leaveRouter.post(
       return;
     }
 
+    const body: unknown = req.body;
+    if (
+      body !== undefined &&
+      (typeof body !== "object" || body === null || Array.isArray(body))
+    ) {
+      res.status(400).json({ error: "Invalid cancellation reason" });
+      return;
+    }
+    const reasonValue =
+      typeof body === "object" && body !== null && "reason" in body
+        ? body.reason
+        : undefined;
+    if (reasonValue !== undefined && typeof reasonValue !== "string") {
+      res.status(400).json({ error: "Cancellation reason must be text" });
+      return;
+    }
+    const cancelReason =
+      typeof reasonValue === "string" ? reasonValue.trim() || null : null;
+    if (cancelReason && cancelReason.length > 500) {
+      res.status(400).json({
+        error: "Cancellation reason must be 500 characters or fewer",
+      });
+      return;
+    }
+
     const client = await pool.connect();
     let cancelled: MyLeaveRow;
+    let cancelledWasApproved = false;
+    let balanceDelta: number | null = null;
     try {
       await client.query("BEGIN");
       const result = await client.query<MyLeaveRow>(
@@ -1915,21 +2039,52 @@ leaveRouter.post(
       ) {
         throw new LeaveRequestError("Leave request not found", 404);
       }
-      if (request.status !== "pending") {
-        throw new LeaveRequestError("Only pending requests can be cancelled");
+      if (leaveHasStartedInSast(request.start_date)) {
+        throw new LeaveRequestError("Leave has already started");
+      }
+      if (request.status !== "pending" && request.status !== "approved") {
+        throw new LeaveRequestError(
+          "Only pending or approved future leave can be cancelled",
+        );
+      }
+
+      const workingDaysCount = Number(request.working_days_count);
+      cancelledWasApproved = request.status === "approved";
+      if (request.status === "approved") {
+        await client.query("SELECT pg_advisory_xact_lock($1, $2)", [
+          companyId,
+          request.employee_user_id,
+        ]);
+        const restored = await restoreApprovedLeaveBalance(
+          request.employee_user_id,
+          companyId,
+          request.leave_type_id,
+          workingDaysCount,
+          client,
+        );
+        if (!restored) {
+          throw new LeaveRequestError(
+            "Could not restore the leave balance for this request",
+          );
+        }
+        if (restored === "restored") balanceDelta = workingDaysCount;
       }
 
       const update = await client.query(
         `UPDATE leave_requests
          SET status = 'cancelled',
-             cancelled_at = NOW()
+             cancelled_at = NOW(),
+             cancelled_by_user_id = $2,
+             cancel_reason = $3
          WHERE id = $1
            AND employee_user_id = $2
-           AND status = 'pending'`,
-        [id, req.user!.id],
+           AND status = $4`,
+        [id, req.user!.id, cancelReason, request.status],
       );
       if (update.rowCount !== 1) {
-        throw new LeaveRequestError("Only pending requests can be cancelled");
+        throw new LeaveRequestError(
+          "This leave request can no longer be cancelled",
+        );
       }
 
       const cancelledResult = await client.query<MyLeaveRow>(
@@ -1948,16 +2103,17 @@ leaveRouter.post(
         companyId,
         leaveRequestId: id,
         actorUserId: req.user!.id,
-        type: "withdraw",
+        type: request.status === "pending" ? "withdraw" : "cancel",
         before: { status: request.status },
-        after: { status: "cancelled" },
+        after: { status: "cancelled", reason: cancelReason },
+        balanceDelta,
       });
 
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -1976,6 +2132,8 @@ leaveRouter.post(
             leaveTypeName: cancelled.leave_type,
             startDate: cancelled.start_date,
             endDate: cancelled.end_date,
+            wasApproved: cancelledWasApproved,
+            reason: cancelReason,
             actionUrl: new URL(
               `/team/queue/${cancelled.id}`,
               appOrigin(),
@@ -2078,7 +2236,7 @@ leaveRouter.post(
     } catch (error) {
       await client.query("ROLLBACK");
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;
@@ -2176,7 +2334,7 @@ leaveRouter.post(
     } catch (error) {
       await client.query("ROLLBACK");
       if (error instanceof LeaveRequestError) {
-        res.status(error.status).json({ error: error.message });
+        res.status(error.status).json({ error: error.message, ...error.body });
         return;
       }
       throw error;

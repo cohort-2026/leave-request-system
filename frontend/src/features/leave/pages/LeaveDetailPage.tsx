@@ -23,7 +23,7 @@ import { Alert } from '../../../shared/components'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { leaveEditPath, paths } from '../../../shared/constants/paths'
 import { leaveTypeColour, leaveTypeDotClass } from '../../../shared/leaveTypeColour'
-import { ApiError, apiRequest } from '../../../services/api'
+import { ApiError } from '../../../services/api'
 import {
   cancelMyLeaveRequest,
   downloadSupportingFile,
@@ -31,25 +31,25 @@ import {
   type MyLeaveRequest,
 } from '../leaveApi'
 
-type LeaveBalanceItem = {
-  leaveType: string
-  daysRemaining: number
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback
+}
+
+function formatDays(days: number) {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
+    days,
+  )
 }
 
 export function LeaveDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [request, setRequest] = useState<MyLeaveRequest | null>(null)
-  const [balances, setBalances] = useState<LeaveBalanceItem[]>([])
-  const [cancelReason, setCancelReason] = useState('')
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
@@ -57,16 +57,10 @@ export function LeaveDetailPage() {
     let active = true
     if (!id) return
 
-   Promise.all([
-      fetchMyLeaveRequest(id),
-      apiRequest<{ balances?: LeaveBalanceItem[] }>('/api/leave/balances').catch(
-        () => ({ balances: [] }),
-      ),
-    ])
-      .then(([data, balanceRes]) => {
+    fetchMyLeaveRequest(id)
+      .then((data) => {
         if (active) {
           setRequest(data)
-          setBalances(balanceRes.balances ?? [])
           setError(null)
           setLoadedId(id)
         }
@@ -99,25 +93,16 @@ export function LeaveDetailPage() {
   }
 
   async function handleCancel() {
-if (!id || !request || cancelling) return
+    if (!id || cancelling) return
     setCancelling(true)
     setActionError(null)
     try {
-       const updated = await cancelMyLeaveRequest(
-        id,
-        request.status === 'approved' ? cancelReason : undefined,
-      )
+      const updated = await cancelMyLeaveRequest(id, cancelReason)
       setRequest(updated)
       setCancelOpen(false)
-      setCancelReason('')
     } catch (err) {
       setActionError(
-        getErrorMessage(
-          err,
-          request.status === 'approved'
-            ? 'Could not cancel this leave request.'
-            : 'Could not withdraw this leave request.',
-        ),
+        getErrorMessage(err, 'Could not cancel this leave request.'),
       )
     } finally {
       setCancelling(false)
@@ -155,27 +140,26 @@ if (!id || !request || cancelling) return
   }
 
   const canChange = request.status === 'pending'
-   const canWithdraw = request.canWithdraw ?? request.status === 'pending'
-  const canCancelApproved = request.canCancel === true
-  const isApprovedStarted =
-    request.status === 'approved' && request.canCancel === false
+  const canWithdraw = request.canWithdraw === true
+  const canCancel = request.canCancel === true
+  const isWithdrawal = request.status === 'pending'
+  const cancelBalance = request.cancelBalance
+  const cancelDescription = isWithdrawal
+    ? 'The reviewer will be notified and your reserved days will be released. You cannot undo this.'
+    : cancelBalance?.hasBalance &&
+        cancelBalance.before !== null &&
+        cancelBalance.after !== null
+      ? `${formatDays(request.workingDays)} ${request.workingDays === 1 ? 'day' : 'days'} will return to your ${request.leaveType} balance (${formatDays(cancelBalance.before)} → ${formatDays(cancelBalance.after)}). You cannot undo this.`
+      : cancelBalance?.hasBalance === false
+        ? `This cancels your approved ${request.leaveType} leave. This leave type does not draw from an allocated balance. You cannot undo this.`
+        : `${formatDays(request.workingDays)} ${request.workingDays === 1 ? 'day' : 'days'} will be returned to your ${request.leaveType} balance. You cannot undo this.`
   const colour = leaveTypeColour(request.leaveType)
-
-  const matchingBalance = balances.find(
-    (b) => b.leaveType.toLowerCase() === request.leaveType.toLowerCase(),
-  )
-  const currentRemaining = matchingBalance?.daysRemaining ?? null
-  const nextRemaining =
-    currentRemaining !== null
-      ? Number((currentRemaining + request.workingDays).toFixed(2))
-      : null
-  const dayWord = request.workingDays === 1 ? 'day' : 'days'
 
   return (
     <PageShell
       title={request.leaveType}
       action={
-  canChange || canWithdraw || canCancelApproved ? (
+        canChange || canCancel || canWithdraw ? (
           <div className="flex flex-wrap gap-2">
             {canChange ? (
               <Button
@@ -186,22 +170,17 @@ if (!id || !request || cancelling) return
                 Change request
               </Button>
             ) : null}
-            {canWithdraw ? (
+            {canWithdraw || canCancel ? (
               <Button
                 variant="destructive"
                 type="button"
-                onClick={() => setCancelOpen(true)}
+                onClick={() => {
+                  setCancelReason('')
+                  setActionError(null)
+                  setCancelOpen(true)
+                }}
               >
-                Withdraw
-              </Button>
-            ) : null}
-            {canCancelApproved ? (
-              <Button
-                variant="destructive"
-                type="button"
-                onClick={() => setCancelOpen(true)}
-              >
-                Cancel leave
+                {canCancel ? 'Cancel leave' : 'Withdraw'}
               </Button>
             ) : null}
           </div>
@@ -211,13 +190,6 @@ if (!id || !request || cancelling) return
       {actionError && !cancelOpen ? (
         <Alert tone="error">{actionError}</Alert>
       ) : null}
-
-        {isApprovedStarted ? (
-        <p className="text-sm text-muted-foreground">
-          Ask HR to shorten this leave
-        </p>
-      ) : null}
-
 
       <div className="flex flex-wrap items-center gap-3">
         <span
@@ -229,6 +201,12 @@ if (!id || !request || cancelling) return
           {request.startDate} – {request.endDate}
         </p>
       </div>
+
+      {request.isOwner &&
+      request.hasStarted &&
+      request.status === 'approved' ? (
+        <Alert tone="info">This leave has started. Ask HR to shorten this leave.</Alert>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -299,54 +277,29 @@ if (!id || !request || cancelling) return
         <Link to={paths.leave}>Back to my leave</Link>
       </Button>
 
-         <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {canCancelApproved
-                ? 'Cancel approved leave?'
-                : 'Withdraw this request?'}
+              {isWithdrawal ? 'Withdraw this request?' : 'Cancel approved leave?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {canCancelApproved ? (
-                <>
-                  {request.workingDays} {dayWord} will return to your{' '}
-                  {request.leaveType} balance
-                  {currentRemaining !== null && nextRemaining !== null
-                    ? ` (${currentRemaining} → ${nextRemaining})`
-                    : ''}
-                  .
-                </>
-              ) : (
-                'The reviewer will be notified. You cannot undo this.'
-              )}
+              {cancelDescription}
             </AlertDialogDescription>
           </AlertDialogHeader>
-
-          {canCancelApproved ? (
-            <div className="grid gap-2 py-2">
-              <label
-                htmlFor="cancel-reason"
-                className="text-sm font-medium text-foreground"
-              >
-                Reason (optional)
-              </label>
-              <Textarea
-                id="cancel-reason"
-                placeholder="Optional note for HR or your manager..."
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                rows={3}
-              />
-            </div>
-          ) : null}
-
+          <label className="grid gap-1.5 text-sm font-medium" htmlFor="cancel-reason">
+            Reason (optional)
+            <Textarea
+              id="cancel-reason"
+              maxLength={500}
+              value={cancelReason}
+              disabled={cancelling}
+              onChange={(event) => setCancelReason(event.target.value)}
+            />
+          </label>
           {actionError ? <Alert tone="error">{actionError}</Alert> : null}
-
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={cancelling}>
-              {canCancelApproved ? 'Keep leave' : 'Keep request'}
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={cancelling}>Keep request</AlertDialogCancel>
             <AlertDialogAction
               disabled={cancelling}
               onClick={(event) => {
@@ -355,12 +308,12 @@ if (!id || !request || cancelling) return
               }}
             >
               {cancelling
-                ? canCancelApproved
-                  ? 'Cancelling…'
-                  : 'Withdrawing…'
-                : canCancelApproved
-                  ? 'Cancel leave'
-                  : 'Withdraw'}
+                ? isWithdrawal
+                  ? 'Withdrawing…'
+                  : 'Cancelling…'
+                : isWithdrawal
+                  ? 'Withdraw'
+                  : 'Cancel leave'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

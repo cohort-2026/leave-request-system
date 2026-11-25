@@ -3,8 +3,9 @@ import { pool } from "../db.js";
 
 type Queryable = Pool | PoolClient;
 
-// Matches the starter types in backend/sql/013_leave_types.sql and their S1
-// balance settings in backend/sql/027_s1_balances.sql.
+// Matches the starter types in backend/sql/013_leave_types.sql, S1 balance
+// settings in backend/sql/027_s1_balances.sql, and S11 ignores_blocks in
+// backend/sql/030_blocks.sql.
 export const DEFAULT_LEAVE_TYPES = [
   {
     name: "Annual",
@@ -14,6 +15,7 @@ export const DEFAULT_LEAVE_TYPES = [
     colour: "violet",
     allowBackdate: false,
     requiresDocumentAfterDays: null,
+    ignoresBlocks: false,
   },
   {
     name: "Sick",
@@ -23,6 +25,7 @@ export const DEFAULT_LEAVE_TYPES = [
     colour: "rose",
     allowBackdate: true,
     requiresDocumentAfterDays: 2,
+    ignoresBlocks: true,
   },
   {
     name: "Family responsibility",
@@ -32,6 +35,7 @@ export const DEFAULT_LEAVE_TYPES = [
     colour: "amber",
     allowBackdate: true,
     requiresDocumentAfterDays: null,
+    ignoresBlocks: true,
   },
   {
     name: "Unpaid",
@@ -41,6 +45,7 @@ export const DEFAULT_LEAVE_TYPES = [
     colour: "slate",
     allowBackdate: false,
     requiresDocumentAfterDays: null,
+    ignoresBlocks: false,
   },
   {
     name: "Study",
@@ -50,6 +55,7 @@ export const DEFAULT_LEAVE_TYPES = [
     colour: "sky",
     allowBackdate: false,
     requiresDocumentAfterDays: null,
+    ignoresBlocks: false,
   },
 ] as const;
 
@@ -62,12 +68,13 @@ const INSERT_COLUMNS = `company_id,
     allowance_period,
     is_active,
     allow_backdate,
-    requires_document_after_days`;
+    requires_document_after_days,
+    ignores_blocks`;
 
 const FROM_DEFAULTS = `UNNEST($1::text[], $2::int[], $3::boolean[], $4::int[],
-                   $5::boolean[], $6::int[], $7::text[])
+                   $5::boolean[], $6::int[], $7::text[], $8::boolean[])
      AS lt(name, default_days, allow_backdate, requires_document_after_days,
-           has_balance, cycle_months, colour)`;
+           has_balance, cycle_months, colour, ignores_blocks)`;
 
 function defaultTypeParams(): [
   string[],
@@ -77,6 +84,7 @@ function defaultTypeParams(): [
   boolean[],
   Array<number | null>,
   string[],
+  boolean[],
 ] {
   return [
     DEFAULT_LEAVE_TYPES.map((type) => type.name),
@@ -86,6 +94,7 @@ function defaultTypeParams(): [
     DEFAULT_LEAVE_TYPES.map((type) => type.hasBalance),
     DEFAULT_LEAVE_TYPES.map((type) => type.cycleMonths),
     DEFAULT_LEAVE_TYPES.map((type) => type.colour),
+    DEFAULT_LEAVE_TYPES.map((type) => type.ignoresBlocks),
   ];
 }
 
@@ -101,13 +110,14 @@ export async function seedDefaultLeaveTypes(
     hasBalance,
     cycleMonths,
     colours,
+    ignoresBlocks,
   ] = defaultTypeParams();
   await executor.query(
     `INSERT INTO leave_types (
        ${INSERT_COLUMNS}
      )
      SELECT
-       $8,
+       $9,
        lt.name,
        lt.default_days,
        lt.has_balance,
@@ -116,7 +126,8 @@ export async function seedDefaultLeaveTypes(
        'annual',
        true,
        lt.allow_backdate,
-       lt.requires_document_after_days
+       lt.requires_document_after_days,
+       lt.ignores_blocks
      FROM ${FROM_DEFAULTS}
      ON CONFLICT (company_id, name) DO NOTHING`,
     [
@@ -127,6 +138,7 @@ export async function seedDefaultLeaveTypes(
       hasBalance,
       cycleMonths,
       colours,
+      ignoresBlocks,
       companyId,
     ],
   );
@@ -143,6 +155,7 @@ export async function backfillDefaultLeaveTypes(
     hasBalance,
     cycleMonths,
     colours,
+    ignoresBlocks,
   ] = defaultTypeParams();
   await executor.query(
     `INSERT INTO leave_types (
@@ -158,7 +171,8 @@ export async function backfillDefaultLeaveTypes(
        'annual',
        true,
        lt.allow_backdate,
-       lt.requires_document_after_days
+       lt.requires_document_after_days,
+       lt.ignores_blocks
      FROM companies
      CROSS JOIN ${FROM_DEFAULTS}
      ON CONFLICT (company_id, name) DO NOTHING`,
@@ -170,6 +184,7 @@ export async function backfillDefaultLeaveTypes(
       hasBalance,
       cycleMonths,
       colours,
+      ignoresBlocks,
     ],
   );
 }
