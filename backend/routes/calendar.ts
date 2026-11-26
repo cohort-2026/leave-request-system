@@ -271,6 +271,7 @@ calendarRouter.get(
         AND employees.company_id = leave_requests.company_id
        JOIN leave_types
          ON leave_types.id = leave_requests.leave_type_id
+        AND leave_types.company_id = leave_requests.company_id
        WHERE leave_requests.company_id = $1
          AND leave_requests.status IN ('pending', 'approved')
          AND leave_requests.start_date <= $3::date
