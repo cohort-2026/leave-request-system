@@ -102,6 +102,8 @@ psql "$DATABASE_URL" -f sql/031_medical_document_rule.sql
 
 `030_blocks.sql` (issue #274; ticket file name `028_blocks.sql`) adds `date_blocks` (company-wide when `department_id` is null, otherwise one department; `starts_on`/`ends_on`; mode `block` or `warn`; required reason), `departments.max_off`, and `leave_types.ignores_blocks`. Existing Sick and Family responsibility types ignore blocks.
 
+`031_medical_document_rule.sql` (issues #333 / #331; ticket file name `030_deferred_sick_notes.sql`) adds `company_leave_rules.medical_document_after_working_days` (default 2, `0` means a medical document is always required for Sick).
+
 ## Demo password
 
 All four seed accounts use the same password: `Leave2026!`

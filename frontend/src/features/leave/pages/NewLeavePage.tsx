@@ -406,6 +406,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
         reason,
         file,
         removeFile,
+        documentDeferred: uploadLater && documentRequired && !file,
       }
       if (editMode && id) {
         await updateLeaveRequest(id, input)
@@ -666,15 +667,33 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
               {documentRequired ? ' Attach a sick note or supporting document before you submit.' : ''}
             </FieldDescription>
             {documentRequired ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={uploadLater}
-                  disabled={Boolean(file)}
-                  onChange={(event) => setUploadLater(event.target.checked)}
-                />
-                Upload later
-              </label>
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="document-timing"
+                    checked={!uploadLater}
+                    onChange={() => setUploadLater(false)}
+                  />
+                  Attach now
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="document-timing"
+                    checked={uploadLater}
+                    disabled={Boolean(file)}
+                    onChange={() => setUploadLater(true)}
+                  />
+                  Upload later
+                </label>
+                {uploadLater ? (
+                  <FieldDescription>
+                    You can submit now. We will remind you to attach the sick
+                    note.
+                  </FieldDescription>
+                ) : null}
+              </div>
             ) : null}
             <FieldError>
               {submitFieldErrors.file ?? submitFieldErrors.attachment}

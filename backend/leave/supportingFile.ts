@@ -54,6 +54,17 @@ export function assertSupportingFile(
   return mime;
 }
 
+export function documentThresholdForType(
+  leaveTypeName: string,
+  requiresDocumentAfterDays: number | null,
+  medicalDocumentAfterWorkingDays: number | null | undefined,
+): number | null {
+  if (leaveTypeName.toLocaleLowerCase() === "sick") {
+    return Number(medicalDocumentAfterWorkingDays ?? 2);
+  }
+  return requiresDocumentAfterDays;
+}
+
 export function documentIsRequired(
   requiresDocumentAfterDays: number | null,
   workingDaysCount: number,
@@ -62,6 +73,10 @@ export function documentIsRequired(
     requiresDocumentAfterDays !== null &&
     workingDaysCount >= requiresDocumentAfterDays
   );
+}
+
+export function isDocumentDeferredFlag(value: unknown): boolean {
+  return value === true || value === "true" || value === "on" || value === "1";
 }
 
 export function asciiDownloadName(filename: string): string {

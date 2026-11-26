@@ -31,6 +31,8 @@ import {
   downloadSupportingFile,
   fetchMyLeaveRequest,
   updateLeaveRequest,
+  type DayPart,
+  type LeaveHalf,
   type MyLeaveRequest,
 } from '../leaveApi'
 
@@ -42,6 +44,12 @@ function formatDays(days: number) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
     days,
   )
+}
+
+function toDayPart(value: LeaveHalf | null | undefined): DayPart {
+  if (value === 'morning' || value === 'am') return 'morning'
+  if (value === 'afternoon' || value === 'pm') return 'afternoon'
+  return 'full'
 }
 
 export function LeaveDetailPage() {
@@ -106,14 +114,8 @@ export function LeaveDetailPage() {
           leaveTypeId: request.leaveTypeId,
           start: request.startDate,
           end: request.endDate,
-          startPart:
-            request.startHalf === 'morning' || request.startHalf === 'afternoon'
-              ? request.startHalf
-              : 'full',
-          endPart:
-            request.endHalf === 'morning' || request.endHalf === 'afternoon'
-              ? request.endHalf
-              : 'full',
+          startPart: toDayPart(request.startHalf),
+          endPart: toDayPart(request.endHalf),
           reason: request.reason ?? '',
           file: uploadFile,
         })

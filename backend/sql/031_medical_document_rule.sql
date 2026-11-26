@@ -1,3 +1,6 @@
+-- S16 medical-document threshold (issue #333 UI; database ticket #331).
+-- Ticket file name was 030_deferred_sick_notes.sql; 030 is date blocks.
+
 BEGIN;
 
 ALTER TABLE company_leave_rules

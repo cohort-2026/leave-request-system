@@ -92,6 +92,7 @@ export type LeaveRequestInput = {
   reason: string
   file?: File
   removeFile?: boolean
+  documentDeferred?: boolean
 }
 
 export type SubmittedLeaveRequest = {
@@ -166,6 +167,7 @@ function leaveRequestForm(input: LeaveRequestInput): FormData {
   if (input.endPart) body.set('endPart', input.endPart)
   if (input.file) body.set('file', input.file)
   if (input.removeFile) body.set('removeFile', 'true')
+  if (input.documentDeferred) body.set('documentDeferred', 'true')
   return body
 }
 

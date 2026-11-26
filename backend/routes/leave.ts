@@ -11,6 +11,8 @@ import {
   assertSupportingFile,
   asciiDownloadName,
   documentIsRequired,
+  documentThresholdForType,
+  isDocumentDeferredFlag,
   MAX_SUPPORTING_FILE_BYTES,
   UnsupportedSupportingFileError,
 } from "../leave/supportingFile.js";
@@ -621,13 +623,11 @@ leaveRouter.get(
       endDate,
     });
 
-    const medicalThreshold = Number(
-      rulesResult.rows[0]?.medical_document_after_working_days ?? 2,
+    const effectiveDocumentThreshold = documentThresholdForType(
+      leaveType.name,
+      leaveType.requires_document_after_days,
+      rulesResult.rows[0]?.medical_document_after_working_days,
     );
-    const effectiveDocumentThreshold =
-      leaveType.name.toLocaleLowerCase() === "sick"
-        ? medicalThreshold
-        : leaveType.requires_document_after_days;
     const documentRequired = documentIsRequired(
       effectiveDocumentThreshold,
       workingDaysCount,
@@ -759,8 +759,13 @@ leaveRouter.post(
           throw new LeaveRequestError("Your dates contain no working days");
         }
 
-        const rulesResult = await client.query<{ min_notice_days: number }>(
-          `SELECT COALESCE(min_notice_days, 0) AS min_notice_days
+        const rulesResult = await client.query<{
+          min_notice_days: number;
+          medical_document_after_working_days: number;
+        }>(
+          `SELECT COALESCE(min_notice_days, 0) AS min_notice_days,
+                  COALESCE(medical_document_after_working_days, 2)
+                    AS medical_document_after_working_days
            FROM company_leave_rules
            WHERE company_id = $1
            LIMIT 1`,
@@ -769,6 +774,23 @@ leaveRouter.post(
         const minNoticeDays = Number(
           rulesResult.rows[0]?.min_notice_days ?? 0,
         );
+        const needsDocument = documentIsRequired(
+          documentThresholdForType(
+            leaveType.name,
+            leaveType.requires_document_after_days,
+            rulesResult.rows[0]?.medical_document_after_working_days,
+          ),
+          workingDaysCount,
+        );
+        const documentDeferred =
+          needsDocument &&
+          !uploadedFile &&
+          isDocumentDeferredFlag(req.body?.documentDeferred);
+        if (needsDocument && !uploadedFile && !documentDeferred) {
+          throw new LeaveRequestError(
+            "A supporting file is required, or choose Upload later",
+          );
+        }
         if (
           !leaveType.allow_backdate &&
           minNoticeDays > 0 &&
@@ -837,8 +859,10 @@ leaveRouter.post(
           client,
         );
         const autoApprove =
-          !reviewer && req.user!.role === "company_admin";
-        if (!reviewer && !autoApprove) {
+          !reviewer &&
+          req.user!.role === "company_admin" &&
+          !documentDeferred;
+        if (!reviewer && !autoApprove && !documentDeferred) {
           throw new LeaveRequestError(
             "No eligible reviewer is available for this request",
             409,
@@ -1058,10 +1082,11 @@ const MY_LEAVE_SQL = `SELECT
        ON rules.company_id = lr.company_id`;
 
 function toMyLeaveItem(row: MyLeaveRow) {
-  const threshold =
-    row.leave_type.toLocaleLowerCase() === "sick"
-      ? Number(row.medical_document_after_working_days)
-      : row.requires_document_after_days;
+  const threshold = documentThresholdForType(
+    row.leave_type,
+    row.requires_document_after_days,
+    row.medical_document_after_working_days,
+  );
   return {
     id: String(row.id),
     employeeName: row.employee_name,
@@ -1220,14 +1245,36 @@ leaveRouter.patch(
           (await hasStoredSupportingFile(client, request.id) ||
             Boolean(request.supporting_file_name));
         const hasSupportingFile = Boolean(uploadedFile || storedFile);
-        const rulesResult = await client.query<{ min_notice_days: number }>(
-          `SELECT COALESCE(min_notice_days, 0) AS min_notice_days
+        const rulesResult = await client.query<{
+          min_notice_days: number;
+          medical_document_after_working_days: number;
+        }>(
+          `SELECT COALESCE(min_notice_days, 0) AS min_notice_days,
+                  COALESCE(medical_document_after_working_days, 2)
+                    AS medical_document_after_working_days
            FROM company_leave_rules
            WHERE company_id = $1
            LIMIT 1`,
           [companyId],
         );
         const minNoticeDays = Number(rulesResult.rows[0]?.min_notice_days ?? 0);
+        const needsDocument = documentIsRequired(
+          documentThresholdForType(
+            leaveType.name,
+            leaveType.requires_document_after_days,
+            rulesResult.rows[0]?.medical_document_after_working_days,
+          ),
+          workingDaysCount,
+        );
+        const documentDeferred =
+          needsDocument &&
+          !hasSupportingFile &&
+          isDocumentDeferredFlag(req.body?.documentDeferred);
+        if (needsDocument && !hasSupportingFile && !documentDeferred) {
+          throw new LeaveRequestError(
+            "A supporting file is required, or choose Upload later",
+          );
+        }
         if (
           !leaveType.allow_backdate &&
           minNoticeDays > 0 &&
@@ -1496,10 +1543,11 @@ const QUEUE_REQUEST_SQL = `SELECT
       AND department.company_id = lr.company_id`;
 
 function toQueueItem(row: QueueRequestRow) {
-  const threshold =
-    row.leave_type.toLocaleLowerCase() === "sick"
-      ? Number(row.medical_document_after_working_days)
-      : row.requires_document_after_days;
+  const threshold = documentThresholdForType(
+    row.leave_type,
+    row.requires_document_after_days,
+    row.medical_document_after_working_days,
+  );
   return {
     id: String(row.id),
     employeeName: row.employee_name,
@@ -2197,13 +2245,17 @@ leaveRouter.post(
       if (request.status !== "pending") {
         throw new LeaveRequestError("Only pending requests can be approved");
       }
-      const threshold =
-        request.leave_type.toLocaleLowerCase() === "sick"
-          ? Number(request.medical_document_after_working_days)
-          : request.requires_document_after_days;
+      const threshold = documentThresholdForType(
+        request.leave_type,
+        request.requires_document_after_days,
+        request.medical_document_after_working_days,
+      );
+      const hasSupportingFile =
+        Boolean(request.supporting_file_name) ||
+        (await hasStoredSupportingFile(client, request.id));
       if (
         documentIsRequired(threshold, Number(request.working_days_count)) &&
-        !request.supporting_file_name
+        !hasSupportingFile
       ) {
         throw new LeaveRequestError(
           "A supporting medical document is required before this request can be approved",
