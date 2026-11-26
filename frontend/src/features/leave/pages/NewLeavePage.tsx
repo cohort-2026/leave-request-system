@@ -178,6 +178,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     Record<string, string>
   >({})
   const [submitting, setSubmitting] = useState(false)
+  const [uploadLater, setUploadLater] = useState(false)
 
   useEffect(() => {
     if (!editMode || !id) return
@@ -283,10 +284,13 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     currentPreview?.data?.documentRequired ??
     (documentRequiredAfter != null &&
       workingDays !== undefined &&
-      workingDays > documentRequiredAfter)
+      workingDays >= documentRequiredAfter)
   const missingReason = needsReason && reason.trim().length === 0
   const missingFile =
-    documentRequired && !file && !(editMode && editRequest?.supportingFileName && !removeFile)
+    documentRequired &&
+    !uploadLater &&
+    !file &&
+    !(editMode && editRequest?.supportingFileName && !removeFile)
   const policyWarnings = useMemo(
     () =>
       currentPreview?.data
@@ -402,6 +406,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
         reason,
         file,
         removeFile,
+        documentDeferred: uploadLater && documentRequired && !file,
       }
       if (editMode && id) {
         await updateLeaveRequest(id, input)
@@ -661,6 +666,35 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
               PDF, JPG, PNG, or HEIC. {documentRule}
               {documentRequired ? ' Attach a sick note or supporting document before you submit.' : ''}
             </FieldDescription>
+            {documentRequired ? (
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="document-timing"
+                    checked={!uploadLater}
+                    onChange={() => setUploadLater(false)}
+                  />
+                  Attach now
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="document-timing"
+                    checked={uploadLater}
+                    disabled={Boolean(file)}
+                    onChange={() => setUploadLater(true)}
+                  />
+                  Upload later
+                </label>
+                {uploadLater ? (
+                  <FieldDescription>
+                    You can submit now. We will remind you to attach the sick
+                    note.
+                  </FieldDescription>
+                ) : null}
+              </div>
+            ) : null}
             <FieldError>
               {submitFieldErrors.file ?? submitFieldErrors.attachment}
             </FieldError>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { PageShell } from '../../../app/layouts/PageShell'
 import {
   AlertDialog,
@@ -19,6 +20,7 @@ import {
   CardTitle,
 } from '../../../components/ui/card'
 import { Textarea } from '../../../components/ui/textarea'
+import { Input } from '../../../components/ui/input'
 import { Alert } from '../../../shared/components'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { leaveEditPath, paths } from '../../../shared/constants/paths'
@@ -28,6 +30,9 @@ import {
   cancelMyLeaveRequest,
   downloadSupportingFile,
   fetchMyLeaveRequest,
+  updateLeaveRequest,
+  type DayPart,
+  type LeaveHalf,
   type MyLeaveRequest,
 } from '../leaveApi'
 
@@ -41,6 +46,12 @@ function formatDays(days: number) {
   )
 }
 
+function toDayPart(value: LeaveHalf | null | undefined): DayPart {
+  if (value === 'morning' || value === 'am') return 'morning'
+  if (value === 'afternoon' || value === 'pm') return 'afternoon'
+  return 'full'
+}
+
 export function LeaveDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -52,6 +63,8 @@ export function LeaveDetailPage() {
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | undefined>()
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -90,6 +103,32 @@ export function LeaveDetailPage() {
     } finally {
       setDownloading(false)
     }
+  }
+
+  async function handleUpload() {
+      if (!id || !request || !uploadFile || uploading) return
+      setUploading(true)
+      setActionError(null)
+      try {
+        const updated = await updateLeaveRequest(id, {
+          leaveTypeId: request.leaveTypeId,
+          start: request.startDate,
+          end: request.endDate,
+          startPart: toDayPart(request.startHalf),
+          endPart: toDayPart(request.endHalf),
+          reason: request.reason ?? '',
+          file: uploadFile,
+        })
+        setRequest(updated)
+        setUploadFile(undefined)
+        toast.success('Supporting document uploaded')
+      } catch (err) {
+        setActionError(
+          getErrorMessage(err, 'Could not upload the supporting file.'),
+        )
+      } finally {
+        setUploading(false)
+      }
   }
 
   async function handleCancel() {
@@ -265,9 +304,30 @@ export function LeaveDetailPage() {
                 </Button>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No supporting file was attached.
-              </p>
+              <div className="grid gap-3">
+                <p className="text-sm text-muted-foreground">
+                  No supporting file was attached.
+                  {request.documentRequired ? ' Upload it now to complete the medical-document requirement.' : ''}
+                </p>
+                {canChange ? (
+                  <>
+                    <Input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.heic"
+                      onChange={(event) =>
+                        setUploadFile(event.target.files?.[0])
+                      }
+                    />
+                    <Button
+                      type="button"
+                      disabled={!uploadFile || uploading}
+                      onClick={() => void handleUpload()}
+                    >
+                      {uploading ? 'Uploading…' : 'Upload document'}
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             )}
           </CardContent>
         </Card>

@@ -212,13 +212,13 @@ export function TeamQueuePage() {
           {!loading && !error && visibleQueue.length > 0 ? (
             <ul className="m-0 grid list-none gap-3 p-0">
               {visibleQueue.map((item) => {
-                const hasDocument = Boolean(
-                  item.supportingFileName || item.documentRequired,
-                )
+                const hasDocument = Boolean(item.supportingFileName)
+                const awaitingDocument =
+                  Boolean(item.documentRequired) && !item.supportingFileName
                 const canQuickApprove =
                   item.status === 'pending' &&
                   item.clashCount === 0 &&
-                  !hasDocument
+                  !awaitingDocument
 
                 return (
                   <li key={item.id}>
@@ -277,7 +277,11 @@ export function TeamQueuePage() {
                               )}
                               {item.documentRequired ? (
                                 <Badge variant="destructive">
-                                  Document required
+                                  {item.supportingFileName
+                                    ? 'Document attached'
+                                    : item.leaveType.toLowerCase() === 'sick'
+                                      ? 'Awaiting sick note'
+                                      : 'Document required'}
                                 </Badge>
                               ) : hasDocument ? (
                                 <Badge variant="outline">

@@ -6,6 +6,7 @@ export type CompanyLeaveRules = {
   staffReviewer: StaffReviewer
   managerReviewer: 'company_admin'
   minNoticeDays: number
+  medicalDocumentAfterWorkingDays: number
   escalateAfterHours: number
   autoApproveAfterHours: number
 }

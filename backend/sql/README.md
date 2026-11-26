@@ -33,6 +33,7 @@ psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 psql "$DATABASE_URL" -f sql/028_company_branding.sql
 psql "$DATABASE_URL" -f sql/029_za_public_holidays.sql
 psql "$DATABASE_URL" -f sql/030_blocks.sql
+psql "$DATABASE_URL" -f sql/031_medical_document_rule.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -100,6 +101,8 @@ psql "$DATABASE_URL" -f sql/030_blocks.sql
 `029_za_public_holidays.sql` inserts South African public holidays for 2026–2030 on every company (`source=za`). Sunday holidays are stored on the following Monday with `actual_date` set to the Sunday. Existing dates are left unchanged (`ON CONFLICT DO NOTHING`). New companies also receive these rows at signup.
 
 `030_blocks.sql` (issue #274; ticket file name `028_blocks.sql`) adds `date_blocks` (company-wide when `department_id` is null, otherwise one department; `starts_on`/`ends_on`; mode `block` or `warn`; required reason), `departments.max_off`, and `leave_types.ignores_blocks`. Existing Sick and Family responsibility types ignore blocks.
+
+`031_medical_document_rule.sql` (issues #333 / #331; ticket file name `030_deferred_sick_notes.sql`) adds `company_leave_rules.medical_document_after_working_days` (default 2, `0` means a medical document is always required for Sick).
 
 ## Demo password
 

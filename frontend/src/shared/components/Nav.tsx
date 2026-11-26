@@ -42,6 +42,7 @@ const adminPrimary: NavItem[] = [
   { to: paths.adminUsers, label: 'People', icon: UsersRound, end: true },
   { to: paths.adminDepartments, label: 'Departments', icon: Building2 },
   { to: paths.adminLeaveTypes, label: 'Leave types', icon: CalendarRange },
+  { to: paths.adminRules, label: 'Rules', icon: ClipboardCheck },
   {
     to: paths.adminCalendarSettings,
     label: 'Week and holidays',
