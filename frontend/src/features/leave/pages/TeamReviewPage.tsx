@@ -368,6 +368,10 @@ export function TeamReviewPage() {
   }
 
   const canDecide = request.status === 'pending'
+  const awaitingDocument =
+    request.status === 'pending' &&
+    request.documentRequired &&
+    !request.supportingFileName
   const firstName = request.employeeName.trim().split(/\s+/)[0] || 'them'
   const overlaps = request.teamOverlaps
   const balanceAfter =
@@ -643,9 +647,14 @@ export function TeamReviewPage() {
             ) : null}
             {canDecide ? (
               <>
+                {awaitingDocument ? (
+                  <Alert variant="destructive">
+                    Upload the medical document before this request can be approved.
+                  </Alert>
+                ) : null}
                 <Button
                   type="button"
-                  disabled={submitting}
+                  disabled={submitting || awaitingDocument}
                   onClick={() => {
                     setActionError(null)
                     setApproveOpen(true)

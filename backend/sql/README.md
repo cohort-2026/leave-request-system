@@ -33,6 +33,7 @@ psql "$DATABASE_URL" -f sql/027_s1_balances.sql
 psql "$DATABASE_URL" -f sql/028_company_branding.sql
 psql "$DATABASE_URL" -f sql/029_za_public_holidays.sql
 psql "$DATABASE_URL" -f sql/030_blocks.sql
+psql "$DATABASE_URL" -f sql/031_medical_document_rule.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.

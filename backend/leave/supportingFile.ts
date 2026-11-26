@@ -60,7 +60,7 @@ export function documentIsRequired(
 ): boolean {
   return (
     requiresDocumentAfterDays !== null &&
-    workingDaysCount > requiresDocumentAfterDays
+    workingDaysCount >= requiresDocumentAfterDays
   );
 }
 

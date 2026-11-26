@@ -178,6 +178,7 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     Record<string, string>
   >({})
   const [submitting, setSubmitting] = useState(false)
+  const [uploadLater, setUploadLater] = useState(false)
 
   useEffect(() => {
     if (!editMode || !id) return
@@ -283,10 +284,13 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
     currentPreview?.data?.documentRequired ??
     (documentRequiredAfter != null &&
       workingDays !== undefined &&
-      workingDays > documentRequiredAfter)
+      workingDays >= documentRequiredAfter)
   const missingReason = needsReason && reason.trim().length === 0
   const missingFile =
-    documentRequired && !file && !(editMode && editRequest?.supportingFileName && !removeFile)
+    documentRequired &&
+    !uploadLater &&
+    !file &&
+    !(editMode && editRequest?.supportingFileName && !removeFile)
   const policyWarnings = useMemo(
     () =>
       currentPreview?.data
@@ -661,6 +665,17 @@ export function NewLeavePage({ editMode = false }: { editMode?: boolean }) {
               PDF, JPG, PNG, or HEIC. {documentRule}
               {documentRequired ? ' Attach a sick note or supporting document before you submit.' : ''}
             </FieldDescription>
+            {documentRequired ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={uploadLater}
+                  disabled={Boolean(file)}
+                  onChange={(event) => setUploadLater(event.target.checked)}
+                />
+                Upload later
+              </label>
+            ) : null}
             <FieldError>
               {submitFieldErrors.file ?? submitFieldErrors.attachment}
             </FieldError>

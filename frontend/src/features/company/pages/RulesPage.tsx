@@ -32,9 +32,10 @@ import {
 
 type RulesForm = Omit<
   CompanyLeaveRules,
-  'minNoticeDays' | 'escalateAfterHours' | 'autoApproveAfterHours'
+  'minNoticeDays' | 'medicalDocumentAfterWorkingDays' | 'escalateAfterHours' | 'autoApproveAfterHours'
 > & {
   minNoticeDays: number | ''
+  medicalDocumentAfterWorkingDays: number | ''
   escalateAfterHours: number | ''
   autoApproveAfterHours: number | ''
 }
@@ -48,6 +49,9 @@ function isValidRules(rules: RulesForm): rules is CompanyLeaveRules {
     typeof rules.minNoticeDays === 'number' &&
     Number.isInteger(rules.minNoticeDays) &&
     rules.minNoticeDays >= 0 &&
+    typeof rules.medicalDocumentAfterWorkingDays === 'number' &&
+    Number.isInteger(rules.medicalDocumentAfterWorkingDays) &&
+    rules.medicalDocumentAfterWorkingDays >= 0 &&
     typeof rules.escalateAfterHours === 'number' &&
     Number.isInteger(rules.escalateAfterHours * 4) &&
     rules.escalateAfterHours >= 0 &&
@@ -246,6 +250,33 @@ export function RulesPage() {
                   <FieldDescription>
                     0 means no minimum. Sick and family leave can still start
                     sooner.
+                  </FieldDescription>
+                </Field>
+
+                <Field className="max-w-sm">
+                  <FieldLabel htmlFor="medicalDocumentAfterWorkingDays">
+                    Require a medical document after (working days)
+                  </FieldLabel>
+                  <Input
+                    id="medicalDocumentAfterWorkingDays"
+                    name="medicalDocumentAfterWorkingDays"
+                    type="number"
+                    min={0}
+                    max={2147483647}
+                    step={1}
+                    value={rules.medicalDocumentAfterWorkingDays}
+                    disabled={saving}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      updateRules({
+                        medicalDocumentAfterWorkingDays:
+                          value === '' ? '' : Number(value),
+                      })
+                    }}
+                  />
+                  <FieldDescription>
+                    0 requires a medical document for sick leave. For example,
+                    2 requires it after 2 working days.
                   </FieldDescription>
                 </Field>
               </CardContent>

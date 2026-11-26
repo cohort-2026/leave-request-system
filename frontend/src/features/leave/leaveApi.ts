@@ -26,6 +26,7 @@ export type MyLeaveRequest = {
   workingDays: number
   reason: string | null
   supportingFileName: string | null
+  documentRequired?: boolean
   status: RequestStatus
   submittedAt: string
   decisionReason: string | null

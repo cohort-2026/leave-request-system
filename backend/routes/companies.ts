@@ -179,6 +179,7 @@ type CompanyLeaveRulesRow = {
   staff_reviewer: StaffReviewer;
   manager_reviewer: "company_admin";
   min_notice_days: number;
+  medical_document_after_working_days: number;
   escalate_after_hours: string | number;
   auto_approve_after_hours: string | number;
 };
@@ -195,6 +196,7 @@ function toPublicCompanyLeaveRules(row: CompanyLeaveRulesRow) {
     staffReviewer: row.staff_reviewer,
     managerReviewer: row.manager_reviewer,
     minNoticeDays: row.min_notice_days,
+    medicalDocumentAfterWorkingDays: row.medical_document_after_working_days,
     escalateAfterHours: Number(row.escalate_after_hours),
     autoApproveAfterHours: Number(row.auto_approve_after_hours),
   };
@@ -1123,6 +1125,7 @@ companiesRouter.get(
     );
     const result = await pool.query<CompanyLeaveRulesRow>(
       `SELECT staff_reviewer, manager_reviewer, min_notice_days,
+              medical_document_after_working_days,
               escalate_after_hours, auto_approve_after_hours
        FROM company_leave_rules
        WHERE company_id = $1`,
@@ -1158,6 +1161,7 @@ companiesRouter.patch(
       "staffReviewer",
       "managerReviewer",
       "minNoticeDays",
+      "medicalDocumentAfterWorkingDays",
       "escalateAfterHours",
       "autoApproveAfterHours",
     ]);
@@ -1214,6 +1218,28 @@ companiesRouter.patch(
       minNoticeDays = value;
     }
 
+    const hasMedicalDocumentAfterWorkingDays =
+      Object.prototype.hasOwnProperty.call(
+        values,
+        "medicalDocumentAfterWorkingDays",
+      );
+    let medicalDocumentAfterWorkingDays: number | undefined;
+    if (hasMedicalDocumentAfterWorkingDays) {
+      const value = values.medicalDocumentAfterWorkingDays;
+      if (
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value > 2_147_483_647
+      ) {
+        res.status(400).json({
+          error: "Medical document threshold must be a non-negative integer",
+        });
+        return;
+      }
+      medicalDocumentAfterWorkingDays = value;
+    }
+
     const hasEscalateAfterHours = Object.prototype.hasOwnProperty.call(
       values,
       "escalateAfterHours",
@@ -1244,6 +1270,7 @@ companiesRouter.patch(
 
     const currentResult = await pool.query<CompanyLeaveRulesRow>(
       `SELECT staff_reviewer, manager_reviewer, min_notice_days,
+              medical_document_after_working_days,
               escalate_after_hours, auto_approve_after_hours
        FROM company_leave_rules
        WHERE company_id = $1`,
@@ -1281,6 +1308,12 @@ companiesRouter.patch(
       parameters.push(minNoticeDays);
       assignments.push(`min_notice_days = $${parameters.length}`);
     }
+    if (medicalDocumentAfterWorkingDays !== undefined) {
+      parameters.push(medicalDocumentAfterWorkingDays);
+      assignments.push(
+        `medical_document_after_working_days = $${parameters.length}`,
+      );
+    }
     if (hasEscalateAfterHours) {
       parameters.push(Number(values.escalateAfterHours));
       assignments.push(`escalate_after_hours = $${parameters.length}`);
@@ -1301,7 +1334,8 @@ companiesRouter.patch(
        SET ${assignments.join(", ")}
        WHERE company_id = $1
        RETURNING staff_reviewer, manager_reviewer, min_notice_days,
-                 escalate_after_hours, auto_approve_after_hours`,
+                  medical_document_after_working_days,
+                  escalate_after_hours, auto_approve_after_hours`,
       parameters,
     );
     const rules = updated.rows[0];

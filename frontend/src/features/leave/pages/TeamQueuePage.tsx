@@ -277,7 +277,11 @@ export function TeamQueuePage() {
                               )}
                               {item.documentRequired ? (
                                 <Badge variant="destructive">
-                                  Document required
+                                  {item.supportingFileName
+                                    ? 'Document attached'
+                                    : item.leaveType.toLowerCase() === 'sick'
+                                      ? 'Awaiting sick note'
+                                      : 'Document required'}
                                 </Badge>
                               ) : hasDocument ? (
                                 <Badge variant="outline">
