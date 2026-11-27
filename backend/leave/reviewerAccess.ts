@@ -13,6 +13,42 @@ export type ReviewableLeaveRequest = {
   escalation_user_ids: number[];
 };
 
+const ROLE_PRIVILEGE: Record<string, number> = {
+  staff: 1,
+  manager: 2,
+  company_admin: 3,
+};
+
+export function hasHigherPrivilege(
+  actorRole: string,
+  employeeRole: string,
+): boolean {
+  return (ROLE_PRIVILEGE[actorRole] ?? 0) > (ROLE_PRIVILEGE[employeeRole] ?? 0);
+}
+
+export function documentNotifyKind(input: {
+  employeeUserId: number;
+  employeeRole: string;
+  departmentManager: { id: number; role: string } | null;
+  companyAdminId: number | null;
+}): "department_manager" | "company_admin" | null {
+  const manager = input.departmentManager;
+  if (
+    manager &&
+    manager.id !== input.employeeUserId &&
+    hasHigherPrivilege(manager.role, input.employeeRole)
+  ) {
+    return "department_manager";
+  }
+  if (
+    input.companyAdminId !== null &&
+    input.companyAdminId !== input.employeeUserId
+  ) {
+    return "company_admin";
+  }
+  return null;
+}
+
 export function canReviewLeaveRequest(
   actor: ReviewActor,
   request: ReviewableLeaveRequest,
