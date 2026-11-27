@@ -37,6 +37,7 @@ psql "$DATABASE_URL" -f sql/031_medical_document_rule.sql
 psql "$DATABASE_URL" -f sql/032_approval_chain.sql
 psql "$DATABASE_URL" -f sql/033_notifications.sql
 psql "$DATABASE_URL" -f sql/034_reports.sql
+psql "$DATABASE_URL" -f sql/035_leave_on_behalf.sql
 ```
 
 `003_login_totp.sql` adds login challenges, encrypted TOTP secrets, and hashed recovery codes. It also drops `login_otp_tokens` if that table exists from an earlier emailed-OTP experiment.
@@ -105,13 +106,15 @@ psql "$DATABASE_URL" -f sql/034_reports.sql
 
 `030_blocks.sql` (issue #274; ticket file name `028_blocks.sql`) adds `date_blocks` (company-wide when `department_id` is null, otherwise one department; `starts_on`/`ends_on`; mode `block` or `warn`; required reason), `departments.max_off`, and `leave_types.ignores_blocks`. Existing Sick and Family responsibility types ignore blocks.
 
-`031_medical_document_rule.sql` (issues #333 / #331; ticket file name `030_deferred_sick_notes.sql`) adds `company_leave_rules.medical_document_after_working_days` (default 2, `0` means a medical document is always required for Sick).
+`031_medical_document_rule.sql` (issue #331; ticket file name `030_deferred_sick_notes.sql`) adds `company_leave_rules.medical_document_after_working_days` (default 2, `0` means a medical document is always required for Sick), `leave_requests.document_deferred` (default false), and `leave_requests.document_reminder_sent_at`. Existing companies are backfilled to 2. A deferred Sick request can be stored without a `leave_documents` row.
 
 `032_approval_chain.sql` (issue #273; ticket file name `027_approval_chain.sql`) allows `leave_requests.status` value `pending_hr`, stores one row per approval step in `leave_approval_steps`, stores non-overlapping manager absences in `approver_delegations`, and adds `company_leave_rules.hr_step_min_days` (default 8), `hr_step_unpaid` (default true), and `escalate_after_days` (default 0 = off).
 
 `033_notifications.sql` (issue #275; ticket file name `029_notifications.sql`) creates `notifications`, `notification_prefs`, and `outbox`. Outbox `channel` is `email` (later `slack` / `push` simulated). Outbox `status` is `queued`, `sent`, `failed`, or `simulated`.
 
 `034_reports.sql` (issue #276; ticket file name `032_reports.sql`) adds `users.employee_number`, `users.daily_rate_zar` (HR-only in the API), and `report_exports` for payroll/balances/liability export audit.
+
+`035_leave_on_behalf.sql` (issue #334; ticket file name `031_leave_on_behalf.sql`) adds `leave_requests.submitted_by_user_id` (the actor who booked the leave; `employee_user_id` remains the person the leave is for). Existing rows are backfilled to `employee_user_id`. Deleting the actor sets the column to null and leaves the request in place.
 
 ## Demo password
 
