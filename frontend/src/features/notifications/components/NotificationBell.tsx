@@ -143,7 +143,7 @@ function NotificationList({
             {href ? (
               <Link
                 to={href}
-                className="flex w-full items-start gap-3 p-3 text-left no-underline"
+                className="flex min-h-11 w-full items-start gap-3 p-3.5 text-left no-underline sm:min-h-0 sm:p-3"
                 onClick={() => onOpenItem(item)}
               >
                 {content}
@@ -151,7 +151,7 @@ function NotificationList({
             ) : (
               <button
                 type="button"
-                className="flex w-full items-start gap-3 p-3 text-left"
+                className="flex min-h-11 w-full items-start gap-3 p-3.5 text-left sm:min-h-0 sm:p-3"
                 onClick={() => onOpenItem(item)}
               >
                 {content}
@@ -177,15 +177,18 @@ function BellTrigger({
     <Button
       {...props}
       aria-label={label}
-      className={cn('relative', className)}
+      className={cn(
+        'relative size-11 shrink-0 rounded-full touch-manipulation sm:size-10',
+        className,
+      )}
       size="icon"
       type="button"
       variant="ghost"
     >
-      <Bell aria-hidden="true" />
+      <Bell aria-hidden="true" className="size-5" />
       {unreadCount > 0 ? (
         <Badge
-          className="absolute -top-1 -right-1 h-5 min-w-5 justify-center px-1"
+          className="absolute top-1 right-1 h-4 min-w-4 justify-center px-1 text-[10px] leading-none"
           variant="default"
         >
           {unreadCount > 99 ? '99+' : unreadCount}
@@ -207,10 +210,11 @@ function PanelHeader({
   TitleTag: ComponentType<{ children?: ReactNode; className?: string }>
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <TitleTag>Notifications</TitleTag>
+    <div className="flex min-h-10 items-center justify-between gap-3">
+      <TitleTag className="min-w-0 truncate">Notifications</TitleTag>
       {canMarkAll ? (
         <Button
+          className="shrink-0"
           size="sm"
           type="button"
           variant="ghost"
@@ -277,8 +281,11 @@ export function NotificationBell() {
         <SheetTrigger asChild>
           <BellTrigger unreadCount={unreadCount} />
         </SheetTrigger>
-        <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
-          <SheetHeader className="border-b">
+        <SheetContent
+          side="right"
+          className="h-full w-full max-w-none gap-0 p-0 data-[side=right]:w-full sm:max-w-md data-[side=right]:sm:max-w-md"
+        >
+          <SheetHeader className="border-b pr-14">
             <PanelHeader
               TitleTag={SheetTitle}
               unreadCount={unreadCount}
@@ -286,7 +293,9 @@ export function NotificationBell() {
               onMarkAll={() => void markAll()}
             />
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">{panel}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            {panel}
+          </div>
         </SheetContent>
       </Sheet>
     )
@@ -297,7 +306,11 @@ export function NotificationBell() {
       <PopoverTrigger asChild>
         <BellTrigger unreadCount={unreadCount} />
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 gap-0 p-0 sm:w-96">
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-[min(24rem,calc(100vw-1.5rem))] gap-0 p-0"
+      >
         <PopoverHeader className="border-b p-3">
           <PanelHeader
             TitleTag={PopoverTitle}
@@ -306,7 +319,7 @@ export function NotificationBell() {
             onMarkAll={() => void markAll()}
           />
         </PopoverHeader>
-        <div className="max-h-96 overflow-y-auto p-2">{panel}</div>
+        <div className="max-h-[min(24rem,70vh)] overflow-y-auto p-2">{panel}</div>
       </PopoverContent>
     </Popover>
   )

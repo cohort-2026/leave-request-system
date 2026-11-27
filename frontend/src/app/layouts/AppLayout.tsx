@@ -125,8 +125,8 @@ export function AppLayout({ children }: { children?: ReactNode }) {
             ) : null}
           </nav>
 
-          <div className="ml-auto flex min-w-0 items-center gap-1">
-            <div className="hidden min-w-0 flex-col leading-tight sm:flex">
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="hidden min-w-0 max-w-40 flex-col leading-tight lg:flex">
               <span className="truncate text-sm font-semibold text-foreground">
                 {session.companyName ?? 'Workspace'}
               </span>
@@ -141,9 +141,9 @@ export function AppLayout({ children }: { children?: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={`User menu for ${session.displayName}`}
-                  className="h-auto shrink-0 gap-2 rounded-xl px-1.5 py-1 hover:bg-muted sm:px-2"
+                  className="size-11 shrink-0 rounded-full p-0 hover:bg-muted sm:size-10"
                   variant="ghost"
-                  size="lg"
+                  size="icon"
                 >
                   <Avatar>
                     <AvatarFallback className="bg-primary/10 font-semibold text-primary">
