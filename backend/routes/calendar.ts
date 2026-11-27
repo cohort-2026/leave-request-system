@@ -112,6 +112,46 @@ export function toCalendarLeaves(
   return rows.map((row) => toCalendarLeave(row, role, viewerId));
 }
 
+export function calendarScope(
+  role: "staff" | "manager" | "company_admin",
+  value: unknown,
+): "team" | "company" {
+  if (role === "staff") return "team";
+  return value === "company" ? "company" : "team";
+}
+
+const LEAVE_SCOPE_FILTER = `AND ($6::INTEGER IS NULL OR employees.department_id = $6)
+         AND (
+           $7::TEXT = 'company'
+           OR employees.id = $4
+           OR ($5::INTEGER IS NOT NULL AND employees.department_id = $5)
+           OR employees.department_id IN (
+             SELECT departments.id
+             FROM departments
+             WHERE departments.company_id = $1
+               AND departments.manager_id = $4
+           )
+         )`;
+
+const BLOCK_SCOPE_FILTER = `AND (
+           date_blocks.department_id IS NULL
+           OR ($6::INTEGER IS NOT NULL AND date_blocks.department_id = $6)
+           OR ($6::INTEGER IS NULL AND $7::TEXT = 'company')
+           OR (
+             $6::INTEGER IS NULL
+             AND $7::TEXT = 'team'
+             AND (
+               date_blocks.department_id = $5
+               OR date_blocks.department_id IN (
+                 SELECT departments.id
+                 FROM departments
+                 WHERE departments.company_id = $1
+                   AND departments.manager_id = $4
+               )
+             )
+           )
+         )`;
+
 calendarRouter.get(
   "/",
   requireAuth,
@@ -150,6 +190,7 @@ calendarRouter.get(
 
     const actor = req.user!;
     const role = actor.role as "staff" | "manager" | "company_admin";
+    const scope = calendarScope(role, req.query.scope);
     await ensureZaHolidaysForCompany(companyId);
     const holidaysResult = await pool.query<HolidayMark>(
       `SELECT holiday_date::TEXT AS date, name AS label, name
@@ -168,7 +209,7 @@ calendarRouter.get(
       res.status(400).json({ error: "departmentId must be a positive integer" });
       return;
     }
-    if (requestedDepartmentId !== null && role !== "company_admin") {
+    if (requestedDepartmentId !== null && role === "staff") {
       res.status(403).json({ error: "Department filtering is not allowed" });
       return;
     }
@@ -193,6 +234,15 @@ calendarRouter.get(
       [actor.id, companyId],
     );
     const departmentId = actorDepartment.rows[0]?.department_id ?? null;
+    const queryParams = [
+      companyId,
+      from,
+      to,
+      actor.id,
+      departmentId,
+      requestedDepartmentId,
+      scope,
+    ];
     const blocksResult = await pool.query<DateBlockMark>(
       `SELECT date_blocks.id,
               date_blocks.starts_on::TEXT AS start,
@@ -211,39 +261,11 @@ calendarRouter.get(
        WHERE date_blocks.company_id = $1
          AND date_blocks.starts_on <= $3::date
          AND date_blocks.ends_on >= $2::date
-         AND (
-           $4 = 'company_admin'
-           OR date_blocks.department_id IS NULL
-           OR date_blocks.department_id = $5
-         )
-         AND ($6::INTEGER IS NULL OR date_blocks.department_id IS NULL
-              OR date_blocks.department_id = $6)
+         ${BLOCK_SCOPE_FILTER}
        ORDER BY date_blocks.starts_on, date_blocks.id`,
-      [companyId, from, to, role, departmentId, requestedDepartmentId],
+      queryParams,
     );
 
-    const managerDepartmentFilter =
-      role === "manager"
-        ? `AND (
-             employees.id = $4
-             OR employees.department_id IN (
-               SELECT departments.id
-               FROM departments
-               WHERE departments.company_id = $1
-                 AND departments.manager_id = $4
-             )
-           )`
-        : "";
-    const companyDepartmentFilter =
-      role === "company_admin" && requestedDepartmentId !== null
-        ? "AND employees.department_id = $4"
-        : "";
-    const leaveParams =
-      role === "manager"
-        ? [companyId, from, to, actor.id]
-        : role === "company_admin" && requestedDepartmentId !== null
-          ? [companyId, from, to, requestedDepartmentId]
-          : [companyId, from, to];
     const leaveResult = await pool.query<LeaveMark>(
       `SELECT
          leave_requests.id,
@@ -275,10 +297,9 @@ calendarRouter.get(
          AND leave_requests.status IN ('pending', 'approved')
          AND leave_requests.start_date <= $3::date
          AND leave_requests.end_date >= $2::date
-         ${managerDepartmentFilter}
-         ${companyDepartmentFilter}
+         ${LEAVE_SCOPE_FILTER}
        ORDER BY leave_requests.start_date, leave_requests.id`,
-      leaveParams,
+      queryParams,
     );
 
     res.json({

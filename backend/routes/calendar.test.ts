@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 process.env.DATABASE_URL ??= "postgres://localhost/calendar-tests";
-const { monthRange, toCalendarLeaves } = await import("./calendar.js");
+const { calendarScope, monthRange, toCalendarLeaves } = await import("./calendar.js");
 
 describe("calendar response ranges", () => {
   it("expands a valid month into inclusive date bounds", () => {
@@ -58,5 +58,15 @@ describe("calendar response ranges", () => {
 
     const managerView = toCalendarLeaves(leave, "manager", 9);
     assert.equal(managerView[1].type, "Sick");
+  });
+
+  it("defaults calendar scope to team and keeps staff on team", () => {
+    assert.equal(calendarScope("staff", "company"), "team");
+    assert.equal(calendarScope("staff", undefined), "team");
+    assert.equal(calendarScope("manager", undefined), "team");
+    assert.equal(calendarScope("manager", "team"), "team");
+    assert.equal(calendarScope("manager", "company"), "company");
+    assert.equal(calendarScope("company_admin", "company"), "company");
+    assert.equal(calendarScope("company_admin", "other"), "team");
   });
 });
