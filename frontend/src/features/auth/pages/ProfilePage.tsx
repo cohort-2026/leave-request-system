@@ -18,6 +18,7 @@ import { Alert } from '../../../shared/components'
 import { paths } from '../../../shared/constants/paths'
 import { ApiError } from '../../../services/api'
 import { roleLabel } from '../../../shared/types/session'
+import { NotificationPrefsCard } from '../../notifications/components/NotificationPrefsCard'
 import {
   changePassword,
   confirmSignedInTotpEnroll,
@@ -452,6 +453,7 @@ export function ProfilePage() {
           </Card>
         </div>
       </div>
+      <NotificationPrefsCard />
     </PageShell>
   )
 }
