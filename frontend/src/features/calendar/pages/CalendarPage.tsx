@@ -50,13 +50,13 @@ function monthTitle(year: number, month: number) {
   })
 }
 
-function defaultScope(role: string | undefined): CalendarScope {
-  return role === 'company_admin' ? 'company' : 'team'
+function defaultScope(): CalendarScope {
+  return 'team'
 }
 
 function viewFor(role: string | undefined, scope: CalendarScope): CalendarView {
   if (role === 'staff') return 'own'
-  if (scope === 'company' || role === 'company_admin') return 'org'
+  if (scope === 'company') return 'org'
   return 'team'
 }
 
@@ -71,7 +71,7 @@ export function CalendarPage() {
   const [year, setYear] = useState(initial.year)
   const [month, setMonth] = useState(initial.month)
   const [selectedDate, setSelectedDate] = useState(initial.date)
-  const [scope, setScope] = useState<CalendarScope>(() => defaultScope(session?.role))
+  const [scope, setScope] = useState<CalendarScope>(() => defaultScope())
   const [departmentId, setDepartmentId] = useState<string>('all')
   const [departments, setDepartments] = useState<Department[]>([])
   const [marks, setMarks] = useState<Awaited<ReturnType<typeof fetchCalendarMarks>>>([])
@@ -81,7 +81,7 @@ export function CalendarPage() {
   const today = initial.date
   const view = viewFor(session?.role, scope)
   const canFilterCompany = session?.role === 'manager' || session?.role === 'company_admin'
-  const canFilterDepartment = session?.role === 'company_admin'
+  const canFilterDepartment = canFilterCompany && scope === 'company'
   const selectedDepartmentId =
     canFilterDepartment && departmentId !== 'all' ? Number(departmentId) : null
   const visibleMonth = new Date(year, month - 1, 1)
@@ -91,7 +91,7 @@ export function CalendarPage() {
   )
 
   useEffect(() => {
-    if (!canFilterDepartment) return
+    if (!canFilterCompany) return
     let active = true
     listDepartments()
       .then((rows) => {
@@ -103,7 +103,7 @@ export function CalendarPage() {
     return () => {
       active = false
     }
-  }, [canFilterDepartment])
+  }, [canFilterCompany])
 
   useEffect(() => {
     let active = true
@@ -258,7 +258,10 @@ export function CalendarPage() {
               {canFilterCompany ? (
                 <Tabs
                   value={scope}
-                  onValueChange={(value) => setScope(value as CalendarScope)}
+                  onValueChange={(value) => {
+                    setScope(value as CalendarScope)
+                    if (value === 'team') setDepartmentId('all')
+                  }}
                 >
                   <TabsList>
                     <TabsTrigger value="team">My team</TabsTrigger>
@@ -266,9 +269,7 @@ export function CalendarPage() {
                   </TabsList>
                 </Tabs>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  Your leave and public holidays. Colleagues show as Away.
-                </p>
+                <p className="text-sm text-muted-foreground">My team</p>
               )}
 
               {canFilterDepartment && departments.length > 0 ? (
