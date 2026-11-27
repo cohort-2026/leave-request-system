@@ -20,6 +20,7 @@ import {
   appOrigin,
   leaveCancelled,
   leaveDecision,
+  leaveDocumentReminder,
   leaveSubmitted,
   sendMail,
 } from "../mail/index.js";
@@ -31,7 +32,10 @@ import {
   restoreApprovedLeaveBalance,
 } from "../leave/balances.js";
 import { buildLeaveReviewEvents } from "../leave/reviewEvents.js";
-import { canReviewLeaveRequest } from "../leave/reviewerAccess.js";
+import {
+  canReviewLeaveRequest,
+  documentNotifyKind,
+} from "../leave/reviewerAccess.js";
 import {
   leaveHasStartedInSast,
   todayInSast,
@@ -368,6 +372,88 @@ async function findReviewer(
   }
 
   if (row.admin_id && row.admin_email && row.admin_name) {
+    return {
+      id: row.admin_id,
+      email: row.admin_email,
+      name: row.admin_name,
+    };
+  }
+  return null;
+}
+
+async function findDocumentNotifyReviewer(
+  companyId: number,
+  employeeId: number,
+  executor: Queryable,
+): Promise<{ id: number; email: string; name: string } | null> {
+  const result = await executor.query<{
+    employee_role: string;
+    manager_id: number | null;
+    manager_email: string | null;
+    manager_name: string | null;
+    manager_role: string | null;
+    admin_id: number | null;
+    admin_email: string | null;
+    admin_name: string | null;
+  }>(
+    `SELECT
+       requester.role AS employee_role,
+       department_manager.id AS manager_id,
+       department_manager.email AS manager_email,
+       COALESCE(department_manager.display_name, department_manager.email)
+         AS manager_name,
+       department_manager.role AS manager_role,
+       company_admin.id AS admin_id,
+       company_admin.email AS admin_email,
+       COALESCE(company_admin.display_name, company_admin.email) AS admin_name
+     FROM users AS requester
+     LEFT JOIN departments AS department
+       ON department.id = requester.department_id
+      AND department.company_id = requester.company_id
+     LEFT JOIN users AS department_manager
+       ON department_manager.id = department.manager_id
+      AND department_manager.company_id = requester.company_id
+      AND department_manager.status = 'active'
+     LEFT JOIN LATERAL (
+       SELECT id, email, display_name
+       FROM users
+       WHERE company_id = requester.company_id
+         AND role = 'company_admin'
+         AND status = 'active'
+         AND id <> requester.id
+       ORDER BY id
+       LIMIT 1
+     ) AS company_admin ON true
+     WHERE requester.id = $1
+       AND requester.company_id = $2
+     LIMIT 1`,
+    [employeeId, companyId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  const kind = documentNotifyKind({
+    employeeUserId: employeeId,
+    employeeRole: row.employee_role,
+    departmentManager:
+      row.manager_id && row.manager_role
+        ? { id: row.manager_id, role: row.manager_role }
+        : null,
+    companyAdminId: row.admin_id,
+  });
+  if (
+    kind === "department_manager" &&
+    row.manager_id &&
+    row.manager_email &&
+    row.manager_name
+  ) {
+    return {
+      id: row.manager_id,
+      email: row.manager_email,
+      name: row.manager_name,
+    };
+  }
+  if (kind === "company_admin" && row.admin_id && row.admin_email && row.admin_name) {
     return {
       id: row.admin_id,
       email: row.admin_email,
@@ -721,6 +807,7 @@ leaveRouter.post(
       let policyWarnings: LeaveWarning[] = [];
       let reviewer: { id: number; email: string; name: string } | null =
         null;
+      let documentDeferred = false;
 
       try {
         await client.query("BEGIN");
@@ -782,7 +869,7 @@ leaveRouter.post(
           ),
           workingDaysCount,
         );
-        const documentDeferred =
+        documentDeferred =
           needsDocument &&
           !uploadedFile &&
           isDocumentDeferredFlag(req.body?.documentDeferred);
@@ -873,6 +960,7 @@ leaveRouter.post(
           `INSERT INTO leave_requests (
              company_id,
              employee_user_id,
+             submitted_by_user_id,
              leave_type_id,
              start_date,
              end_date,
@@ -885,10 +973,12 @@ leaveRouter.post(
              status,
              reviewer_user_id,
              reviewed_at,
-             decision_reason
+             decision_reason,
+             document_deferred,
+             document_reminder_sent_at
            )
            VALUES (
-             $1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+             $1, $2, $3, $4, $5::date, $6::date, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
            )
            RETURNING
              id,
@@ -899,6 +989,7 @@ leaveRouter.post(
              submitted_at`,
           [
             companyId,
+            req.user!.id,
             req.user!.id,
             leaveTypeId,
             startDate,
@@ -913,6 +1004,8 @@ leaveRouter.post(
             reviewer?.id ?? null,
             autoApprove ? new Date() : null,
             autoApprove ? AUTO_APPROVE_REASON : null,
+            documentDeferred,
+            documentDeferred ? new Date() : null,
           ],
         );
         request = insertResult.rows[0];
@@ -968,7 +1061,30 @@ leaveRouter.post(
         client.release();
       }
 
-      if (reviewer) {
+      if (documentDeferred) {
+        try {
+          await sendMail({
+            to: req.user!.email,
+            ...leaveDocumentReminder({
+              requestId: request.id,
+              requesterName: req.user!.display_name ?? req.user!.email,
+              leaveTypeName,
+              startDate: request.start_date,
+              endDate: request.end_date,
+              workingDaysCount,
+              actionUrl: new URL(
+                `/leave/${request.id}`,
+                appOrigin(),
+              ).toString(),
+            }),
+          });
+        } catch (error) {
+          console.error("Document reminder failed for leave request", {
+            requestId: request.id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      } else if (reviewer) {
         try {
           await sendMail({
             to: reviewer.email,
@@ -1028,6 +1144,8 @@ type MyLeaveRow = {
   reason: string | null;
   supporting_file_name: string | null;
   supporting_file_key: string | null;
+  document_deferred: boolean;
+  submitted_by_user_id: number | null;
   status: string;
   submitted_at: Date;
   reviewed_at: Date | null;
@@ -1057,6 +1175,8 @@ const MY_LEAVE_SQL = `SELECT
        lr.reason,
        lr.supporting_file_name,
        lr.supporting_file_key,
+       lr.document_deferred,
+       lr.submitted_by_user_id,
        lr.status,
        lr.submitted_at,
        lr.reviewed_at,
@@ -1099,6 +1219,7 @@ function toMyLeaveItem(row: MyLeaveRow) {
     workingDays: Number(row.working_days_count),
     reason: row.reason,
     supportingFileName: row.supporting_file_name,
+    documentDeferred: Boolean(row.document_deferred),
     documentRequired: documentIsRequired(
       threshold,
       Number(row.working_days_count),
@@ -1185,6 +1306,7 @@ leaveRouter.patch(
       const client = await pool.connect();
       let updated: MyLeaveRow;
       let policyWarnings: LeaveWarning[] = [];
+      let notifyReviewerAfterUpload = false;
       try {
         await client.query("BEGIN");
         const requestResult = await client.query<MyLeaveRow>(
@@ -1269,12 +1391,15 @@ leaveRouter.patch(
         const documentDeferred =
           needsDocument &&
           !hasSupportingFile &&
-          isDocumentDeferredFlag(req.body?.documentDeferred);
+          (isDocumentDeferredFlag(req.body?.documentDeferred) ||
+            Boolean(request.document_deferred));
         if (needsDocument && !hasSupportingFile && !documentDeferred) {
           throw new LeaveRequestError(
             "A supporting file is required, or choose Upload later",
           );
         }
+        notifyReviewerAfterUpload =
+          Boolean(request.document_deferred) && hasSupportingFile;
         if (
           !leaveType.allow_backdate &&
           minNoticeDays > 0 &&
@@ -1350,7 +1475,8 @@ leaveRouter.patch(
                working_days_count = $8,
                reason = $9,
                supporting_file_name = $10,
-               supporting_file_key = $11
+               supporting_file_key = $11,
+               document_deferred = $12
            WHERE id = $1
              AND employee_user_id = $2
              AND status = 'pending'
@@ -1367,6 +1493,7 @@ leaveRouter.patch(
             reason || null,
             nextFileName,
             nextFileKey,
+            documentDeferred,
           ],
         );
         if (updateResult.rowCount !== 1) {
@@ -1404,6 +1531,19 @@ leaveRouter.patch(
         throw error;
       } finally {
         client.release();
+      }
+
+      if (notifyReviewerAfterUpload) {
+        await notifyDocumentReviewer({
+          companyId,
+          employeeUserId: updated.employee_user_id,
+          employeeName: updated.employee_name,
+          requestId: updated.id,
+          leaveTypeName: updated.leave_type,
+          startDate: updated.start_date,
+          endDate: updated.end_date,
+          workingDaysCount: Number(updated.working_days_count),
+        });
       }
 
       res.json({ ...toMyLeaveItem(updated), warnings: policyWarnings });
@@ -1490,6 +1630,8 @@ type QueueRequestRow = {
   status: string;
   submitted_at: Date;
   supporting_file_name: string | null;
+  document_deferred: boolean;
+  submitted_by_user_id: number | null;
   reviewer_user_id: number | null;
   staff_reviewer: "manager" | "company_admin";
   manager_reviewer?: "manager" | "company_admin";
@@ -1514,6 +1656,8 @@ const QUEUE_REQUEST_SQL = `SELECT
        lr.status,
        lr.submitted_at,
        lr.supporting_file_name,
+       lr.document_deferred,
+       lr.submitted_by_user_id,
        lr.reviewer_user_id,
        COALESCE(rules.staff_reviewer, 'manager') AS staff_reviewer,
        COALESCE(rules.manager_reviewer, 'company_admin') AS manager_reviewer,
@@ -1558,6 +1702,7 @@ function toQueueItem(row: QueueRequestRow) {
     status: row.status,
     submittedAt: row.submitted_at ?? null,
     supportingFileName: row.supporting_file_name ?? null,
+    documentDeferred: Boolean(row.document_deferred),
     documentRequired: documentIsRequired(
       threshold,
       Number(row.working_days_count),
@@ -1693,6 +1838,47 @@ async function loadQueueRequest(
     [id],
   );
   return result.rows[0] ?? null;
+}
+
+async function notifyDocumentReviewer(input: {
+  companyId: number;
+  employeeUserId: number;
+  employeeName: string;
+  requestId: number;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  workingDaysCount: number;
+}): Promise<void> {
+  try {
+    const reviewer = await findDocumentNotifyReviewer(
+      input.companyId,
+      input.employeeUserId,
+      pool,
+    );
+    if (!reviewer) return;
+    await sendMail({
+      to: reviewer.email,
+      ...leaveSubmitted({
+        requestId: input.requestId,
+        reviewerName: reviewer.name,
+        requesterName: input.employeeName,
+        leaveTypeName: input.leaveTypeName,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        workingDaysCount: input.workingDaysCount,
+        actionUrl: new URL(
+          `/team/queue/${input.requestId}`,
+          appOrigin(),
+        ).toString(),
+      }),
+    });
+  } catch (error) {
+    console.error("Reviewer document notification failed", {
+      requestId: input.requestId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }
 
 async function notifyRequester(row: QueueRequestRow, status: "approved" | "rejected", decisionReason: string | null) {
@@ -1919,6 +2105,117 @@ leaveRouter.get(
   },
 );
 
+
+leaveRouter.post(
+  "/:id/file",
+  requireAuth,
+  requireRole("staff", "manager", "company_admin"),
+  parseLeaveUpload,
+  async (req, res) => {
+    const uploadedFile = req.file;
+    try {
+      const companyId = requireCompanyId(req.user, res);
+      if (companyId === null) return;
+
+      const id = parsePositiveInteger(req.params.id);
+      if (!id) {
+        throw new LeaveRequestError("Invalid leave request id");
+      }
+      if (!uploadedFile) {
+        throw new LeaveRequestError("A supporting file is required");
+      }
+
+      const client = await pool.connect();
+      let updated: MyLeaveRow;
+      let wasDeferred = false;
+      try {
+        await client.query("BEGIN");
+        const result = await client.query<MyLeaveRow>(
+          `${MY_LEAVE_SQL}
+           WHERE lr.id = $1
+           LIMIT 1
+           FOR UPDATE OF lr`,
+          [id],
+        );
+        const request = result.rows[0];
+        if (!request || request.company_id !== companyId) {
+          throw new LeaveRequestError("Leave request not found", 404);
+        }
+        const isOwner = request.employee_user_id === req.user!.id;
+        const isSubmitter = request.submitted_by_user_id === req.user!.id;
+        if (!isOwner && !isSubmitter) {
+          throw new LeaveRequestError("You are not allowed to do that", 403);
+        }
+        if (request.status !== "pending") {
+          throw new LeaveRequestError(
+            "Only pending requests can receive a supporting file",
+          );
+        }
+
+        wasDeferred = Boolean(request.document_deferred);
+        await saveSupportingDocument(client, request.id, uploadedFile);
+        await client.query(
+          `UPDATE leave_requests
+           SET supporting_file_name = $2,
+               supporting_file_key = 'db',
+               document_deferred = false
+           WHERE id = $1
+             AND status = 'pending'`,
+          [request.id, uploadedFile.originalname],
+        );
+
+        const updatedResult = await client.query<MyLeaveRow>(
+          `${MY_LEAVE_SQL}
+           WHERE lr.id = $1
+           LIMIT 1`,
+          [id],
+        );
+        const row = updatedResult.rows[0];
+        if (!row) {
+          throw new LeaveRequestError("Leave request not found", 404);
+        }
+        updated = row;
+
+        await recordEvent(client, {
+          companyId,
+          leaveRequestId: id,
+          actorUserId: req.user!.id,
+          type: "edit",
+          before: { documentDeferred: wasDeferred },
+          after: { supportingFileName: uploadedFile.originalname },
+        });
+
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      if (wasDeferred) {
+        await notifyDocumentReviewer({
+          companyId,
+          employeeUserId: updated.employee_user_id,
+          employeeName: updated.employee_name,
+          requestId: updated.id,
+          leaveTypeName: updated.leave_type,
+          startDate: updated.start_date,
+          endDate: updated.end_date,
+          workingDaysCount: Number(updated.working_days_count),
+        });
+      }
+
+      res.json(toMyLeaveItem(updated));
+    } catch (error) {
+      if (error instanceof LeaveRequestError) {
+        res.status(error.status).json({ error: error.message, ...error.body });
+        return;
+      }
+      throw error;
+    }
+  },
+);
 
 leaveRouter.get(
   "/:id/file",
@@ -2254,8 +2551,9 @@ leaveRouter.post(
         Boolean(request.supporting_file_name) ||
         (await hasStoredSupportingFile(client, request.id));
       if (
-        documentIsRequired(threshold, Number(request.working_days_count)) &&
-        !hasSupportingFile
+        request.document_deferred ||
+        (documentIsRequired(threshold, Number(request.working_days_count)) &&
+          !hasSupportingFile)
       ) {
         throw new LeaveRequestError(
           "A supporting medical document is required before this request can be approved",
