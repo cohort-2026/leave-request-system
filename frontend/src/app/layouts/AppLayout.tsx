@@ -25,6 +25,7 @@ import {
   getPrimaryNav,
   useApprovalCount,
 } from '../../shared/components/Nav'
+import { NotificationBell } from '../../features/notifications/components/NotificationBell'
 import { CompanyBrandMark } from '../../shared/components/CompanyBrandMark'
 import { homeFor, paths } from '../../shared/constants/paths'
 import { roleLabel } from '../../shared/types/session'
@@ -124,53 +125,57 @@ export function AppLayout({ children }: { children?: ReactNode }) {
             ) : null}
           </nav>
 
-          <div className="ml-auto hidden min-w-0 flex-col leading-tight sm:flex">
-            <span className="truncate text-sm font-semibold text-foreground">
-              {session.companyName ?? 'Workspace'}
-            </span>
-            <span className="truncate text-xs text-muted-foreground">
-              {roleLabel[session.role]}
-            </span>
-          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="hidden min-w-0 max-w-40 flex-col leading-tight lg:flex">
+              <span className="truncate text-sm font-semibold text-foreground">
+                {session.companyName ?? 'Workspace'}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {roleLabel[session.role]}
+              </span>
+            </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label={`User menu for ${session.displayName}`}
-                className="h-auto shrink-0 gap-2 rounded-xl px-1.5 py-1 hover:bg-muted sm:px-2"
-                variant="ghost"
-                size="lg"
-              >
-                <Avatar>
-                  <AvatarFallback className="bg-primary/10 font-semibold text-primary">
-                    {getInitials(session.displayName)}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <span className="block truncate">{session.displayName}</span>
-                <span className="block font-normal text-muted-foreground">
-                  {session.companyName ?? roleLabel[session.role]}
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to={paths.profile}>
-                  <UserRound aria-hidden="true" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => void signOut()}
-                variant="destructive"
-              >
-                <LogOut aria-hidden="true" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <NotificationBell />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label={`User menu for ${session.displayName}`}
+                  className="size-11 shrink-0 rounded-full p-0 hover:bg-muted sm:size-10"
+                  variant="ghost"
+                  size="icon"
+                >
+                  <Avatar>
+                    <AvatarFallback className="bg-primary/10 font-semibold text-primary">
+                      {getInitials(session.displayName)}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <span className="block truncate">{session.displayName}</span>
+                  <span className="block font-normal text-muted-foreground">
+                    {session.companyName ?? roleLabel[session.role]}
+                  </span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to={paths.profile}>
+                    <UserRound aria-hidden="true" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void signOut()}
+                  variant="destructive"
+                >
+                  <LogOut aria-hidden="true" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 

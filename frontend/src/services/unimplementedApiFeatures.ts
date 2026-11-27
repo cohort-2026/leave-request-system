@@ -11,6 +11,25 @@ type UnimplementedApiFeature = {
 }
 
 const UNIMPLEMENTED_API_FEATURES: readonly UnimplementedApiFeature[] = [
+  {
+    methods: ['GET'],
+    match: (pathname) =>
+      pathname === '/api/notifications' ||
+      pathname === '/api/notifications/prefs',
+    issue: 282,
+  },
+  {
+    methods: ['POST'],
+    match: (pathname) =>
+      pathname === '/api/notifications/read-all' ||
+      /^\/api\/notifications\/[^/]+\/read$/.test(pathname),
+    issue: 282,
+  },
+  {
+    methods: ['PATCH'],
+    match: (pathname) => pathname === '/api/notifications/prefs',
+    issue: 282,
+  },
 ]
 
 function pathnameOf(path: string): string {
