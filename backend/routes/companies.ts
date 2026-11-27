@@ -479,7 +479,7 @@ function asNonEmptyString(value: unknown): string | null {
 companiesRouter.get(
   "/current/departments",
   requireAuth,
-  requireRole("company_admin"),
+  requireRole("manager", "company_admin"),
   async (req, res) => {
     const companyId = requireCompanyId(req.user, res);
     if (companyId === null) {
