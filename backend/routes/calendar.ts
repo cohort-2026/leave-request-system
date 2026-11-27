@@ -250,7 +250,6 @@ calendarRouter.get(
          leave_requests.employee_user_id AS "personId",
          COALESCE(
            NULLIF(BTRIM(employees.display_name), ''),
-           NULLIF(BTRIM(CONCAT_WS(' ', employees.first_name, employees.last_name)), ''),
            'Colleague'
          ) AS name,
          GREATEST(leave_requests.start_date, $2::date)::TEXT AS start,

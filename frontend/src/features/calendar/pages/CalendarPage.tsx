@@ -30,7 +30,7 @@ import { ApiError } from '../../../services/api'
 import { listDepartments, type Department } from '../../people/departmentsApi'
 import {
   fetchCalendarMarks,
-  monthBounds,
+  visibleMonthBounds,
   type CalendarScope,
 } from '../calendarApi'
 
@@ -107,7 +107,7 @@ export function CalendarPage() {
 
   useEffect(() => {
     let active = true
-    const bounds = monthBounds(year, month)
+    const bounds = visibleMonthBounds(year, month)
     setLoading(true)
     setError(null)
     fetchCalendarMarks({

@@ -6,7 +6,7 @@ export type CalendarLeaveStatus = 'pending' | 'approved'
 export type CalendarHalf = 'full' | 'am' | 'pm' | 'morning' | 'afternoon'
 
 export type FetchCalendarParams = {
-  month: string
+  month?: string
   from: string
   to: string
   scope?: CalendarScope
@@ -75,6 +75,19 @@ export function monthBounds(year: number, month: number) {
   }
 }
 
+export function visibleMonthBounds(year: number, month: number) {
+  const first = new Date(year, month - 1, 1)
+  const weekday = first.getDay()
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday
+  const start = new Date(year, month - 1, 1 + mondayOffset)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 41)
+  return {
+    from: isoDate(start.getFullYear(), start.getMonth() + 1, start.getDate()),
+    to: isoDate(end.getFullYear(), end.getMonth() + 1, end.getDate()),
+  }
+}
+
 export function eachIsoDate(from: string, to: string): string[] {
   if (!from || !to || from > to) return []
   const dates: string[] = []
@@ -88,9 +101,9 @@ export function eachIsoDate(from: string, to: string): string[] {
 }
 
 function asIsoDate(value: unknown): string | null {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? value
-    : null
+  if (typeof value !== 'string') return null
+  const datePart = value.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : null
 }
 
 function asLabel(value: unknown): string | undefined {
@@ -278,7 +291,8 @@ export async function fetchCalendarMarks({
   viewerId,
   viewerRole,
 }: FetchCalendarParams): Promise<CalendarMark[]> {
-  const query = new URLSearchParams({ month, from, to })
+  const query = new URLSearchParams({ from, to })
+  if (month) query.set('month', month)
   if (scope) query.set('scope', scope)
   if (departmentId != null) {
     query.set('departmentId', String(departmentId))
